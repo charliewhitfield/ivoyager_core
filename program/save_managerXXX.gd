@@ -17,10 +17,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # *****************************************************************************
-class_name IVSaveManager
+class_name IVSaveManagerXXX
 extends Node
 
-## Interfaces with plugin [I, Voyager - Save]() (if present) to manage game saves.
+## Manages game saving and loading. (Not added in base configuration.)
 ##
 ## DEPRECIATED. This class will be replaced by a singleton in the new ivoyager_save
 ## plugin.
