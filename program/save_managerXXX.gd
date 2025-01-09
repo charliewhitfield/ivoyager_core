@@ -17,14 +17,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # *****************************************************************************
-class_name IVSaveManager
+class_name IVSaveManagerXXX
 extends Node
 
-## Interfaces with plugin [url=https://github.com/ivoyager/ivoyager_save]
-## I, Voyager - Save[/url] (if present) to manage game saves.
+## Manages game saving and loading. (Not added in base configuration.)
 ##
-## This class does nothing if the [url=https://github.com/ivoyager/ivoyager_save]
-## Tree Saver plugin[/url]. 
+## DEPRECIATED. This class will be replaced by a singleton in the new ivoyager_save
+## plugin.
+##
+## This class requires the [url=https://github.com/ivoyager/ivoyager_save]
+## Tree Saver plugin[/url]. It is not in base IVCoreInitializer. To add the
+## save/load system to your project, add and enable the Tree Saver plugin. Then
+## add these three classes to IVCoreInitializer:[br][br]
+##
+## IVSaveManager (this node)
+## IVSaveDialog (or add your own save dialog)
+## IVLoadDialog (or add your own load dialog)
 
 const files := preload("res://addons/ivoyager_core/static/files.gd")
 const NO_NETWORK = IVEnums.NetworkState.NO_NETWORK
@@ -77,22 +85,22 @@ func _ready() -> void:
 	IVGlobal.save_quit_requested.connect(save_quit)
 
 
-#func _unhandled_key_input(event: InputEvent) -> void:
-	#if !event.is_action_type() or !event.is_pressed():
-		#return
-	#if event.is_action_pressed(&"quick_save"):
-		#_on_save_requested("", true)
-	#elif event.is_action_pressed(&"save_as"):
-		#_on_save_requested("", false)
-	#elif event.is_action_pressed(&"quick_load"):
-		#_on_load_requested("", true)
-	#elif event.is_action_pressed(&"load_game"):
-		#_on_load_requested("", false)
-	#elif event.is_action_pressed(&"save_quit"):
-		#save_quit()
-	#else:
-		#return
-	#get_viewport().set_input_as_handled()
+func _unhandled_key_input(event: InputEvent) -> void:
+	if !event.is_action_type() or !event.is_pressed():
+		return
+	if event.is_action_pressed(&"quick_save"):
+		_on_save_requested("", true)
+	elif event.is_action_pressed(&"save_as"):
+		_on_save_requested("", false)
+	elif event.is_action_pressed(&"quick_load"):
+		_on_load_requested("", true)
+	elif event.is_action_pressed(&"load_game"):
+		_on_load_requested("", false)
+	elif event.is_action_pressed(&"save_quit"):
+		save_quit()
+	else:
+		return
+	get_viewport().set_input_as_handled()
 
 
 func save_quit() -> void:
