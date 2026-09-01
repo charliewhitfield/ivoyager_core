@@ -90,9 +90,26 @@ uniform float angular_radius = 0.0;       // body radius / camera distance; the 
 uniform float handoff_low = 1.0;          // px radius at/below which this fully replaces the disc
 uniform float handoff_high = 2.5;         // px at/above which the disc fully replaces this core
 
+// Where the WING is centred, as a screen-space offset in units of the body's own pixel radius,
+// set each frame by IVBodyPSF: the direction is the sun's on screen and the magnitude grows
+// with phase, reaching the limb as the crescent vanishes.
+//
+// A CRESCENT'S LIGHT IS NOT CENTRED ON THE BODY, and while the wing was, the glare sat
+// symmetrically around a disc whose lit part was a sliver off to one side. What that costs is
+// worst exactly where a rim is hardest to draw: with the sun near the limb the rim is a
+// saturated line with nothing between it and black sky, because the one thing that could
+// gradate it -- the camera's own spill -- was centred half a disc away and arrived as a broad
+// even halo instead. Offsetting the wing puts that spill where the light actually is, so the
+// rim has a falloff to sit against and the transition stops being one step from white to
+// nothing. The core does NOT take the offset: unresolved, the quad IS the body, and the body
+// is where it is. Scaling by the pixel radius makes this vanish on its own as the disc shrinks
+// toward that regime.
+uniform vec2 wing_offset = vec2(0.0);
+
 varying flat float v_intensity; // core intensity, crossfade already folded in
 varying flat float v_glare;     // wing amplitude at 1 px
 varying flat float v_radius;    // the quad's half-width in px
+varying flat vec2 v_wing_centre; // the wing's centre, px from the quad's centre
 varying vec2 v_offset;          // this vertex's corner, in [-1, 1]
 
 
@@ -125,8 +142,11 @@ void vertex() {
 			glare_max_px * resolution_scale);
 	// The quad must span whichever component reaches further. psf_visible_size returns a
 	// DIAMETER and psf_glare_draw_size a RADIUS, so the core halves and the wing does not.
+	// The wing's reach is measured from its own offset centre, so that distance is added --
+	// without it the quad would clip the wing on the lit side, which is the side it moved to.
+	v_wing_centre = wing_offset * pixel_radius;
 	v_radius = max(0.5 * psf_visible_size(v_intensity, psf_sigma),
-			psf_glare_draw_size(v_glare));
+			psf_glare_draw_size(v_glare) + length(v_wing_centre));
 	// One NDC unit is half the viewport, and the corner offset is in clip units, so it
 	// scales by w. Behind the camera (w <= 0) that scaling flips the corners and would draw
 	// the quad mirrored across the frame instead of not at all -- farwarp keeps the body
@@ -152,8 +172,10 @@ void fragment() {
 	// header). Both multiply here rather than via ALPHA so they see full precision before the
 	// f16 buffer write; see psf_core_light_sprite. Nothing sampled this radiance, so no renderer
 	// decode cancels against it: it crosses over here (see _display.gdshaderinc).
+	// The core is measured from the body, the wing from where the lit light actually is.
+	float wing_px = length(v_offset * v_radius - v_wing_centre);
 	float light = psf_core_light(v_intensity, radius_px, psf_sigma)
-			+ psf_glare_light(v_glare, radius_px);
+			+ psf_glare_light(v_glare, wing_px);
 	ALBEDO = display_write(color_from_b_v(color_bv, color_saturation) * light);
 	ALPHA = 1.0; // blend_add: the add is ALBEDO * ALPHA, already folded above
 }

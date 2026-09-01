@@ -108,6 +108,14 @@ uniform float emission_luminance = 0.0;         // physical, cd/m^2 at a full-wh
 // Lunar-Lambert L (see _photometry.gdshaderinc): 0.0 = Lambert, the exact-no-op default;
 // 1.0 = Lommel-Seeliger, a flat disc at zero phase. Set per surface class in shells.tsv.
 uniform float lunar_lambert : hint_range(0.0, 1.0) = 0.0;
+// Minnaert k, the OTHER direction (see _photometry.gdshaderinc): 1.0 = Lambert, the exact-no-op
+// default; above 1.0 darkens the limb, which no lunar_lambert can do. Carried here so a body
+// with a MAP can hold that direction at all -- the cloud-deck shaders have had both laws, while
+// a mapped surface could only ever flatten its disc. Shipped bodies set neither: Uranus and
+// Neptune measure k < 1 and take lunar_lambert instead, and Jupiter and Saturn have no measured
+// value (see PHOTOMETRIC_MODEL.md). Note the two are coupled to LEVEL through the disc factor
+// F = 2/(2k+1), so a body adopting one must re-derive its map level against A x F = p.
+uniform float minnaert_k : hint_range(1.0, 2.0) = 1.0;
 global uniform float iv_emission_energy_scale;    // 1.0 with physical light off, else 0.0
 global uniform float iv_emission_luminance_scale; // rendered units per cd/m^2; 0.0 with physical light off
 
@@ -216,8 +224,8 @@ void fragment() {
 	// ray, so screen direction, and therefore VIEW, is untouched.
 	vec3 macro_normal = normalize(v_normal_matrix * dir);
 	vec3 sun_view = normalize(mat3(VIEW_MATRIX) * sun_direction);
-	float atm_beam_response = lunar_lambert_albedo_factor(macro_normal, sun_view, VIEW,
-			lunar_lambert);
+	float atm_beam_response = minnaert_albedo_factor(macro_normal, sun_view, VIEW, minnaert_k)
+			* lunar_lambert_albedo_factor(macro_normal, sun_view, VIEW, lunar_lambert);
 	ALBEDO *= atm_beam_response;
 	// The body's atmosphere above this shell (the limb row's atm_* columns, propagated
 	// here; an exact no-op without them): direct light reddened along the sun path, and
@@ -274,7 +282,8 @@ void fragment() {
 	// arrives from the whole sky, and mu0^(k-1) is an answer about one incidence angle. On a
 	// Lambert body both are 1 and nothing changes; on Venus the beam factor had been
 	// collapsing the twilight toward the terminator exactly where it takes over.
-	float atm_sky_response = lunar_lambert_isotropic_response(macro_normal, VIEW, lunar_lambert);
+	float atm_sky_response = minnaert_isotropic_response(macro_normal, VIEW, minnaert_k)
+			* lunar_lambert_isotropic_response(macro_normal, VIEW, lunar_lambert);
 	EMISSION += unlit_albedo * atm_sky_excess(atm_mu0, atm_sky_response,
 			atm_beam_response) * atm_tint * (sun_light_energy * sun_visible);
 	// The share of the pixel's mean sun angle the engine's own N.L cannot deliver, because at

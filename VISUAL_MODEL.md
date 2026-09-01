@@ -497,11 +497,16 @@ same reason nothing viewport-dependent is allowed on the CPU side here.
 
 Three approximations worth carrying:
 
-- **The wing is symmetric about the body's centre while a crescent's light is not.** If
-  the eye objects, shift the quad centre toward the lit limb by a phase-dependent fraction
-  of the disc radius — still analytic, still free. Not a reason to reach for a screen-space
-  convolution: the engine pass is structurally unable for point sources (its feed is
-  capped), which is why this system exists.
+- **The wing is offset toward the lit limb by a phase-dependent fraction of the disc
+  radius** (`wing_offset`: direction the sun's on screen, magnitude `(1 − cos phase)/2`),
+  because a crescent's light is not centred on the body and the wing used to be. What that
+  cost showed worst with the sun near the limb, where the rim is a saturated line and the
+  one thing that could gradate it — the camera's own spill — sat half a disc away as an
+  even halo. The core keeps the body's own centre, and scaling by the pixel radius retires
+  the offset on its own as the disc shrinks toward the unresolved regime. The magnitude is
+  by eye: a Lambert sphere's lit centroid is at 4/(3π) of the radius at quarter phase
+  against this curve's 0.5, and closing that gap would mean carrying the disc integral of
+  whichever BRDF the body renders with.
 - **On Forward+ a resolved bright disc still feeds the engine glow pass**, so the
   resolved-regime wing stacks on that pass's bloom there and the two renderers are close
   rather than identical. Its amplitude in that regime is an in-app anchor to judge,

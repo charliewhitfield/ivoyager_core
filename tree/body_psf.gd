@@ -267,6 +267,7 @@ func _process(_delta: float) -> void:
 	_refresh_handoff(apparent_magnitude, camera_distance)
 	_material.set_shader_parameter(&"apparent_magnitude", apparent_magnitude)
 	_material.set_shader_parameter(&"angular_radius", _mean_radius / camera_distance)
+	_material.set_shader_parameter(&"wing_offset", _get_wing_offset(camera))
 
 
 # Re-solves the crossfade when the exposure or the source's distance-independent
@@ -292,6 +293,41 @@ func _refresh_handoff(apparent_magnitude: float, camera_distance: float) -> void
 	_material.set_shader_parameter(&"handoff_low", handoff.x)
 	_material.set_shader_parameter(&"handoff_high", handoff.y)
 	_body.psf_handoff = handoff
+
+
+# Where the glare wing sits, as a screen-space offset in units of the body's own pixel radius
+# (see the shader's wing_offset). A crescent's light is not centred on the body, and the wing
+# was: the direction here is the sun's on screen, and the magnitude runs 0 at full phase to 1.0
+# as the crescent vanishes onto the limb, which is where its light ends up.
+#
+# The shape is by eye rather than derived. A Lambert sphere's lit centroid sits at 4/(3*PI) of
+# the radius at quarter phase against this curve's 0.5, and closing that gap would mean carrying
+# the disc integral of whichever BRDF the body renders with -- a lot of machinery to move a glow
+# by a tenth of a radius. Stated so the next reader knows which it is.
+#
+# Zero for a star, which has no phase and whose glare is its own.
+func _get_wing_offset(camera: Camera3D) -> Vector2:
+	if _is_sun or !_star:
+		return Vector2.ZERO
+	var star_vector := _star.global_position - _body.global_position
+	if star_vector.is_zero_approx():
+		return Vector2.ZERO
+	var to_star := star_vector.normalized()
+	var camera_vector := _body.global_position - camera.global_position
+	if camera_vector.is_zero_approx():
+		return Vector2.ZERO
+	# Phase angle at the body, sun-to-camera, matching _get_reflected_apparent_magnitude's sign
+	# convention. cos(phase) runs +1 at full to -1 at new, so (1 - cos)/2 runs 0 to 1.
+	var phase_cos := -to_star.dot(camera_vector.normalized())
+	var offset := (1.0 - clampf(phase_cos, -1.0, 1.0)) * 0.5
+	# The sun's direction projected onto the camera's screen axes. Its length falls to zero as
+	# the sun goes directly behind or in front of the body, which is exactly where a lit side
+	# stops having a screen direction at all -- so the offset collapses on its own there.
+	var camera_basis := camera.global_transform.basis
+	var screen_direction := Vector2(to_star.dot(camera_basis.x), to_star.dot(camera_basis.y))
+	if screen_direction.is_zero_approx():
+		return Vector2.ZERO
+	return screen_direction.normalized() * offset
 
 
 func _get_star_apparent_magnitude(camera_distance: float) -> float:
