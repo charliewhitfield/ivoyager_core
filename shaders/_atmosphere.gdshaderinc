@@ -690,41 +690,71 @@ void atm_ring(AtmLayers L, float R, float h, float qs, float sz, float sun_ang,
 // many fragments but resolves the profile, so it takes one or two samples each; a distant one
 // needs the full set but has a rim of a few hundred fragments to pay it on.
 const int ATM_RING_MAX_TAPS = 8;
-const float ATM_RING_RESOLVED = 0.5;  // footprint / H_ref below which one sample IS the pixel
+// The reconstruction filter's width in pixels. A box one pixel wide is the pixel's own MEAN,
+// which is correct and still leaves the arc a one-pixel line — and a one-pixel line following a
+// shallow curve is a staircase, in runs as long as the curve stays within a row. Reconstructing
+// over rather more than a pixel is what gives the arc a soft cross-section, so consecutive rows
+// overlap and the steps blur into each other. It is the same width as the camera's own PSF, and
+// the same answer [code]limb_fade_factor()[/code] gives the silhouette.
+const float ATM_RING_FILTER_PX = 2.5;
+
+// Altitude above which the ring carries nothing worth sampling, so the taps can be spent on the
+// part of the window that has structure: 8 scale heights is e^-8 of the peak, and the haze top
+// and a detached layer each push it up if they stand higher.
+float atm_ring_reach(AtmLayers L) {
+	float reach = 8.0 * L.H_ref;
+	if (L.z_k > 0.0) {
+		reach = max(reach, L.z_k + 8.0 * L.H_t);
+	}
+	if (L.has_layer) {
+		reach = max(reach, L.z_c + 4.0 * L.sigma);
+	}
+	return reach;
+}
 
 bool atm_ring_pixel(AtmLayers L, float R, float h, float footprint, float qs, float sz,
 		float sun_ang, out vec3 path, out vec3 transmittance) {
 	path = vec3(0.0);
 	transmittance = vec3(1.0);
-	float h_hi = h + 0.5 * footprint;
-	if (h_hi <= 0.0) {
-		return false; // wholly below the silhouette: this pixel sees no beyond-limb ray
+	// The filter spans this much altitude, and the samples are taken over the part of it that
+	// both exists (above the silhouette) and carries signal (below the reach). Normalizing by
+	// the FULL width rather than by the sampled part is what makes the clipping mean something:
+	// a fragment whose filter hangs half over the silhouette gets half the ring, which is how
+	// the band fades out at the limb instead of ending on a step.
+	float half_width = 0.5 * ATM_RING_FILTER_PX * footprint;
+	float lo = max(h - half_width, 0.0);
+	float hi = min(h + half_width, atm_ring_reach(L));
+	if (hi <= lo) {
+		return false; // no beyond-limb ray with anything on it reaches this pixel
 	}
-	if (footprint < ATM_RING_RESOLVED * L.H_ref) {
-		atm_ring(L, R, max(h, 0.0), qs, sz, sun_ang, path, transmittance);
-		return true;
-	}
-	float h_lo = max(h - 0.5 * footprint, 0.0);
-	float span = h_hi - h_lo;
-	int taps = int(clamp(ceil(span / L.H_ref), 1.0, float(ATM_RING_MAX_TAPS)));
+	float span = hi - lo;
+	// One tap per scale height, and never coarser than one per pixel: close in, where the
+	// annulus spreads over many fragments, the profile is resolved and a couple of taps carry
+	// the filter; far out it takes the full set, on a rim of a few hundred fragments.
+	int taps = int(clamp(ceil(span / min(L.H_ref, footprint)), 1.0, float(ATM_RING_MAX_TAPS)));
 	float step = span / float(taps);
 	vec3 transmittance_sum = vec3(0.0);
+	float weight_sum = 0.0;
 	// Constant trip bound with a break, so no target has to support a dynamic loop count (the
 	// same caution the small-body Kepler solver carries).
 	for (int i = 0; i < ATM_RING_MAX_TAPS; i++) {
 		if (i >= taps) {
 			break;
 		}
+		float tap_h = lo + (float(i) + 0.5) * step;
+		// Tent, normalized so its integral over the full width is exactly 1.
+		float weight = max(1.0 - abs(tap_h - h) / half_width, 0.0) * step / half_width;
 		vec3 tap_path;
 		vec3 tap_transmittance;
-		atm_ring(L, R, h_lo + (float(i) + 0.5) * step, qs, sz, sun_ang, tap_path,
-				tap_transmittance);
-		path += tap_path;
-		transmittance_sum += tap_transmittance;
+		atm_ring(L, R, tap_h, qs, sz, sun_ang, tap_path, tap_transmittance);
+		path += tap_path * weight;
+		transmittance_sum += tap_transmittance * weight;
+		weight_sum += weight;
 	}
-	float coverage = span / footprint; // < 1 only for a pixel straddling the silhouette
-	path *= coverage / float(taps);
-	transmittance = mix(vec3(1.0), transmittance_sum / float(taps), coverage);
+	if (weight_sum <= 0.0) {
+		return false;
+	}
+	transmittance = mix(vec3(1.0), transmittance_sum / weight_sum, min(weight_sum, 1.0));
 	return true;
 }
 
