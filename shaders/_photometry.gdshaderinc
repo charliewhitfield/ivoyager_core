@@ -133,3 +133,47 @@ float lunar_lambert_isotropic_response(vec3 macro_normal, vec3 view_dir, float e
 	float mu = max(dot(macro_normal, view_dir), 1.0e-4);
 	return 4.0 * el * (1.0 - mu * log(1.0 + 1.0 / mu)) + (1.0 - el);
 }
+
+
+// THE LIMB IS A SAMPLING EDGE, and one shading sample per pixel cannot resolve it. Each
+// pixel along a body's silhouette holds a sliver of surface at grazing incidence, and the
+// shader answers for that whole sliver from ONE point, whose interpolated (and normal-mapped)
+// normal extrapolates past where the geometry actually turns away -- so a fragment that
+// should be edge-on can report a lit mu0, at full physical-light radiance. What that renders
+// is speckle: isolated full-brightness pixels scattered along a backlit rim, reshuffling as
+// the camera moves, and dashes running off the tips of a crescent once its width drops below
+// a pixel. Both are the same defect, and glow finds every one of them.
+//
+// So fade a shell's radiance over the last LIMB_FADE_PX of its silhouette, where the light
+// being removed was never physical. A fixed PIXEL width is what makes that self-scaling:
+// most of a crescent tip on a body a few px across, an edge softening finer than the
+// camera's own PSF on one that fills the screen.
+//
+// It needs no radius, no camera distance and no CPU feed -- so it serves every body, whether
+// or not that body has an IVBodyPSF quad to feed angular_radius. mu = dot(macroscopic normal,
+// VIEW) is the silhouette's own implicit function, exactly zero at tangency at any distance
+// and any oblateness, and a screen gradient converts it to pixels: for a sphere mu =
+// sqrt(2x/R) at x px inside a limb of pixel radius R, so mu / |grad mu| = 2x whatever R is.
+// A normal that extrapolates to negative mu falls out of the same expression as fully faded.
+//
+// HAZARD: screen derivatives, so call this under UNIFORM control flow -- the rule the ring
+// shadow's fwidth() carries (see _sun_occlusion.gdshaderinc). Form it where mu is formed,
+// never inside a branch that some lanes of a 2x2 quad skip.
+//
+// An OPAQUE shell applies it to radiance (and to SPECULAR as its square root, F0 scaling as
+// SPECULAR^2). It cannot use ALPHA, which would move it to the transparent pass and stop it
+// writing depth. Its light is therefore removed rather than replaced by what stands behind:
+// right against sky, where every one of these artifacts lives, and a ~1 px dark fringe in the
+// rarer case of a lit body transiting a brighter one. A TRANSLUCENT shell has no such
+// constraint and applies it to ALPHA, where partial coverage is what alpha already means.
+const float LIMB_FADE_PX = 1.5;
+
+
+// See above: pass dot(macroscopic normal, VIEW), multiply radiance (or alpha) by the result.
+// 1.0 everywhere but the last LIMB_FADE_PX of the silhouette.
+float limb_fade_factor(float mu) {
+	// The guard is for the disc's interior, where mu is flat and its gradient underflows to
+	// zero; the ratio there is meant to be enormous, not indeterminate.
+	float gradient = length(vec2(dFdx(mu), dFdy(mu)));
+	return smoothstep(0.0, LIMB_FADE_PX, 0.5 * mu / max(gradient, 1.0e-8));
+}

@@ -330,6 +330,10 @@ void fragment() {
 	float atm_mu = dot(macro_normal, VIEW);
 	vec3 atm_tint = atm_view_tint(atm_mu);
 	ALBEDO *= atm_sun_transmittance(atm_mu0) * atm_tint;
+	// The sub-pixel sliver at the silhouette, which one shading sample renders as speckle
+	// (see limb_fade_factor). Formed here, alongside the mu it reads, because its screen
+	// derivatives must stay under uniform control flow; applied at the very end.
+	float limb_fade = limb_fade_factor(atm_mu);
 
 	float sun_visible = 1.0;
 	if (ring_texture_outer > 0.0 || occluder_count > 0) {
@@ -378,6 +382,11 @@ void fragment() {
 	ALBEDO *= atm_behind_luma;
 	SPECULAR *= sqrt(atm_behind_luma);
 	EMISSION = EMISSION * atm_behind_luma + atm_path * sun_light_energy;
+
+	// The limb fade goes last, so it takes every term above it.
+	ALBEDO *= limb_fade;
+	SPECULAR *= sqrt(limb_fade);
+	EMISSION *= limb_fade;
 
 	ALBEDO = display_write_albedo(ALBEDO);
 	EMISSION = display_write(EMISSION);

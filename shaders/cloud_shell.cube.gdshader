@@ -189,6 +189,11 @@ void fragment() {
 	float atm_mu = dot(macro_normal, VIEW);
 	vec3 atm_tint = atm_view_tint(atm_mu);
 	ALBEDO *= atm_sun_transmittance(atm_mu0) * atm_tint;
+	// The sub-pixel sliver at the silhouette, which one shading sample renders as speckle
+	// (see limb_fade_factor). Formed here, alongside the mu it reads, because its screen
+	// derivatives must stay under uniform control flow -- and specifically BEFORE the
+	// coverage branch below, which some lanes of a 2x2 quad skip. Applied to ALPHA at the end.
+	float limb_fade = limb_fade_factor(atm_mu);
 
 	float sun_visible = 1.0;
 	if (ring_texture_outer > 0.0 || occluder_count > 0) {
@@ -244,6 +249,7 @@ void fragment() {
 
 	ALBEDO = display_write_albedo(ALBEDO);
 	EMISSION = display_write(EMISSION);
-	// Alpha-blended, so the one weight fades everything this shell contributes.
-	ALPHA *= v_disc_weight;
+	// Alpha-blended, so the one weight fades everything this shell contributes -- and the
+	// limb fade rides the same alpha, which is where partial coverage belongs.
+	ALPHA *= v_disc_weight * limb_fade;
 }
