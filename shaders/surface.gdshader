@@ -192,7 +192,21 @@ void fragment() {
 	float atm_mu0 = dot(macro_normal, sun_view);
 	float atm_mu = dot(macro_normal, VIEW);
 	vec3 atm_tint = atm_view_tint(atm_mu);
-	ALBEDO *= atm_sun_transmittance(atm_mu0) * atm_tint;
+	vec3 atm_sun_t = atm_sun_transmittance(atm_mu0);
+	ALBEDO *= atm_sun_t * atm_tint;
+	// The sun angle averaged across this pixel's radial extent, which one shading sample cannot
+	// resolve at the rim (see limb_mean_incidence). The engine's diffuse carries
+	// albedo * mu0, so rescaling ALBEDO delivers the mean wherever mu0 is positive; where the
+	// centre sample missed the sliver entirely no albedo factor can reach it, and that
+	// remainder goes to emission below. Formed here with the other screen-derivative terms,
+	// under uniform control flow.
+	float limb_mu0_centre = max(atm_mu0, 0.0);
+	float limb_mu0_mean = limb_mean_incidence(macro_normal, VIEW, sun_view, atm_mu);
+	float limb_engine_mu0 = min(limb_mu0_mean, LIMB_INCIDENCE_ALBEDO_MAX * limb_mu0_centre);
+	float limb_emission_mu0 = limb_mu0_mean - limb_engine_mu0;
+	if (limb_mu0_centre > 0.0) {
+		ALBEDO *= limb_engine_mu0 / limb_mu0_centre;
+	}
 	// The sub-pixel sliver at the silhouette, which one shading sample renders as speckle
 	// (see limb_fade_factor). Formed here, alongside the mu it reads, because its screen
 	// derivatives must stay under uniform control flow; applied at the very end.
@@ -228,6 +242,11 @@ void fragment() {
 	float atm_sky_response = lunar_lambert_isotropic_response(macro_normal, VIEW, lunar_lambert);
 	EMISSION += unlit_albedo * atm_sky_excess(atm_mu0, atm_sky_response,
 			atm_beam_response) * atm_tint * (sun_light_energy * sun_visible);
+	// The share of the pixel's mean sun angle the engine's own N.L cannot deliver, because at
+	// this pixel that N.L is zero (see limb_mean_incidence). Direct sunlight, so it takes the
+	// beam response, the sun path's transmittance and the tint exactly as the lit albedo did.
+	EMISSION += unlit_albedo * atm_beam_response * atm_sun_t * atm_tint * limb_emission_mu0
+			* (sun_light_energy * sun_visible);
 
 	// The air in FRONT of this fragment (atm_disc_air: the veil over the lit disc, the
 	// twilight glow past the terminator, the far half of a ray whose disc is an optical
