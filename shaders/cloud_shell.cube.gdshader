@@ -188,15 +188,12 @@ void fragment() {
 	float atm_mu0 = dot(macro_normal, sun_view);
 	float atm_mu = dot(macro_normal, VIEW);
 	vec3 atm_tint = atm_view_tint(atm_mu);
-	vec3 atm_sun_t = atm_sun_transmittance(atm_mu0);
-	ALBEDO *= atm_sun_t * atm_tint;
-	// The two sub-pixel edges of a lit shell, both formed HERE alongside the cosines they read,
-	// because their screen derivatives must stay under uniform control flow -- and specifically
-	// BEFORE the coverage branch below, which some lanes of a 2x2 quad skip. The silhouette's
-	// sliver goes to ALPHA at the end (limb_fade_factor); the terminator's crossing is added as
-	// emission below (terminator_lit_excess).
+	ALBEDO *= atm_sun_transmittance(atm_mu0) * atm_tint;
+	// The sub-pixel sliver at the silhouette, which one shading sample renders as speckle
+	// (see limb_fade_factor). Formed here, alongside the mu it reads, because its screen
+	// derivatives must stay under uniform control flow -- and specifically BEFORE the
+	// coverage branch below, which some lanes of a 2x2 quad skip. Applied to ALPHA at the end.
 	float limb_fade = limb_fade_factor(atm_mu);
-	float terminator_excess = terminator_lit_excess(atm_mu0);
 
 	float sun_visible = 1.0;
 	if (ring_texture_outer > 0.0 || occluder_count > 0) {
@@ -229,10 +226,6 @@ void fragment() {
 			* lunar_lambert_isotropic_response(macro_normal, VIEW, lunar_lambert);
 	EMISSION += unlit_albedo * atm_sky_excess(atm_mu0, atm_sky_response,
 			atm_beam_response) * atm_tint * (sun_light_energy * sun_visible);
-	// The lit fraction of a pixel the terminator crosses. Direct sunlight, so it takes the beam
-	// response, the sun path's transmittance and the tint exactly as the lit albedo did.
-	EMISSION += unlit_albedo * atm_beam_response * atm_sun_t * atm_tint * terminator_excess
-			* (sun_light_energy * sun_visible);
 
 	// The air in FRONT of this fragment (atm_disc_air: the veil over the lit disc, the
 	// twilight glow past the terminator), composited here rather than blended by the limb
