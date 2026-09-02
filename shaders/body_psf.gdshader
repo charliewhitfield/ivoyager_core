@@ -123,6 +123,7 @@ uniform vec2 sun_screen_direction = vec2(0.0);
 uniform float phase_cos = 1.0;    // cos of the phase angle at the body
 uniform mat3 limb_conic;          // the silhouette, in tangent coordinates (+Y up)
 uniform vec2 limb_semi_axes = vec2(0.0); // its (major, minor) semi-axes, same units
+uniform float limb_centre_offset = 0.0; // and how far its centre sits from the body's
 
 // How far inside the analytic limb the sky-side spread still draws, in px. The ellipse above
 // is the body's true figure while the silhouette on screen is a tessellated mesh just inside
@@ -192,7 +193,11 @@ void vertex() {
 	// so an oblate body's rim is not brightened by the polar radius it does not have. The
 	// crossfade is the disc's, not the core's: the spread belongs to a body being RESOLVED, and
 	// it retires exactly as the core takes over, leaving the point source undisturbed.
-	float limb_major_px = limb_semi_axes.x * v_focal_px;
+	// The quad is drawn on the BODY, and a silhouette seen off the camera's axis is centred
+	// away from it, so its far side reaches the semi-axis plus that offset. Sizing to the
+	// semi-axis alone cost the rim wherever the offset pointed: the round mask cut the limb,
+	// and with it every fragment the spread had to be drawn on.
+	float limb_major_px = (limb_semi_axes.x + limb_centre_offset) * v_focal_px;
 	float limb_area_px = limb_semi_axes.x * limb_semi_axes.y * v_focal_px * v_focal_px;
 	float phase = acos(clamp(phase_cos, -1.0, 1.0));
 	float disc_integral = (2.0 / 3.0) * (sin(phase) + (PI - phase) * phase_cos);

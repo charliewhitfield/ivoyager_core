@@ -340,6 +340,7 @@ func _set_rim_parameters(camera: Camera3D, camera_distance: float) -> void:
 	_material.set_shader_parameter(&"limb_conic", conic)
 	_material.set_shader_parameter(&"limb_semi_axes",
 			Vector2.ZERO if _is_sun else get_conic_semi_axes(conic))
+	_material.set_shader_parameter(&"limb_centre_offset", get_conic_centre(conic).length())
 
 
 ## Returns the body's SILHOUETTE as a conic in the camera's tangent coordinates — screen
@@ -406,6 +407,19 @@ static func get_limb_conic(to_body: Vector3, pole: Vector3, equatorial_radius: f
 	m_v1 *= normalize
 	m_11 *= normalize
 	return Basis(Vector3(m_uu, m_uv, m_u1), Vector3(m_uv, m_vv, m_v1), Vector3(m_u1, m_v1, m_11))
+
+
+## Returns the centre, in tangent units, of the ellipse [method get_limb_conic]
+## returns — which is NOT the body's own projected position: a sphere seen off the
+## camera's axis has a silhouette offset outward from it, by 15 px here on a body
+## filling a 4K frame. The quad is drawn on the body, so this is what its own extent
+## has to carry beyond the ellipse's semi-axis.
+static func get_conic_centre(conic: Basis) -> Vector2:
+	var minor_determinant := conic.x.x * conic.y.y - conic.x.y * conic.x.y
+	if minor_determinant == 0.0:
+		return Vector2.ZERO
+	return Vector2(conic.x.y * conic.y.z - conic.y.y * conic.x.z,
+			conic.x.y * conic.x.z - conic.x.x * conic.y.z) / minor_determinant
 
 
 ## Returns the (major, minor) semi-axes, in tangent units, of the ellipse
