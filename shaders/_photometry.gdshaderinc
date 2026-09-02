@@ -142,54 +142,54 @@ float lunar_lambert_isotropic_response(vec3 macro_normal, vec3 view_dir, float e
 // should be edge-on can report a lit mu0, at full physical-light radiance. What that renders
 // is speckle: isolated full-brightness pixels scattered along a backlit rim, reshuffling as
 // the camera moves, and dashes running off the tips of a crescent once its width drops below
-// a pixel. Both are the same defect, and glow finds every one of them.
+// a pixel. With the sun within a radius or so of the limb the whole lit crescent is such a
+// sliver -- at 175 deg phase it is 0.55 px on a Jupiter 145 px across -- and the rim renders as
+// a dotted chain. It is the SHADING rate that is short, not coverage, so MSAA cannot touch it:
+// MSAA resolves coverage and shades a fragment once.
 //
-// So fade a shell's radiance over the last LIMB_FADE_PX of its silhouette, where the light
-// being removed was never physical. A fixed PIXEL width is what makes that self-scaling:
-// most of a crescent tip on a body a few px across, an edge softening finer than the
-// camera's own PSF on one that fills the screen.
+// WHAT A CAMERA DOES WITH THE SAME SLIVER is the standard this has to meet, and it is the star
+// field's standard: a source narrower than the PSF is imaged AS the PSF, at the source's flux.
+// The rim is such a source in one dimension. So limb_mean_incidence images each pixel's stretch
+// of rim through the camera's Gaussian -- iv_psf_sigma, the one that images every star -- and
+// answers the two questions the one shading sample cannot: how much of this pixel the body
+// COVERS, and what the sun angle is, on average, over the covered part. A rim far above
+// saturation then comes out as a line whose WIDTH the size law sets, exactly as a bright star's
+// disc does, rather than as one pixel that is either lit or not; and a rim that is only faintly
+// lit trails off through intermediate values instead of breaking up.
 //
-// It needs no radius, no camera distance and no CPU feed -- so it serves every body, whether
-// or not that body has an IVBodyPSF quad to feed angular_radius. mu = dot(macroscopic normal,
-// VIEW) is the silhouette's own implicit function, exactly zero at tangency at any distance
-// and any oblateness, and a screen gradient converts it to pixels: for a sphere mu =
-// sqrt(2x/R) at x px inside a limb of pixel radius R, so mu / |grad mu| = 2x whatever R is.
-// A normal that extrapolates to negative mu falls out of the same expression as fully faded.
+// COVERAGE is what a shell multiplies its whole contribution by: the fraction of the pixel's
+// PSF footprint that lands on the body -- 1.0 everywhere but the last few pixels of the
+// silhouette, one half at the silhouette itself. That is the camera's own edge, so a body
+// filling the screen gets an edge softening finer than any by-eye ramp, and a normal that
+// extrapolates past the silhouette lands ON it rather than off it. An OPAQUE shell applies
+// coverage to radiance (specular takes the fade below instead). It cannot use ALPHA, which
+// would move it to the transparent pass and stop it writing depth. Its
+// light is therefore removed rather than replaced by what stands behind: right against sky,
+// where every one of these artifacts lives, and a ~1 px dark fringe in the rarer case of a lit
+// body transiting a brighter one. A TRANSLUCENT shell has no such constraint and applies it to
+// ALPHA, where partial coverage is what alpha already means.
+//
+// THE MEAN SUN ANGLE is what closes the speckle. The engine's diffuse carries albedo * N.L from
+// the one interpolated normal; rescaling ALBEDO (and SPECULAR) by mean / N.L replaces that
+// sample with the pixel's true mean -- zero on a night side however the normal extrapolated,
+// the sliver's exact light where the sample missed it. Where N.L is zero no factor can reach
+// the diffuse, and the caller hands the remainder to emission.
+//
+// SPECULAR KEEPS A FIXED-WIDTH FADE AT THE SILHOUETTE on top of that, LIMB_FADE_PX wide, and
+// not the coverage above. The lobe is a point sample of the sliver as the diffuse was, but the
+// rescale by N.L does not average it: at grazing incidence the microfacet visibility term makes
+// it a function of N.V as much as N.L, and N.V runs to zero across the sliver, where the term is
+// the model's grazing sheen -- a default dielectric lobe no body has tuned -- rather than any
+// sunlight the camera resolves. Measured on the Jupiter rim with specular on coverage alone, the
+// sheen turned the line's fading end pixels from intermediate to clipped and brightened a ~20 px
+// band along the whole rim by 15-30 codes through the glow pass. Whether a limb should glint is
+// a question for the disc photometry laws, not for sampling, so the fade that held the sheen in
+// check before coverage existed stays, for specular alone. Applied as the square root, F0
+// scaling as SPECULAR^2.
 //
 // HAZARD: screen derivatives, so call this under UNIFORM control flow -- the rule the ring
 // shadow's fwidth() carries (see _sun_occlusion.gdshaderinc). Form it where mu is formed,
 // never inside a branch that some lanes of a 2x2 quad skip.
-//
-// An OPAQUE shell applies it to radiance (and to SPECULAR as its square root, F0 scaling as
-// SPECULAR^2). It cannot use ALPHA, which would move it to the transparent pass and stop it
-// writing depth. Its light is therefore removed rather than replaced by what stands behind:
-// right against sky, where every one of these artifacts lives, and a ~1 px dark fringe in the
-// rarer case of a lit body transiting a brighter one. A TRANSLUCENT shell has no such
-// constraint and applies it to ALPHA, where partial coverage is what alpha already means.
-const float LIMB_FADE_PX = 1.5;
-
-
-// See above: pass dot(macroscopic normal, VIEW), multiply radiance (or alpha) by the result.
-// 1.0 everywhere but the last LIMB_FADE_PX of the silhouette.
-float limb_fade_factor(float mu) {
-	// The guard is for the disc's interior, where mu is flat and its gradient underflows to
-	// zero; the ratio there is meant to be enormous, not indeterminate.
-	float gradient = length(vec2(dFdx(mu), dFdy(mu)));
-	return smoothstep(0.0, LIMB_FADE_PX, 0.5 * mu / max(gradient, 1.0e-8));
-}
-
-
-// SUPERSAMPLING THE SUN ANGLE ACROSS ONE PIXEL, at the rim and nowhere else, which is the only
-// thing that removes the points and broken dashes along a body's limb when the sun stands just
-// above it.
-//
-// THE DEFECT. With the sun within a radius or so of the limb, the whole lit crescent is a
-// sliver narrower than a pixel: at 175 deg phase it is 0.55 px on a Jupiter 145 px across. One
-// shading sample per pixel then decides the whole sliver by where its centre happened to land,
-// and the rim renders as a dotted chain. It is the SHADING rate that is short, not coverage, so
-// MSAA cannot touch it -- MSAA resolves coverage and shades a fragment once. Rendering the same
-// view at 2x2 and downsampling makes the rim a clean continuous line, which is the measurement
-// that identified this and the standard this has to meet.
 //
 // WHY THE OBVIOUS CHEAP VERSION IS WRONG, recorded because it shipped once and had to come back
 // out. Estimating the pixel's mean from mu0 and its screen gradient assumes mu0 ramps LINEARLY
@@ -199,65 +199,163 @@ float limb_fade_factor(float mu) {
 // side that has no sunlight at all, and reports a different one per pixel: the original speckle,
 // straight back.
 //
+// WHY POINT SAMPLES ARE WRONG TOO, recorded for the same reason. Eight samples across one pixel
+// in surface angle still miss a sliver thinner than their spacing, or catch it with one sample
+// at eight times its weight. Against the exact integral the rim's mean came out 1.9x high on
+// average and anywhere from zero to several times that from one pixel to the next -- and that
+// noise IS the dashes that survived: it sits exactly where the line is faint enough for noise
+// to show.
+//
 // WHAT THIS DOES INSTEAD. A spheroid's visible surface has an exact parameterization along the
 // screen-radial direction: at surface angle t from the sub-observer point the normal is
 // cos(t) * view + sin(t) * radial, so mu0 is exactly A cos(t) + B sin(t) for two dot products
-// fixed per fragment. No linearization anywhere. Samples are taken across the pixel's own radial
-// extent, and t > 90 deg is DROPPED rather than counted -- past the silhouette is sky, not lit
-// surface, and counting it is the other half of what went wrong before. At 180 deg phase every
-// sample returns exactly zero, so the speckle cannot come back; where the sliver is resolved the
-// mean equals the centre sample and this is a no-op. Measured on the 175 deg case, the
-// along-arc variation that makes the dashes falls from 6e7 to 7.
+// fixed per fragment, and the sunlight on any stretch of that line integrates in closed form.
+// The kernel is cut into cells of screen pixels, each cell's light is that integral -- so a
+// sliver of any width is counted exactly, in whichever cell it falls -- and the cells are
+// weighted by the camera's Gaussian at the pixel's own depth. Past the limb is sky: it counts
+// toward coverage as the zero it is, and not toward the mean. At 180 deg phase every cell
+// integrates to exactly zero, so the speckle cannot come back; where the crescent is resolved
+// the mean equals the centre sample and this is a no-op. Modelled before it was written,
+// against a brute-force render of the sliver through the same PSF: at 179 deg phase the point
+// samples left 86 of 144 lit degrees of arc dark, and this leaves none.
 //
-// The pixel's radial extent comes from mu's own screen gradient, as in limb_fade_factor: the
-// surface angle per screen pixel is |grad mu| / sin(t). So this needs no radius, no camera
-// distance and no CPU feed either.
+// The pixel's depth inside the limb and the limb's pixel radius both come from mu's own screen
+// gradient: for a sphere mu = sqrt(2x/R) at x px inside a limb of pixel radius R, so
+// |grad mu| is tan(t) / R per pixel -- the LOCAL curvature, right on an oblate body at any
+// latitude, and needing no CPU feed. What that cannot serve is the pixel whose interpolated
+// normal has already turned past the silhouette: mu is zero or negative there, the ratio is
+// meaningless, and the pixel is nonetheless a surface fragment sitting right on the limb. The
+// caller supplies the body's pixel radius from its own geometry for that case, and it bounds
+// the gradient's answer everywhere else against interpolation error at the limb.
 //
-// COST is confined to the rim by LIMB_INCIDENCE_REACH_PX, and there is no texture work in it --
-// the loop is arithmetic on two dot products.
-//
-// HAZARD: screen derivatives, so call under UNIFORM control flow (see limb_fade_factor).
-const int LIMB_INCIDENCE_SAMPLES = 8;
-// One pixel, not more. Widening is what the atmosphere ring needs, because there the light has
-// no neighbouring fragment to land in; here every pixel along the rim already exists and now
-// carries its own correct mean, so a wider filter only spreads the sliver over more pixels than
-// it occupies and over-delivers against the supersampled reference.
-const float LIMB_INCIDENCE_FILTER_PX = 1.0; // pixel widths the mean is taken over
-const float LIMB_INCIDENCE_REACH_PX = 6.0;  // px inside the silhouette past which the centre IS the mean
+// COST is confined to the rim by the kernel's reach, and there is no texture work in it --
+// per rim fragment, one asin and a few trig calls per cell.
+const int LIMB_KERNEL_CELLS = 16;
+// Half-width of the kernel in px. Three sigma would be 1.5 px; this is set by the size law
+// instead, as a star's sprite is: the rim at the camera's dark-adapted rest exposure stands
+// four to five decades above saturation, and its Gaussian is still above one 8-bit step at
+// 2.7 px. A cell is 3/8 px, fine enough that the Gaussian is nearly flat across it.
+const float LIMB_KERNEL_REACH_PX = 3.0;
+// Width in px of the silhouette fade that SPECULAR alone keeps (see above).
+const float LIMB_FADE_PX = 1.5;
 const float LIMB_HALF_PI = 1.5707963;
 // How far the ALBEDO rescale may carry the mean above the centre sample before the rest is
 // handed to emission. A cap is needed because the ratio diverges as the centre sample goes to
 // zero, which is precisely the pixel whose sliver the centre missed.
 const float LIMB_INCIDENCE_ALBEDO_MAX = 4.0;
+// The camera's PSF width in px, IVPSFSettings.psf_sigma -- a global so this cannot drift from
+// the star field and the body quads it images alongside.
+global uniform float iv_psf_sigma;
 
-// Returns the mean of max(mu0, 0) over the ON-BODY part of this fragment's radial footprint.
-// Pass the MACROSCOPIC normal and mu = dot(macro_normal, view_dir), all in one space.
-float limb_mean_incidence(vec3 macro_normal, vec3 view_dir, vec3 sun_dir, float mu) {
+// Antiderivative of (a cos t + b sin t) cos t.
+float limb_chord_antiderivative(float a, float b, float t) {
+	float sin_t = sin(t);
+	return a * (0.5 * t + 0.25 * sin(2.0 * t)) + 0.5 * b * sin_t * sin_t;
+}
+
+// Integral over [t_lo, t_hi] of max(a cos t + b sin t, 0) cos t dt: the sunlight on the
+// stretch of screen-radial surface line between two surface angles, per unit radius. The
+// clamp is exact -- mu0 is a single sinusoid in t, so its positive part is one interval.
+float limb_lit_chord(float a, float b, float t_lo, float t_hi) {
+	float t_peak = atan(b, a);
+	float lo = max(t_lo, t_peak - LIMB_HALF_PI);
+	float hi = min(t_hi, t_peak + LIMB_HALF_PI);
+	if (hi <= lo) {
+		return 0.0;
+	}
+	// max(): where the lit stretch is a hair wide the difference can cancel to a hair below
+	// zero, and a negative mean reaches the specular path as sqrt() of a negative ratio -- a
+	// NaN the glow pass then blooms into a blob many times the size of the sun's.
+	return max(limb_chord_antiderivative(a, b, hi) - limb_chord_antiderivative(a, b, lo), 0.0);
+}
+
+// Sunlight (the integral of max(mu0, 0), in px) on the surface between screen depths x1 < x2,
+// measured inward from the near limb along the screen-radial line, on a sphere of radius_px;
+// covered receives the length of [x1, x2] that is surface at all. Sky beyond either limb
+// contributes to neither; past the centre the line runs on to the far limb with the radial
+// reversed, which only matters for a body a few px across.
+float limb_cell_light(float a, float b, float x1, float x2, float radius_px, out float covered) {
+	float far_limb = 2.0 * radius_px;
+	x1 = max(x1, 0.0);
+	x2 = min(x2, far_limb);
+	covered = max(x2 - x1, 0.0);
+	if (covered <= 0.0) {
+		return 0.0;
+	}
+	float light = 0.0;
+	if (x1 < radius_px) { // near side: x = R (1 - sin t)
+		float x_hi = min(x2, radius_px);
+		light += limb_lit_chord(a, b, asin(1.0 - x_hi / radius_px), asin(1.0 - x1 / radius_px));
+	}
+	if (x2 > radius_px) { // far side: x = R (1 + sin t)
+		float x_lo = max(x1, radius_px);
+		light += limb_lit_chord(a, -b, asin(x_lo / radius_px - 1.0), asin(x2 / radius_px - 1.0));
+	}
+	return light * radius_px;
+}
+
+// The body's silhouette radius in px from its own geometry, for limb_mean_incidence: this
+// fragment's TRUE world position (the shells' v_world_position, not the farwarped VERTEX),
+// the body's world centre (MODEL_MATRIX[3]), the camera, and the projection. The fragment's
+// own distance from the centre is the radius, whatever mesh and frame the shell draws with
+// -- the shared unit sphere or a packed model in kilometres -- and world space is the one
+// frame every shell fills in unconditionally (the local-frame varyings are skipped on an
+// airless body). Small-angle, as body_pixel_radius is; the value bounds a local estimate
+// and stands in for it only at the silhouette, so a few percent on a body filling the
+// screen is nothing.
+float limb_radius_px(vec3 world_position, vec3 centre_world, vec3 camera_world,
+		float proj_11, float viewport_height) {
+	float radius = length(world_position - centre_world);
+	float distance = max(length(camera_world - centre_world), radius);
+	return abs(proj_11) * viewport_height * 0.5 * radius / distance;
+}
+
+// Returns the mean of max(mu0, 0) over the part of this fragment's PSF footprint that lands
+// on the body; in coverage the fraction of the footprint that does; and in silhouette_fade
+// the fixed-width fade that specular alone applies (see above for what each is for). Pass the
+// MACROSCOPIC normal and mu = dot(macro_normal, view_dir), all in one space, and the
+// silhouette radius from limb_radius_px.
+float limb_mean_incidence(vec3 macro_normal, vec3 view_dir, vec3 sun_dir, float mu,
+		float radius_px_hint, out float coverage, out float silhouette_fade) {
+	coverage = 1.0;
+	silhouette_fade = 1.0;
 	float centre = max(dot(macro_normal, sun_dir), 0.0);
 	float gradient = length(vec2(dFdx(mu), dFdy(mu)));
 	float sin_t = sqrt(max(1.0 - mu * mu, 0.0));
-	if (gradient <= 0.0 || sin_t < 1.0e-4 || 0.5 * mu / gradient > LIMB_INCIDENCE_REACH_PX) {
-		return centre; // resolved, or degenerate at the sub-observer point where mu is flat
+	if (gradient <= 0.0 || sin_t < 1.0e-4) {
+		return centre; // degenerate at the sub-observer point, where mu is flat
+	}
+	// R = tan(t) / |grad mu|, bounded by the geometric radius (see above), and the depth is
+	// R (1 - sin t), written with 1 - sin t = mu^2 / (1 + sin t) so it survives float32 at
+	// the limb, where sin t -> 1. A normal interpolated past the silhouette sits ON it.
+	float radius_px = radius_px_hint;
+	float depth_px = 0.0;
+	if (mu > 0.0) {
+		radius_px = clamp(sin_t / (mu * gradient), 0.5 * radius_px_hint, 2.0 * radius_px_hint);
+		depth_px = radius_px * mu * mu / (1.0 + sin_t);
+	}
+	silhouette_fade = smoothstep(0.0, LIMB_FADE_PX, depth_px);
+	if (depth_px > LIMB_KERNEL_REACH_PX + 0.5) {
+		return centre; // resolved: the kernel never reaches the silhouette
 	}
 	vec3 radial = normalize(macro_normal - mu * view_dir); // outward, in the (normal, view) plane
 	float along_view = dot(view_dir, sun_dir);
 	float along_radial = dot(radial, sun_dir);
-	float t = acos(clamp(mu, -1.0, 1.0));
-	float step_t = gradient / sin_t; // surface angle per screen pixel, radially
-	float sum = 0.0;
+	float sigma = max(iv_psf_sigma, 0.1);
+	float cell = 2.0 * LIMB_KERNEL_REACH_PX / float(LIMB_KERNEL_CELLS);
+	float light = 0.0;
+	float covered_weight = 0.0;
 	float weight_sum = 0.0;
-	for (int i = 0; i < LIMB_INCIDENCE_SAMPLES; i++) {
-		float offset = (float(i) + 0.5) * (2.0 / float(LIMB_INCIDENCE_SAMPLES)) - 1.0;
-		float weight = 1.0 - abs(offset); // tent
-		weight_sum += weight;
-		float sample_t = t + offset * 0.5 * LIMB_INCIDENCE_FILTER_PX * step_t;
-		if (sample_t > LIMB_HALF_PI) {
-			continue; // beyond the silhouette: sky, contributing no surface light
-		}
-		sum += weight * max(along_view * cos(sample_t) + along_radial * sin(sample_t), 0.0);
+	for (int i = 0; i < LIMB_KERNEL_CELLS; i++) {
+		float offset = (float(i) + 0.5) * cell - LIMB_KERNEL_REACH_PX;
+		float weight = exp(-offset * offset / (2.0 * sigma * sigma));
+		weight_sum += weight * cell;
+		float x = depth_px + offset;
+		float covered;
+		light += weight * limb_cell_light(along_view, along_radial, x - 0.5 * cell,
+				x + 0.5 * cell, radius_px, covered);
+		covered_weight += weight * covered;
 	}
-	// Normalized by the FULL tent, so the part of the filter hanging past the silhouette
-	// counts as the zero it is. That makes the result coverage-weighted, which is what keeps
-	// the rim from over-delivering where the sliver fills only a fraction of the pixel.
-	return weight_sum > 0.0 ? sum / weight_sum : centre;
+	coverage = covered_weight / weight_sum;
+	return covered_weight > 0.0 ? light / covered_weight : centre;
 }

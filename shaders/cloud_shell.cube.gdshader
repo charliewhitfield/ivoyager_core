@@ -195,19 +195,21 @@ void fragment() {
 	// albedo * mu0, so rescaling ALBEDO delivers the mean wherever mu0 is positive; where the
 	// centre sample missed the sliver entirely no albedo factor can reach it, and that
 	// remainder goes to emission below. Formed here with the other screen-derivative terms,
-	// under uniform control flow.
+	// under uniform control flow. It also reports the pixel's coverage by this shell, which
+	// is applied at the very end.
 	float limb_mu0_centre = max(atm_mu0, 0.0);
-	float limb_mu0_mean = limb_mean_incidence(macro_normal, VIEW, sun_view, atm_mu);
+	float limb_fade; // the pixel's coverage by this shell
+	float limb_specular_fade; // the silhouette fade specular alone keeps
+	float limb_mu0_mean = limb_mean_incidence(macro_normal, VIEW, sun_view, atm_mu,
+			limb_radius_px(v_world_position, MODEL_MATRIX[3].xyz, CAMERA_POSITION_WORLD,
+			PROJECTION_MATRIX[1][1], VIEWPORT_SIZE.y), limb_fade, limb_specular_fade);
 	float limb_engine_mu0 = min(limb_mu0_mean, LIMB_INCIDENCE_ALBEDO_MAX * limb_mu0_centre);
 	float limb_emission_mu0 = limb_mu0_mean - limb_engine_mu0;
 	if (limb_mu0_centre > 0.0) {
-		ALBEDO *= limb_engine_mu0 / limb_mu0_centre;
+		float limb_ratio = limb_engine_mu0 / limb_mu0_centre;
+		ALBEDO *= limb_ratio;
+		SPECULAR *= sqrt(limb_ratio); // F0 scales as SPECULAR^2
 	}
-	// The sub-pixel sliver at the silhouette, which one shading sample renders as speckle
-	// (see limb_fade_factor). Formed here, alongside the mu it reads, because its screen
-	// derivatives must stay under uniform control flow -- and specifically BEFORE the
-	// coverage branch below, which some lanes of a 2x2 quad skip. Applied to ALPHA at the end.
-	float limb_fade = limb_fade_factor(atm_mu);
 
 	float sun_visible = 1.0;
 	if (ring_texture_outer > 0.0 || occluder_count > 0) {
@@ -266,9 +268,12 @@ void fragment() {
 	SPECULAR *= sqrt(atm_behind_luma);
 	EMISSION = EMISSION * atm_behind_luma + atm_path * sun_light_energy;
 
+	// Specular keeps the silhouette fade rather than coverage (see limb_mean_incidence).
+	SPECULAR *= sqrt(limb_specular_fade);
+
 	ALBEDO = display_write_albedo(ALBEDO);
 	EMISSION = display_write(EMISSION);
 	// Alpha-blended, so the one weight fades everything this shell contributes -- and the
-	// limb fade rides the same alpha, which is where partial coverage belongs.
+	// pixel's coverage by this shell rides the same alpha, which is where it belongs.
 	ALPHA *= v_disc_weight * limb_fade;
 }
