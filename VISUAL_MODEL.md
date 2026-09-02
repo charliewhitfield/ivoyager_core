@@ -450,7 +450,13 @@ draws the missing half there — the same closed-form chord integral under the s
 evaluated outward, so the two halves partition one convolution rather than overlapping. Its
 cells are spaced uniformly in `sqrt(depth)` rather than in depth: seen from outside, the whole
 lit sliver sits *at* the limb, and a uniform grid's first sample lands past it and weights it
-as if it were that much deeper — 40 % low at three pixels out.
+as if it were that much deeper — 40 % low at three pixels out. And the sun angles it
+integrates are the limb point's for the camera where it is (`limb_sun_angles()`), not the
+phase at the body's centre: a camera at finite distance sees the tangent circle, whose points
+see the sun lower than the centre does by the body's angular radius — 18° from three radii
+out. Lit from the centre's phase, the rim stood as if the sun were that far above a limb it
+was sitting on, stayed lit after the sun had set behind the disc, and went out only at phase
+180°, while the surface beneath it, which has the real normal, had gone dark with the sun.
 
 **What scales it is the body's own flux**, spread over a Lambert sphere's disc, rather than
 anything sampled from the surface — which this quad cannot read. The total is therefore the

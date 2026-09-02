@@ -307,7 +307,9 @@ const float LIMB_SQRT_TWO_PI = 2.5066283;
 //
 // The coefficients are the caller's own: a = dot(view, sun) and b = dot(radial, sun), where
 // radial is the outward screen direction at this pixel's azimuth -- the same pair
-// limb_mean_incidence() builds from a surface normal it has and a quad does not.
+// limb_mean_incidence() builds from a surface normal it has and a quad does not. They must be
+// the LIMB POINT's for the camera where it is (body_psf.gdshader's limb_sun_angles()), not the
+// body centre's phase: the two differ by the body's angular radius.
 //
 // CELLS ARE SPACED UNIFORMLY IN sqrt(x), not in x, and that is not tidiness. Seen from the
 // sky side the whole lit sliver sits AT the limb, x ~ 0, while the Gaussian's weight falls

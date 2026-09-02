@@ -42,7 +42,10 @@ render_mode unshaded, cull_disabled, skip_vertex_transform, blend_add, depth_dra
 // surface and its ring reconstructs across the edge. This quad already covers the sky beside
 // the limb, so the missing half is drawn here: the same closed-form chord integral under the
 // same Gaussian (limb_sky_side_incidence(), the sibling of the surface's limb_mean_incidence()),
-// evaluated outward from the limb, scaled so the two halves partition one convolution.
+// evaluated outward from the limb, scaled so the two halves partition one convolution. What it
+// integrates is the sun's height above the LIMB's horizon for the camera where it is
+// (limb_sun_angles()), not the phase at the body's centre: from three radii out the two differ
+// by the body's 18 deg angular radius, and the surface this has to meet has the real normal.
 //
 // It is the body's OWN flux that scales it -- the magnitude the core would draw, spread over a
 // Lambert sphere's disc -- rather than anything sampled from the surface, which this quad has
@@ -107,20 +110,23 @@ uniform float angular_radius = 0.0;       // body radius / camera distance; the 
 uniform float handoff_low = 1.0;          // px radius at/below which this fully replaces the disc
 uniform float handoff_high = 2.5;         // px at/above which the disc fully replaces this core
 
-// THE BODY'S RIM, as this quad needs it; IVBodyPSF sets all five each frame.
+// THE BODY'S RIM, as this quad needs it; IVBodyPSF sets all six each frame.
 //
-// The sun's direction on screen (+Y up) and the phase angle's cosine say where the lit limb is
-// and how much of the disc is lit. The silhouette arrives as the CONIC it actually is
+// The first three are in the camera's own frame (right, up, forward), in units of the body's
+// equatorial radius: the sun's direction, the camera's position from the body's centre, and the
+// body's figure as the quadric x^T E x = 1. Together they give the sun's angles at any point of
+// the limb for the camera where it IS (limb_sun_angles), and the phase angle and sun's screen
+// direction the wing takes. The silhouette arrives as the CONIC it actually is
 // (IVBodyPSF.get_limb_conic), in tangent units this shader scales by its own focal length: the
 // fragment solves it along its own direction rather than comparing against a radius. An angular
 // radius could not do it -- perspective draws the tangent cone, 8 % wider than r/d at 2.6 radii
 // out, and an oblate body's outline is an ellipse -- and both errors are tens of pixels where
 // the spread being drawn is a few. Two degenerate cases, both meaning "no rim to draw here":
-// sun_screen_direction is zero where a lit side has no screen direction at all (a body at full
-// or new phase), and limb_semi_axes is zero for an emissive disc, which has no crescent and no
-// reflected rim.
-uniform vec2 sun_screen_direction = vec2(0.0);
-uniform float phase_cos = 1.0;    // cos of the phase angle at the body
+// sun_direction is zero for an emissive body, which has no lit side, and limb_semi_axes is zero
+// where the silhouette is not an ellipse (and again for a star).
+uniform vec3 sun_direction = vec3(0.0);  // unit, camera frame; zero for a star
+uniform vec3 limb_camera_offset = vec3(0.0, 0.0, -1.0); // the camera from the body's centre
+uniform mat3 limb_ellipsoid;      // the body's figure, x^T E x = 1, same frame and units
 uniform mat3 limb_conic;          // the silhouette, in tangent coordinates (+Y up)
 uniform vec2 limb_semi_axes = vec2(0.0); // its (major, minor) semi-axes, same units
 uniform float limb_centre_offset = 0.0; // and how far its centre sits from the body's
@@ -143,6 +149,42 @@ varying flat float v_rim_amplitude; // the lit limb's flux density, per unit inc
 varying flat float v_rim_reach; // how far out the sky-side spread is worth drawing, px
 varying vec2 v_offset;          // this vertex's corner, in [-1, 1]
 
+
+// Where a ray from the body's projected position along a screen direction (+Y up) crosses the
+// silhouette, in tangent units: the conic restricted to that ray is a quadratic in the
+// distance, and the body's centre is inside its own outline, so the two roots straddle zero and
+// the positive one is the limb. Zero where the conic is degenerate.
+float limb_tangent_along(vec2 direction_up) {
+	vec3 ray = vec3(direction_up, 0.0);
+	vec3 centre = vec3(0.0, 0.0, 1.0);
+	float ray_term = dot(ray, limb_conic * ray);
+	float cross_term = 2.0 * dot(centre, limb_conic * ray);
+	float centre_term = dot(centre, limb_conic * centre);
+	float discriminant = cross_term * cross_term - 4.0 * ray_term * centre_term;
+	if (discriminant <= 0.0 || ray_term == 0.0) {
+		return 0.0;
+	}
+	float root = sqrt(discriminant);
+	return max((-cross_term + root) / (2.0 * ray_term), (-cross_term - root) / (2.0 * ray_term));
+}
+
+// The sun's angles AT THE POINT OF THE LIMB this screen direction touches -- along the view and
+// along the outward normal, the pair limb_sky_side_incidence() takes -- for the camera where it
+// is. A camera at finite distance sees the TANGENT circle, and a point on it sees the sun lower
+// than the body's centre does by the body's angular radius: 18 deg from three radii out. Lit
+// from the centre's phase angle instead, this rim stood as if the sun were that far above a
+// limb it was sitting on, stayed lit after the sun had set behind the disc, and went out only
+// at phase 180 -- while the surface, which has the real normal, had gone dark with the sun. The
+// ray through the silhouette at tangent offset limb_tangent touches the figure at the double
+// root of its quadric, and the figure's normal there is E times the touching point.
+vec2 limb_sun_angles(vec2 direction_up, float limb_tangent) {
+	vec3 centre_ray = limb_camera_offset / limb_camera_offset.z;
+	vec3 limb_ray = centre_ray + vec3(direction_up * limb_tangent, 0.0);
+	vec3 figure_ray = limb_ellipsoid * limb_ray;
+	float touch = -dot(limb_camera_offset, figure_ray) / dot(limb_ray, figure_ray);
+	vec3 normal = normalize(limb_ellipsoid * (limb_camera_offset + touch * limb_ray));
+	return vec2(-dot(normalize(limb_ray), sun_direction), dot(normal, sun_direction));
+}
 
 void vertex() {
 	// VERTEX.xy carries the corner sign; the mesh is a unit quad and the size is set here.
@@ -175,8 +217,13 @@ void vertex() {
 	// below are clip space, whose +Y points DOWN under Vulkan and up under GL. Unsigned they land
 	// mirrored across the body on one renderer of the two -- a second light on the dark limb.
 	vec2 screen_to_clip = vec2(1.0, sign(PROJECTION_MATRIX[1][1]));
-	v_sun_direction = sun_screen_direction * screen_to_clip;
+	float sun_screen_length = length(sun_direction.xy);
+	vec2 sun_up = sun_screen_length > 0.0 ? sun_direction.xy / sun_screen_length : vec2(0.0);
+	v_sun_direction = sun_up * screen_to_clip;
 	v_focal_px = abs(PROJECTION_MATRIX[1][1]) * VIEWPORT_SIZE.y * 0.5;
+	// cos of the phase angle at the body's centre, +1 at full and -1 at new: what the wing's
+	// offset and the disc integral want, and NOT what lights the limb (see limb_sun_angles).
+	float phase_cos = dot(normalize(limb_camera_offset), sun_direction);
 	// A CRESCENT'S LIGHT IS NOT CENTRED ON THE BODY, and while the wing was, the glare sat
 	// symmetrically around a disc whose lit part was a sliver off to one side. Offsetting it by
 	// a phase-dependent fraction of the disc radius puts that spill where the light actually is.
@@ -201,16 +248,21 @@ void vertex() {
 	float limb_area_px = limb_semi_axes.x * limb_semi_axes.y * v_focal_px * v_focal_px;
 	float phase = acos(clamp(phase_cos, -1.0, 1.0));
 	float disc_integral = (2.0 / 3.0) * (sin(phase) + (PI - phase) * phase_cos);
+	// The sun's angles at the limb point nearest it, where the spread is brightest: the sun
+	// below that point's horizon is below every limb point's, and there is no rim at all.
+	float limb_tangent_peak = limb_tangent_along(sun_up);
+	vec2 sun_angles_peak = limb_sun_angles(sun_up, limb_tangent_peak);
 	v_rim_amplitude = 0.0;
 	v_rim_reach = 0.0;
-	if (limb_area_px > 0.0 && disc_integral > 0.0) {
+	if (limb_area_px > 0.0 && disc_integral > 0.0 && limb_tangent_peak > 0.0
+			&& sun_angles_peak.y > 0.0) {
 		v_rim_amplitude = intensity * TAU * psf_sigma * psf_sigma
 				* body_disc_weight(pixel_radius, handoff_low, handoff_high)
 				/ (limb_area_px * disc_integral);
 		// Reach by the same size law the core and the field's stars take, evaluated on the
 		// brightest place the spread has: the lit limb, where its own Gaussian starts.
-		float limb_peak = v_rim_amplitude * limb_sky_side_incidence(phase_cos, sin(phase), 0.0,
-				sqrt(limb_area_px), psf_sigma);
+		float limb_peak = v_rim_amplitude * limb_sky_side_incidence(sun_angles_peak.x,
+				sun_angles_peak.y, 0.0, limb_tangent_peak * v_focal_px, psf_sigma);
 		v_rim_reach = 0.5 * psf_visible_size(limb_peak, psf_sigma);
 	}
 	// The quad must span whichever component reaches further. psf_visible_size returns a
@@ -254,27 +306,14 @@ void fragment() {
 	// them, but a shader with a discard in it cannot be trusted to be rejected before it runs.
 	float rim = 0.0;
 	if (v_rim_amplitude > 0.0 && radius_px > 0.0) {
-		// Where this fragment's own direction crosses the silhouette: the conic restricted to
-		// that ray is a quadratic in distance, and the body's centre is inside its own outline,
-		// so the two roots straddle zero and the positive one is the limb.
-		vec2 direction = offset_px / radius_px;
-		vec3 ray = vec3(direction * vec2(1.0, sign(PROJECTION_MATRIX[1][1])), 0.0);
-		vec3 centre = vec3(0.0, 0.0, 1.0);
-		float ray_term = dot(ray, limb_conic * ray);
-		float cross_term = 2.0 * dot(centre, limb_conic * ray);
-		float centre_term = dot(centre, limb_conic * centre);
-		float discriminant = cross_term * cross_term - 4.0 * ray_term * centre_term;
-		if (discriminant > 0.0 && ray_term != 0.0) {
-			float root = sqrt(discriminant);
-			float limb_px = max((-cross_term + root) / (2.0 * ray_term),
-					(-cross_term - root) / (2.0 * ray_term)) * v_focal_px;
-			float distance_px = radius_px - limb_px;
-			if (distance_px > -RIM_SEAM_PX && distance_px < v_rim_reach) {
-				float along_radial = sqrt(max(1.0 - phase_cos * phase_cos, 0.0))
-						* dot(direction, v_sun_direction);
-				rim = min(v_rim_amplitude * limb_sky_side_incidence(phase_cos, along_radial,
-						max(distance_px, 0.0), limb_px, psf_sigma), PSF_LIGHT_MAX);
-			}
+		vec2 direction_up = (offset_px / radius_px) * vec2(1.0, sign(PROJECTION_MATRIX[1][1]));
+		float limb_tangent = limb_tangent_along(direction_up);
+		float limb_px = limb_tangent * v_focal_px;
+		float distance_px = radius_px - limb_px;
+		if (limb_tangent > 0.0 && distance_px > -RIM_SEAM_PX && distance_px < v_rim_reach) {
+			vec2 sun_angles = limb_sun_angles(direction_up, limb_tangent);
+			rim = min(v_rim_amplitude * limb_sky_side_incidence(sun_angles.x, sun_angles.y,
+					max(distance_px, 0.0), limb_px, psf_sigma), PSF_LIGHT_MAX);
 		}
 	}
 	float light = psf_core_light(v_intensity, radius_px, psf_sigma)

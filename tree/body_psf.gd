@@ -274,7 +274,7 @@ func _process(_delta: float) -> void:
 	_refresh_handoff(apparent_magnitude, camera_distance)
 	_material.set_shader_parameter(&"apparent_magnitude", apparent_magnitude)
 	_material.set_shader_parameter(&"angular_radius", _mean_radius / camera_distance)
-	_set_rim_parameters(camera, camera_distance)
+	_set_rim_parameters(camera)
 
 
 # Re-solves the crossfade when the exposure or the source's distance-independent
@@ -317,26 +317,25 @@ func _refresh_handoff(apparent_magnitude: float, camera_distance: float) -> void
 # sqrt(a^2 cos^2 + c^2 sin^2) along it, for the angle between the pole and the line of sight.
 # A body whose real figure is a mesh gets the ellipse its table radii describe, which is what
 # RIM_SEAM_PX in the shader exists to absorb.
-func _set_rim_parameters(camera: Camera3D, camera_distance: float) -> void:
+func _set_rim_parameters(camera: Camera3D) -> void:
+	# The rim's geometry goes over in the camera's own frame, in units of the equatorial
+	# radius (see get_limb_ellipsoid): the shader derives the phase angle and the sun's screen
+	# direction from it, and the sun's angles at any limb point for the camera where it is.
 	var camera_basis := camera.global_transform.basis
-	var view_direction := (_body.global_position - camera.global_position) / camera_distance
-	var sun_screen_direction := Vector2.ZERO
-	var phase_cos := 1.0
+	var to_body := _body.global_position - camera.global_position
+	var pole := _body.get_north_axis()
+	var sun_direction := Vector3.ZERO
 	if !_is_sun and _star:
 		var star_vector := _star.global_position - _body.global_position
 		if !star_vector.is_zero_approx():
-			var to_star := star_vector.normalized()
-			# Phase angle at the body, sun-to-camera, matching _get_reflected_apparent_magnitude's
-			# sign convention. cos(phase) runs +1 at full to -1 at new.
-			phase_cos = clampf(-to_star.dot(view_direction), -1.0, 1.0)
-			var screen_direction := Vector2(to_star.dot(camera_basis.x),
-					to_star.dot(camera_basis.y))
-			if !screen_direction.is_zero_approx():
-				sun_screen_direction = screen_direction.normalized()
-	var conic := get_limb_conic(_body.global_position - camera.global_position,
-			_body.get_north_axis(), _equatorial_radius, _polar_radius, camera.global_transform.basis)
-	_material.set_shader_parameter(&"sun_screen_direction", sun_screen_direction)
-	_material.set_shader_parameter(&"phase_cos", phase_cos)
+			sun_direction = to_camera_frame(star_vector.normalized(), camera_basis)
+	var radius_scale := 1.0 / _equatorial_radius if _equatorial_radius > 0.0 else 0.0
+	var conic := get_limb_conic(to_body, pole, _equatorial_radius, _polar_radius, camera_basis)
+	_material.set_shader_parameter(&"sun_direction", sun_direction)
+	_material.set_shader_parameter(&"limb_camera_offset",
+			to_camera_frame(-to_body, camera_basis) * radius_scale)
+	_material.set_shader_parameter(&"limb_ellipsoid",
+			get_limb_ellipsoid(pole, _equatorial_radius, _polar_radius, camera_basis))
 	_material.set_shader_parameter(&"limb_conic", conic)
 	_material.set_shader_parameter(&"limb_semi_axes",
 			Vector2.ZERO if _is_sun else get_conic_semi_axes(conic))
@@ -407,6 +406,35 @@ static func get_limb_conic(to_body: Vector3, pole: Vector3, equatorial_radius: f
 	m_v1 *= normalize
 	m_11 *= normalize
 	return Basis(Vector3(m_uu, m_uv, m_u1), Vector3(m_uv, m_vv, m_v1), Vector3(m_u1, m_v1, m_11))
+
+
+## Returns [param vector] in the camera's own frame — x right, y up, z FORWARD (the
+## negative of the basis' z) — the frame the quad's rim uniforms share.
+static func to_camera_frame(vector: Vector3, camera_basis: Basis) -> Vector3:
+	return Vector3(vector.dot(camera_basis.x), vector.dot(camera_basis.y),
+			-vector.dot(camera_basis.z))
+
+
+## Returns the body's figure as the quadric [code]x^T E x = 1[/code], in the camera's frame
+## (see [method to_camera_frame]) and in units of the equatorial radius so that its entries
+## are of order one: the identity plus [code](a/c)^2 - 1[/code] times the pole's outer
+## product. The quad's fragment takes the figure's normal at the point its limb ray touches:
+## the sun's incidence THERE is what lights a rim, and from a camera at finite distance that
+## point sees the sun lower than the body's centre does by the body's angular radius.
+static func get_limb_ellipsoid(pole: Vector3, equatorial_radius: float, polar_radius: float,
+		camera_basis: Basis) -> Basis:
+	if equatorial_radius <= 0.0 or polar_radius <= 0.0:
+		return Basis.IDENTITY
+	var pole_excess := (equatorial_radius / polar_radius) ** 2 - 1.0
+	var pole_camera := to_camera_frame(pole, camera_basis)
+	var pole_outer := pole_excess * pole_camera
+	return Basis(
+			Vector3(1.0 + pole_outer.x * pole_camera.x, pole_outer.x * pole_camera.y,
+					pole_outer.x * pole_camera.z),
+			Vector3(pole_outer.y * pole_camera.x, 1.0 + pole_outer.y * pole_camera.y,
+					pole_outer.y * pole_camera.z),
+			Vector3(pole_outer.z * pole_camera.x, pole_outer.z * pole_camera.y,
+					1.0 + pole_outer.z * pole_camera.z))
 
 
 ## Returns the centre, in tangent units, of the ellipse [method get_limb_conic]
