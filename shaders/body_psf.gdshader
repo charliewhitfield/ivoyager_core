@@ -211,8 +211,6 @@ void vertex() {
 			VIEWPORT_SIZE.y);
 	v_intensity = intensity * (1.0 - body_disc_weight(pixel_radius, handoff_low,
 			handoff_high));
-	v_glare = psf_glare_amplitude(intensity, glare_scale, glare_gamma,
-			glare_max_px * resolution_scale);
 	// Both screen directions arrive in the camera's own terms (+Y up) while the corner offsets
 	// below are clip space, whose +Y points DOWN under Vulkan and up under GL. Unsigned they land
 	// mirrored across the body on one renderer of the two -- a second light on the dark limb.
@@ -224,15 +222,49 @@ void vertex() {
 	// cos of the phase angle at the body's centre, +1 at full and -1 at new: what the wing's
 	// offset and the disc integral want, and NOT what lights the limb (see limb_sun_angles).
 	float phase_cos = dot(normalize(limb_camera_offset), sun_direction);
+	// Where the silhouette stands in the sun's own screen direction. Everything the crescent
+	// does happens at or inside this: it is the lit limb's place, and the far end of the disc
+	// the wing must stay on.
+	float limb_sun_tangent = limb_tangent_along(sun_up);
+	float limb_sun_px = limb_sun_tangent * v_focal_px;
+	// Lambert's disc integral of mu0, in units of the disc's area: what the body's flux is
+	// spread over, and the distant observer's phase law itself.
+	float phase = acos(clamp(phase_cos, -1.0, 1.0));
+	float disc_integral = (2.0 / 3.0) * (sin(phase) + (PI - phase) * phase_cos);
+	// THE FLUX THIS CAMERA RECEIVES, against the flux a distant one would. The magnitude driving
+	// this quad carries the body's phase law evaluated at the body's CENTRE, which is a distant
+	// observer's crescent: from close range the camera sees less than a hemisphere, so the sun
+	// sets behind the disc while that law still reports a crescent -- at Saturn from 3.7 radii
+	// the whole visible face is dark past 164 deg of phase, where the law still says 4e-4 of
+	// full. Every limb point sees the sun at sin(phase + rho) for the silhouette's own angular
+	// radius rho, so a distant observer with that much more phase has this camera's geometry:
+	// the substitution is exact where the crescent dies and where the body is far (rho -> 0),
+	// and within a third of a magnitude between, which on a glare halo is nothing.
+	float visible_phase = min(phase + atan(limb_sun_tangent), PI);
+	float visible_integral = (2.0 / 3.0) * (sin(visible_phase)
+			+ (PI - visible_phase) * cos(visible_phase));
+	float visible_flux_ratio = disc_integral > 0.0
+			? max(visible_integral, 0.0) / disc_integral : 1.0;
+	// ONLY THE WING TAKES IT. The core is a point source only where the body is unresolved, and
+	// there the two fluxes agree exactly. The rim divides the same flux by the same disc
+	// integral, so the correction cancels out of it -- which is right: a crescent's surface
+	// brightness is its albedo and its illuminance, and does not care how much of it is left.
+	// The wing is the one term that stands outside the silhouette, glaring for the whole body.
+	v_glare = psf_glare_amplitude(intensity * visible_flux_ratio, glare_scale, glare_gamma,
+			glare_max_px * resolution_scale);
 	// A CRESCENT'S LIGHT IS NOT CENTRED ON THE BODY, and while the wing was, the glare sat
 	// symmetrically around a disc whose lit part was a sliver off to one side. Offsetting it by
-	// a phase-dependent fraction of the disc radius puts that spill where the light actually is.
-	// The core does NOT take the offset: unresolved, the quad IS the body, and the body is where
-	// it is. Scaling by the pixel radius retires the offset as the disc shrinks toward that
-	// regime. The magnitude is by eye -- a Lambert sphere's lit centroid is at 4/(3*PI) of the
-	// radius at quarter phase against this curve's 0.5, and closing that gap would mean carrying
-	// the disc integral of whichever BRDF the body renders with.
-	v_wing_centre = v_sun_direction * ((1.0 - phase_cos) * 0.5) * pixel_radius;
+	// a phase-dependent fraction of the SILHOUETTE'S radius in that direction puts that spill
+	// where the light actually is, and keeps the r^-2 singularity on the disc, which draws over
+	// it. A fraction of the mean radius does not: a mean lies BETWEEN an oblate body's polar and
+	// equatorial extents, so past Saturn's pole the centre stood 10 px out in open sky, where an
+	// exposed r^-2 peak is a dot with a glow around it. The core does NOT take the offset:
+	// unresolved, the quad IS the body, and the body is where it is. The silhouette radius
+	// retires the offset as the disc shrinks toward that regime, as a pixel radius did. The
+	// FRACTION is by eye -- a Lambert sphere's lit centroid is at 4/(3*PI) of the radius at
+	// quarter phase against this curve's 0.5, and closing that gap would mean carrying the disc
+	// integral of whichever BRDF the body renders with.
+	v_wing_centre = v_sun_direction * ((1.0 - phase_cos) * 0.5) * limb_sun_px;
 	// THE RIM'S SKY SIDE (see the header). Amplitude first: the body's whole flux is
 	// intensity * 2*PI*sigma^2 -- what its Gaussian core integrates to -- and a Lambert sphere
 	// spreads that over its projected disc as flux/(area * J) per unit mu0, with J the disc
@@ -246,15 +278,12 @@ void vertex() {
 	// and with it every fragment the spread had to be drawn on.
 	float limb_major_px = (limb_semi_axes.x + limb_centre_offset) * v_focal_px;
 	float limb_area_px = limb_semi_axes.x * limb_semi_axes.y * v_focal_px * v_focal_px;
-	float phase = acos(clamp(phase_cos, -1.0, 1.0));
-	float disc_integral = (2.0 / 3.0) * (sin(phase) + (PI - phase) * phase_cos);
 	// The sun's angles at the limb point nearest it, where the spread is brightest: the sun
 	// below that point's horizon is below every limb point's, and there is no rim at all.
-	float limb_tangent_peak = limb_tangent_along(sun_up);
-	vec2 sun_angles_peak = limb_sun_angles(sun_up, limb_tangent_peak);
+	vec2 sun_angles_peak = limb_sun_angles(sun_up, limb_sun_tangent);
 	v_rim_amplitude = 0.0;
 	v_rim_reach = 0.0;
-	if (limb_area_px > 0.0 && disc_integral > 0.0 && limb_tangent_peak > 0.0
+	if (limb_area_px > 0.0 && disc_integral > 0.0 && limb_sun_tangent > 0.0
 			&& sun_angles_peak.y > 0.0) {
 		v_rim_amplitude = intensity * TAU * psf_sigma * psf_sigma
 				* body_disc_weight(pixel_radius, handoff_low, handoff_high)
@@ -262,7 +291,7 @@ void vertex() {
 		// Reach by the same size law the core and the field's stars take, evaluated on the
 		// brightest place the spread has: the lit limb, where its own Gaussian starts.
 		float limb_peak = v_rim_amplitude * limb_sky_side_incidence(sun_angles_peak.x,
-				sun_angles_peak.y, 0.0, limb_tangent_peak * v_focal_px, psf_sigma);
+				sun_angles_peak.y, 0.0, limb_sun_px, psf_sigma);
 		v_rim_reach = 0.5 * psf_visible_size(limb_peak, psf_sigma);
 	}
 	// The quad must span whichever component reaches further. psf_visible_size returns a

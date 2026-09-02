@@ -529,18 +529,36 @@ Each shader resolves the pixel radius against its **own** `VIEWPORT_SIZE`, so an
 off-screen capture fades at its own buffer's scale rather than the main window's — the
 same reason nothing viewport-dependent is allowed on the CPU side here.
 
-Three approximations worth carrying:
+Four approximations worth carrying:
 
-- **The wing is offset toward the lit limb by a phase-dependent fraction of the disc
-  radius** (direction the sun's on screen, magnitude `(1 − cos phase)/2`),
-  because a crescent's light is not centred on the body and the wing used to be. What that
-  cost showed worst with the sun near the limb, where the rim is a saturated line and the
-  one thing that could gradate it — the camera's own spill — sat half a disc away as an
-  even halo. The core keeps the body's own centre, and scaling by the pixel radius retires
-  the offset on its own as the disc shrinks toward the unresolved regime. The magnitude is
-  by eye: a Lambert sphere's lit centroid is at 4/(3π) of the radius at quarter phase
+- **The wing is offset toward the lit limb by a phase-dependent fraction of the
+  silhouette's own radius in that direction** (direction the sun's on screen, magnitude
+  `(1 − cos phase)/2`), because a crescent's light is not centred on the body and the wing
+  used to be. What that cost showed worst with the sun near the limb, where the rim is a
+  saturated line and the one thing that could gradate it — the camera's own spill — sat
+  half a disc away as an even halo. It takes the silhouette's radius rather than a mean one
+  because that is what holds the `1/r²` singularity on the disc, which draws over it: a mean
+  lies *between* an oblate body's polar and equatorial extents, and past Saturn's pole the
+  centre stood ten pixels out in open sky, where an unoccluded peak is a dot with a glow
+  around it. The core keeps the body's own centre, and the silhouette radius retires the
+  offset on its own as the disc shrinks toward the unresolved regime. The fraction is by
+  eye: a Lambert sphere's lit centroid is at 4/(3π) of the radius at quarter phase
   against this curve's 0.5, and closing that gap would mean carrying the disc integral of
   whichever BRDF the body renders with.
+- **The wing carries the flux this camera receives, not a distant observer's.** The
+  magnitude driving the quad evaluates the body's phase law at the body's *centre*, which is
+  a distant observer's crescent. From close range the camera sees less than a hemisphere, so
+  the sun sets behind the disc while that law still reports one: at Saturn from 3.7 radii the
+  whole visible face is dark past 164° of phase, where the law still says 4 × 10⁻⁴ of full —
+  and the wing glared for a body with no light anywhere on it. Every limb point sees the sun
+  at `sin(phase + ρ)` for the silhouette's own angular radius ρ, so a distant observer with
+  that much more phase has this camera's geometry; the substitution is exact where the
+  crescent dies and where the body is far (ρ → 0), and within a third of a magnitude between,
+  which on a glare halo is nothing. Only the wing takes it. The core is a point source only
+  where the body is unresolved, and the two fluxes agree exactly there; the rim divides the
+  same flux by the same disc integral, so the correction cancels out of it — which is right,
+  a crescent's surface brightness being its albedo and its illuminance however little of it
+  is left.
 - **On Forward+ a resolved bright disc still feeds the engine glow pass**, so the
   resolved-regime wing stacks on that pass's bloom there and the two renderers are close
   rather than identical. Its amplitude in that regime is an in-app anchor to judge,
