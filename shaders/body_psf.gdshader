@@ -20,8 +20,8 @@
 shader_type spatial;
 render_mode unshaded, cull_disabled, skip_vertex_transform, blend_add, depth_draw_never;
 
-// The camera's point-spread response to one body's flux: the Gaussian PSF core plus the
-// r^-2 glare wing, on a camera-facing quad. Driven by IVBodyPSF, which sets the apparent
+// The camera's point-spread response to one body's flux: the Gaussian PSF core, the r^-2
+// glare wing, and the sky side of the body's own rim, on a camera-facing quad. Driven by IVBodyPSF, which sets the apparent
 // magnitude and angular radius from true (un-farwarped) geometry each frame -- for an
 // in-scene star from its own luminosity, for a sunlit body from its albedo, phase and the
 // two distances. The law is the catalog star field's, shared function for function through
@@ -33,6 +33,22 @@ render_mode unshaded, cull_disabled, skip_vertex_transform, blend_add, depth_dra
 // body that shrinks past its disc becomes a photometric point rather than vanishing at a
 // distance cull. Resolved, the WING persists -- glare belongs to the camera and not to the
 // subject, so it takes no crossfade -- and that persisting wing is the crescent glow.
+//
+// THE RIM'S SKY SIDE, and why it can only be drawn here. A body's surface shader images each
+// rim pixel through the camera's PSF, but it can only put that light on fragments the body
+// has: its rim ends at the rasterized silhouette, and the outward half of a rim pixel's point
+// spread belongs beyond it. Left undrawn, a rim compressed to a line keeps a knife edge, which
+// on a shallow curve is a staircase -- an atmosphere has none because its shell stands off the
+// surface and its ring reconstructs across the edge. This quad already covers the sky beside
+// the limb, so the missing half is drawn here: the same closed-form chord integral under the
+// same Gaussian (limb_sky_side_incidence(), the sibling of the surface's limb_mean_incidence()),
+// evaluated outward from the limb, scaled so the two halves partition one convolution.
+//
+// It is the body's OWN flux that scales it -- the magnitude the core would draw, spread over a
+// Lambert sphere's disc -- rather than anything sampled from the surface, which this quad has
+// no access to. So the total is the body's true flux through its true phase law, while the
+// distribution across the crescent is Lambert's. What that costs is the seam: a body whose rim
+// albedo differs from its disc average meets its own spread at a slightly different level.
 //
 // WHY ONE ITEM RATHER THAN TWO. This merges what were sun_point.gdshader (a point sprite)
 // and sun_glare.gdshader (a quad). Two draws are two adds in the blend, and on the
@@ -63,6 +79,7 @@ render_mode unshaded, cull_disabled, skip_vertex_transform, blend_add, depth_dra
 
 #include "_display.gdshaderinc"
 #include "_farwarp.gdshaderinc"
+#include "_photometry.gdshaderinc"
 #include "_point_spread_function.gdshaderinc"
 
 // The field's photometry, shared value for value with stars.gdshader through IVStarSettings,
@@ -90,26 +107,39 @@ uniform float angular_radius = 0.0;       // body radius / camera distance; the 
 uniform float handoff_low = 1.0;          // px radius at/below which this fully replaces the disc
 uniform float handoff_high = 2.5;         // px at/above which the disc fully replaces this core
 
-// Where the WING is centred, as a screen-space offset (+Y up) in units of the body's own pixel
-// radius, set each frame by IVBodyPSF: the direction is the sun's on screen and the magnitude
-// grows with phase, reaching the limb as the crescent vanishes.
+// THE BODY'S RIM, as this quad needs it; IVBodyPSF sets all five each frame.
 //
-// A CRESCENT'S LIGHT IS NOT CENTRED ON THE BODY, and while the wing was, the glare sat
-// symmetrically around a disc whose lit part was a sliver off to one side. What that costs is
-// worst exactly where a rim is hardest to draw: with the sun near the limb the rim is a
-// saturated line with nothing between it and black sky, because the one thing that could
-// gradate it -- the camera's own spill -- was centred half a disc away and arrived as a broad
-// even halo instead. Offsetting the wing puts that spill where the light actually is, so the
-// rim has a falloff to sit against and the transition stops being one step from white to
-// nothing. The core does NOT take the offset: unresolved, the quad IS the body, and the body
-// is where it is. Scaling by the pixel radius makes this vanish on its own as the disc shrinks
-// toward that regime.
-uniform vec2 wing_offset = vec2(0.0);
+// The sun's direction on screen (+Y up) and the phase angle's cosine say where the lit limb is
+// and how much of the disc is lit. The silhouette arrives as the CONIC it actually is
+// (IVBodyPSF.get_limb_conic), in tangent units this shader scales by its own focal length: the
+// fragment solves it along its own direction rather than comparing against a radius. An angular
+// radius could not do it -- perspective draws the tangent cone, 8 % wider than r/d at 2.6 radii
+// out, and an oblate body's outline is an ellipse -- and both errors are tens of pixels where
+// the spread being drawn is a few. Two degenerate cases, both meaning "no rim to draw here":
+// sun_screen_direction is zero where a lit side has no screen direction at all (a body at full
+// or new phase), and limb_semi_axes is zero for an emissive disc, which has no crescent and no
+// reflected rim.
+uniform vec2 sun_screen_direction = vec2(0.0);
+uniform float phase_cos = 1.0;    // cos of the phase angle at the body
+uniform mat3 limb_conic;          // the silhouette, in tangent coordinates (+Y up)
+uniform vec2 limb_semi_axes = vec2(0.0); // its (major, minor) semi-axes, same units
+
+// How far inside the analytic limb the sky-side spread still draws, in px. The ellipse above
+// is the body's true figure while the silhouette on screen is a tessellated mesh just inside
+// it, and a custom-mesh body's real outline departs from any ellipse -- so the two edges
+// disagree by a fraction of a pixel, or by a pixel or two on a lumpy moon. Holding the spread
+// at its limb value across that seam closes it; the disc's own fragments are in front of this
+// quad and drop it anyway.
+const float RIM_SEAM_PX = 1.0;
 
 varying flat float v_intensity; // core intensity, crossfade already folded in
 varying flat float v_glare;     // wing amplitude at 1 px
 varying flat float v_radius;    // the quad's half-width in px
 varying flat vec2 v_wing_centre; // the wing's centre, px from the quad's centre
+varying flat vec2 v_sun_direction; // the sun's screen direction, in the quad's own frame
+varying flat float v_focal_px;  // px per tangent unit, for the limb conic
+varying flat float v_rim_amplitude; // the lit limb's flux density, per unit incidence
+varying flat float v_rim_reach; // how far out the sky-side spread is worth drawing, px
 varying vec2 v_offset;          // this vertex's corner, in [-1, 1]
 
 
@@ -140,16 +170,52 @@ void vertex() {
 			handoff_high));
 	v_glare = psf_glare_amplitude(intensity, glare_scale, glare_gamma,
 			glare_max_px * resolution_scale);
-	// The offset arrives in the camera's own screen terms (+Y up) while the corner offsets below
-	// are clip space, whose +Y points DOWN under Vulkan and up under GL. Unsigned, the wing draws
+	// Both screen directions arrive in the camera's own terms (+Y up) while the corner offsets
+	// below are clip space, whose +Y points DOWN under Vulkan and up under GL. Unsigned they land
 	// mirrored across the body on one renderer of the two -- a second light on the dark limb.
-	v_wing_centre = wing_offset * pixel_radius * vec2(1.0, sign(PROJECTION_MATRIX[1][1]));
+	vec2 screen_to_clip = vec2(1.0, sign(PROJECTION_MATRIX[1][1]));
+	v_sun_direction = sun_screen_direction * screen_to_clip;
+	v_focal_px = abs(PROJECTION_MATRIX[1][1]) * VIEWPORT_SIZE.y * 0.5;
+	// A CRESCENT'S LIGHT IS NOT CENTRED ON THE BODY, and while the wing was, the glare sat
+	// symmetrically around a disc whose lit part was a sliver off to one side. Offsetting it by
+	// a phase-dependent fraction of the disc radius puts that spill where the light actually is.
+	// The core does NOT take the offset: unresolved, the quad IS the body, and the body is where
+	// it is. Scaling by the pixel radius retires the offset as the disc shrinks toward that
+	// regime. The magnitude is by eye -- a Lambert sphere's lit centroid is at 4/(3*PI) of the
+	// radius at quarter phase against this curve's 0.5, and closing that gap would mean carrying
+	// the disc integral of whichever BRDF the body renders with.
+	v_wing_centre = v_sun_direction * ((1.0 - phase_cos) * 0.5) * pixel_radius;
+	// THE RIM'S SKY SIDE (see the header). Amplitude first: the body's whole flux is
+	// intensity * 2*PI*sigma^2 -- what its Gaussian core integrates to -- and a Lambert sphere
+	// spreads that over its projected disc as flux/(area * J) per unit mu0, with J the disc
+	// integral of mu0 in units of the disc's area. The apparent ellipse carries the area term,
+	// so an oblate body's rim is not brightened by the polar radius it does not have. The
+	// crossfade is the disc's, not the core's: the spread belongs to a body being RESOLVED, and
+	// it retires exactly as the core takes over, leaving the point source undisturbed.
+	float limb_major_px = limb_semi_axes.x * v_focal_px;
+	float limb_area_px = limb_semi_axes.x * limb_semi_axes.y * v_focal_px * v_focal_px;
+	float phase = acos(clamp(phase_cos, -1.0, 1.0));
+	float disc_integral = (2.0 / 3.0) * (sin(phase) + (PI - phase) * phase_cos);
+	v_rim_amplitude = 0.0;
+	v_rim_reach = 0.0;
+	if (limb_area_px > 0.0 && disc_integral > 0.0) {
+		v_rim_amplitude = intensity * TAU * psf_sigma * psf_sigma
+				* body_disc_weight(pixel_radius, handoff_low, handoff_high)
+				/ (limb_area_px * disc_integral);
+		// Reach by the same size law the core and the field's stars take, evaluated on the
+		// brightest place the spread has: the lit limb, where its own Gaussian starts.
+		float limb_peak = v_rim_amplitude * limb_sky_side_incidence(phase_cos, sin(phase), 0.0,
+				sqrt(limb_area_px), psf_sigma);
+		v_rim_reach = 0.5 * psf_visible_size(limb_peak, psf_sigma);
+	}
 	// The quad must span whichever component reaches further. psf_visible_size returns a
 	// DIAMETER and psf_glare_draw_size a RADIUS, so the core halves and the wing does not.
 	// The wing's reach is measured from its own offset centre, so that distance is added --
 	// without it the quad would clip the wing on the lit side, which is the side it moved to.
+	// The rim's is measured from the limb, so the silhouette's own radius is added to it.
 	v_radius = max(0.5 * psf_visible_size(v_intensity, psf_sigma),
-			psf_glare_draw_size(v_glare) + length(v_wing_centre));
+			max(psf_glare_draw_size(v_glare) + length(v_wing_centre),
+			limb_major_px + v_rim_reach));
 	// One NDC unit is half the viewport, and the corner offset is in clip units, so it
 	// scales by w. Behind the camera (w <= 0) that scaling flips the corners and would draw
 	// the quad mirrored across the frame instead of not at all -- farwarp keeps the body
@@ -176,9 +242,38 @@ void fragment() {
 	// f16 buffer write; see psf_core_light_sprite. Nothing sampled this radiance, so no renderer
 	// decode cancels against it: it crosses over here (see _display.gdshaderinc).
 	// The core is measured from the body, the wing from where the lit light actually is.
-	float wing_px = length(v_offset * v_radius - v_wing_centre);
+	vec2 offset_px = v_offset * v_radius;
+	float wing_px = length(offset_px - v_wing_centre);
+	// The rim's sky-side spread, on the band just beyond the silhouette. The disc's own
+	// fragments are inside the branch's reach test and skip the kernel: the depth test drops
+	// them, but a shader with a discard in it cannot be trusted to be rejected before it runs.
+	float rim = 0.0;
+	if (v_rim_amplitude > 0.0 && radius_px > 0.0) {
+		// Where this fragment's own direction crosses the silhouette: the conic restricted to
+		// that ray is a quadratic in distance, and the body's centre is inside its own outline,
+		// so the two roots straddle zero and the positive one is the limb.
+		vec2 direction = offset_px / radius_px;
+		vec3 ray = vec3(direction * vec2(1.0, sign(PROJECTION_MATRIX[1][1])), 0.0);
+		vec3 centre = vec3(0.0, 0.0, 1.0);
+		float ray_term = dot(ray, limb_conic * ray);
+		float cross_term = 2.0 * dot(centre, limb_conic * ray);
+		float centre_term = dot(centre, limb_conic * centre);
+		float discriminant = cross_term * cross_term - 4.0 * ray_term * centre_term;
+		if (discriminant > 0.0 && ray_term != 0.0) {
+			float root = sqrt(discriminant);
+			float limb_px = max((-cross_term + root) / (2.0 * ray_term),
+					(-cross_term - root) / (2.0 * ray_term)) * v_focal_px;
+			float distance_px = radius_px - limb_px;
+			if (distance_px > -RIM_SEAM_PX && distance_px < v_rim_reach) {
+				float along_radial = sqrt(max(1.0 - phase_cos * phase_cos, 0.0))
+						* dot(direction, v_sun_direction);
+				rim = min(v_rim_amplitude * limb_sky_side_incidence(phase_cos, along_radial,
+						max(distance_px, 0.0), limb_px, psf_sigma), PSF_LIGHT_MAX);
+			}
+		}
+	}
 	float light = psf_core_light(v_intensity, radius_px, psf_sigma)
-			+ psf_glare_light(v_glare, wing_px);
+			+ psf_glare_light(v_glare, wing_px) + rim;
 	ALBEDO = display_write(color_from_b_v(color_bv, color_saturation) * light);
 	ALPHA = 1.0; // blend_add: the add is ALBEDO * ALPHA, already folded above
 }

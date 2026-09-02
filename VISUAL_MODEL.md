@@ -440,6 +440,34 @@ point instead of disappearing. Resolved, the **wing persists** — glare belongs
 camera, not to the subject, so it takes no crossfade — and that persisting wing is
 crescent glow.
 
+**The rim's sky side is drawn here too, because nothing else can.** A body's surface images
+each rim pixel through the camera's PSF (`limb_mean_incidence()`, and *Imaging a pixel* in
+the sibling document), but it can only put that light on fragments it has: its rim ends at
+the rasterized silhouette, and the outward half of a rim pixel's spread belongs beyond it.
+Undrawn, a rim compressed to a line keeps a knife edge, which on a shallow curve is a
+staircase. This quad already covers the sky beside the limb, so `limb_sky_side_incidence()`
+draws the missing half there — the same closed-form chord integral under the same Gaussian,
+evaluated outward, so the two halves partition one convolution rather than overlapping. Its
+cells are spaced uniformly in `sqrt(depth)` rather than in depth: seen from outside, the whole
+lit sliver sits *at* the limb, and a uniform grid's first sample lands past it and weights it
+as if it were that much deeper — 40 % low at three pixels out.
+
+**What scales it is the body's own flux**, spread over a Lambert sphere's disc, rather than
+anything sampled from the surface — which this quad cannot read. The total is therefore the
+body's true flux through its true phase law while the distribution across the crescent is
+Lambert's, and the seam is where that shows: a body whose rim albedo differs from its disc
+average meets its own spread at a slightly different level.
+
+**The silhouette it measures from is the exact conic**, not an angular radius
+(`IVBodyPSF.get_limb_conic()`, the tangent cone of the body's own spheroid, handed over in
+tangent units and solved per fragment along its own direction). Both of the obvious
+approximations fail here by tens of pixels against a spread that is a few pixels wide: a
+perspective projection draws the tangent cone, 8 % wider than `r / d` at 2.6 radii out, and an
+oblate body's outline is an ellipse whose flattening is not the body's own. Either error puts
+the whole of the spread inside the silhouette, where the depth test drops it. The conic is
+normalized before it is sent — built from `1/radius^2` terms, Jupiter's raw entries are 1e-15
+and their 3x3 determinant underflows float32.
+
 **Scope is a flag, but the mechanism is a magnitude.** A quad is built for an in-scene
 star and for every body carrying `BODYFLAGS_PLANETARY_MASS_OBJECT` with a geometric
 albedo — 26 bodies: eight planets, Ceres and Pluto, and the sixteen planetary-mass moons.
@@ -498,7 +526,7 @@ same reason nothing viewport-dependent is allowed on the CPU side here.
 Three approximations worth carrying:
 
 - **The wing is offset toward the lit limb by a phase-dependent fraction of the disc
-  radius** (`wing_offset`: direction the sun's on screen, magnitude `(1 − cos phase)/2`),
+  radius** (direction the sun's on screen, magnitude `(1 − cos phase)/2`),
   because a crescent's light is not centred on the body and the wing used to be. What that
   cost showed worst with the sun near the limb, where the rim is a saturated line and the
   one thing that could gradate it — the camera's own spill — sat half a disc away as an

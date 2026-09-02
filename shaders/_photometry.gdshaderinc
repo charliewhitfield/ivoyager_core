@@ -294,6 +294,43 @@ float limb_cell_light(float a, float b, float x1, float x2, float radius_px, out
 	return light * radius_px;
 }
 
+// Square root of 2*PI, for the Gaussian's own normalization.
+const float LIMB_SQRT_TWO_PI = 2.5066283;
+
+// The SKY SIDE of the convolution limb_mean_incidence() does inside the silhouette: the
+// PSF-weighted sun angle reaching a pixel distance_px BEYOND the limb, which is light the
+// body's own surface has no fragment to carry -- its rim ends at the rasterized edge, and
+// half of a rim pixel's point spread belongs outside it. Returned in the same units the
+// inside kernel returns (a mean incidence, the Gaussian normalized to one), so the two are
+// the two halves of one integral and neither double-counts the other. IVBodyPSF's quad
+// draws it, being the one item that covers the sky beside a body's limb.
+//
+// The coefficients are the caller's own: a = dot(view, sun) and b = dot(radial, sun), where
+// radial is the outward screen direction at this pixel's azimuth -- the same pair
+// limb_mean_incidence() builds from a surface normal it has and a quad does not.
+//
+// CELLS ARE SPACED UNIFORMLY IN sqrt(x), not in x, and that is not tidiness. Seen from the
+// sky side the whole lit sliver sits AT the limb, x ~ 0, while the Gaussian's weight falls
+// by exp(-d/sigma^2) per pixel of depth: a uniform grid puts its first sample half a cell
+// past the sliver and so weights it as if it were that much deeper, which at 3 px out reads
+// 40% low and at 5 px 80% low -- exactly the faint outer part whose reach the size law sets.
+// The sqrt spacing puts the first cell inside the first hundredth of a pixel; measured
+// against a high-accuracy integral, 16 cells then hold to 1% at the limb and 4% at 3 px.
+float limb_sky_side_incidence(float a, float b, float distance_px, float radius_px,
+		float sigma) {
+	float scale = LIMB_KERNEL_REACH_PX / float(LIMB_KERNEL_CELLS * LIMB_KERNEL_CELLS);
+	float light = 0.0;
+	for (int i = 0; i < LIMB_KERNEL_CELLS; i++) {
+		float x1 = scale * float(i * i);
+		float x2 = scale * float((i + 1) * (i + 1));
+		float centre = 0.5 * (x1 + x2) + distance_px;
+		float weight = exp(-centre * centre / (2.0 * sigma * sigma));
+		float covered;
+		light += weight * limb_cell_light(a, b, x1, x2, radius_px, covered);
+	}
+	return light / (sigma * LIMB_SQRT_TWO_PI);
+}
+
 // The body's silhouette radius in px from its own geometry, for limb_mean_incidence: this
 // fragment's TRUE world position (the shells' v_world_position, not the farwarped VERTEX),
 // the body's world centre (MODEL_MATRIX[3]), the camera, and the projection. The fragment's
