@@ -474,6 +474,17 @@ the whole of the spread inside the silhouette, where the depth test drops it. Th
 normalized before it is sent — built from `1/radius^2` terms, Jupiter's raw entries are 1e-15
 and their 3x3 determinant underflows float32.
 
+**And it is the table figure's conic, which two of the bodies with a quad do not have.** The
+shared sphere a body scales to its own radii *is* that ellipse to within the tessellation
+`RIM_SEAM_PX` absorbs — measured against the projected vertices at three radii out, the two
+edges agree to 0.3 px of a 393 px disc. A body carrying its own mesh does not: Ceres and
+Charon are drawn from a displaced sphere whose outline stands wherever their terrain does,
+1.9 % of the radius inside the figure on Charon, and the rim drew there as a smooth arc of
+open sky detached from the limb it belonged to — 16 px off it on a 785 px disc, over a fifth
+of the azimuths, at every phase that lights the limb at all. No constant can absorb an error
+in percents of a radius, and nothing on this quad can find that outline, so `IVBodyPSF` sends
+those bodies a zero `limb_semi_axes` and they get the inward half of the spread only.
+
 **Scope is a flag, but the mechanism is a magnitude.** A quad is built for an in-scene
 star and for every body carrying `BODYFLAGS_PLANETARY_MASS_OBJECT` with a geometric
 albedo — 26 bodies: eight planets, Ceres and Pluto, and the sixteen planetary-mass moons.

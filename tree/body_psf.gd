@@ -78,6 +78,7 @@ const FIVE_OVER_LN10 := 2.1714724095162594 # 5 / ln(10), for m = M + 5*log10(d)
 var _body: IVBody
 var _star: IVBody
 var _is_sun: bool
+var _draws_rim: bool # false for a star, and for a body the table figure does not outline
 var _mean_radius: float
 var _equatorial_radius: float
 var _polar_radius: float
@@ -232,6 +233,15 @@ func _init(body: IVBody) -> void:
 func _ready() -> void:
 	_star = _body.star
 	_is_sun = bool(_body.flags & BodyFlags.BODYFLAGS_STAR)
+	# The quad's rim is drawn against the SILHOUETTE OF THE TABLE FIGURE (see get_limb_conic),
+	# so it can only be drawn where that is the silhouette: the shared sphere, which the body
+	# scales to its own radii. A body drawn with a mesh of its own outlines wherever its terrain
+	# does -- 1.9 % of the radius inside the figure on Charon, 16 px on a 785 px disc -- and the
+	# rim would stand off it as a detached arc of open sky. There is nothing here that could
+	# find that outline, so such a body gets no rim (see RIM_SEAM_PX in the shader).
+	var asset_preloader: IVAssetPreloader = IVGlobal.program[&"AssetPreloader"]
+	_draws_rim = (!_is_sun and !asset_preloader.get_body_packed_model(_body.name)
+			and !asset_preloader.get_body_mesh(_body.name))
 	_mean_radius = _body.mean_radius
 	_equatorial_radius = _body.get_equatorial_radius()
 	_polar_radius = _body.get_polar_radius()
@@ -315,8 +325,9 @@ func _refresh_handoff(apparent_magnitude: float, camera_distance: float) -> void
 # (IVSunOcclusionManager, which treats the same bodies as oblate spheroids): the outline of a
 # spheroid is an ellipse with the equatorial radius across the projected pole and
 # sqrt(a^2 cos^2 + c^2 sin^2) along it, for the angle between the pole and the line of sight.
-# A body whose real figure is a mesh gets the ellipse its table radii describe, which is what
-# RIM_SEAM_PX in the shader exists to absorb.
+# A body whose real figure is a mesh gets no rim at all: the ellipse its table radii describe
+# is not the outline the rasterizer draws, and the difference is percents of a radius rather
+# than the fraction of a pixel RIM_SEAM_PX absorbs.
 func _set_rim_parameters(camera: Camera3D) -> void:
 	# The rim's geometry goes over in the camera's own frame, in units of the equatorial
 	# radius (see get_limb_ellipsoid): the shader derives the phase angle and the sun's screen
@@ -338,7 +349,7 @@ func _set_rim_parameters(camera: Camera3D) -> void:
 			get_limb_ellipsoid(pole, _equatorial_radius, _polar_radius, camera_basis))
 	_material.set_shader_parameter(&"limb_conic", conic)
 	_material.set_shader_parameter(&"limb_semi_axes",
-			Vector2.ZERO if _is_sun else get_conic_semi_axes(conic))
+			get_conic_semi_axes(conic) if _draws_rim else Vector2.ZERO)
 	_material.set_shader_parameter(&"limb_centre_offset", get_conic_centre(conic).length())
 
 

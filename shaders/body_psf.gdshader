@@ -121,9 +121,10 @@ uniform float handoff_high = 2.5;         // px at/above which the disc fully re
 // fragment solves it along its own direction rather than comparing against a radius. An angular
 // radius could not do it -- perspective draws the tangent cone, 8 % wider than r/d at 2.6 radii
 // out, and an oblate body's outline is an ellipse -- and both errors are tens of pixels where
-// the spread being drawn is a few. Two degenerate cases, both meaning "no rim to draw here":
-// sun_direction is zero for an emissive body, which has no lit side, and limb_semi_axes is zero
-// where the silhouette is not an ellipse (and again for a star).
+// the spread being drawn is a few. Two cases both mean "no rim to draw here": sun_direction is
+// zero for an emissive body, which has no lit side, and limb_semi_axes is zero for a star and
+// for a body whose FIGURE IS NOT THIS ELLIPSE -- one drawn with its own mesh, whose real outline
+// stands wherever its terrain does (see RIM_SEAM_PX).
 uniform vec3 sun_direction = vec3(0.0);  // unit, camera frame; zero for a star
 uniform vec3 limb_camera_offset = vec3(0.0, 0.0, -1.0); // the camera from the body's centre
 uniform mat3 limb_ellipsoid;      // the body's figure, x^T E x = 1, same frame and units
@@ -131,22 +132,25 @@ uniform mat3 limb_conic;          // the silhouette, in tangent coordinates (+Y 
 uniform vec2 limb_semi_axes = vec2(0.0); // its (major, minor) semi-axes, same units
 uniform float limb_centre_offset = 0.0; // and how far its centre sits from the body's
 
-// How far inside the analytic limb the sky-side spread still draws, in px. The ellipse above
-// is the body's true figure while the silhouette on screen is a tessellated mesh just inside
-// it, and a custom-mesh body's real outline departs from any ellipse -- so the two edges
-// disagree by a fraction of a pixel, or by a pixel or two on a lumpy moon. Holding the spread
-// at its limb value across that seam closes it; the disc's own fragments are in front of this
-// quad and drop it anyway.
+// How far inside the analytic limb the sky-side spread still draws, in px. The ellipse above is
+// the body's figure while the silhouette on screen is a tessellated sphere just inside it, so
+// the two edges disagree by a fraction of a pixel; holding the spread at its limb value across
+// that closes the seam, and the disc's own fragments are in front of this quad and drop it
+// anyway. It absorbs a TESSELLATION error and nothing else. A body carrying its own mesh
+// departs from its table figure by percents of its radius rather than by a pixel -- measured
+// on Charon at 1.9 %, which is 16 px on a 785 px disc -- and no constant here could reach that:
+// the rim drew as an arc of open sky, detached from the terrain it belonged to. Such a body
+// gets limb_semi_axes zero from IVBodyPSF and no rim at all.
 const float RIM_SEAM_PX = 1.0;
 
 varying flat float v_intensity; // core intensity, crossfade already folded in
 varying flat float v_glare;     // wing amplitude at 1 px
 varying flat float v_radius;    // the quad's half-width in px
 varying flat vec2 v_wing_centre; // the wing's centre, px from the quad's centre
-varying flat vec2 v_sun_direction; // the sun's screen direction, in the quad's own frame
 varying flat float v_focal_px;  // px per tangent unit, for the limb conic
 varying flat float v_rim_amplitude; // the lit limb's flux density, per unit incidence
 varying flat float v_rim_reach; // how far out the sky-side spread is worth drawing, px
+varying flat vec2 v_rim_band;   // the px radii the sky-side spread can fall between
 varying vec2 v_offset;          // this vertex's corner, in [-1, 1]
 
 
@@ -155,17 +159,20 @@ varying vec2 v_offset;          // this vertex's corner, in [-1, 1]
 // distance, and the body's centre is inside its own outline, so the two roots straddle zero and
 // the positive one is the limb. Zero where the conic is degenerate.
 float limb_tangent_along(vec2 direction_up) {
-	vec3 ray = vec3(direction_up, 0.0);
-	vec3 centre = vec3(0.0, 0.0, 1.0);
-	float ray_term = dot(ray, limb_conic * ray);
-	float cross_term = 2.0 * dot(centre, limb_conic * ray);
-	float centre_term = dot(centre, limb_conic * centre);
-	float discriminant = cross_term * cross_term - 4.0 * ray_term * centre_term;
+	// The ray's third component is zero and the body's own position is the origin, so the
+	// quadratic's coefficients come straight out of the conic's 2x2 block and its last column
+	// -- no mat3 product, on a function every fragment of the rim band calls.
+	vec3 conic_last = limb_conic[2];
+	float ray_term = dot(direction_up, mat2(limb_conic[0].xy, limb_conic[1].xy) * direction_up);
+	float cross_term = 2.0 * dot(conic_last.xy, direction_up);
+	float discriminant = cross_term * cross_term - 4.0 * ray_term * conic_last.z;
 	if (discriminant <= 0.0 || ray_term == 0.0) {
 		return 0.0;
 	}
-	float root = sqrt(discriminant);
-	return max((-cross_term + root) / (2.0 * ray_term), (-cross_term - root) / (2.0 * ray_term));
+	// The two roots straddle zero, so the limb is the larger: written as centre plus half-span
+	// to spend one divide rather than two.
+	float half_reciprocal = 0.5 / ray_term;
+	return -cross_term * half_reciprocal + abs(sqrt(discriminant) * half_reciprocal);
 }
 
 // The sun's angles AT THE POINT OF THE LIMB this screen direction touches -- along the view and
@@ -217,7 +224,7 @@ void vertex() {
 	vec2 screen_to_clip = vec2(1.0, sign(PROJECTION_MATRIX[1][1]));
 	float sun_screen_length = length(sun_direction.xy);
 	vec2 sun_up = sun_screen_length > 0.0 ? sun_direction.xy / sun_screen_length : vec2(0.0);
-	v_sun_direction = sun_up * screen_to_clip;
+	vec2 sun_clip = sun_up * screen_to_clip;
 	v_focal_px = abs(PROJECTION_MATRIX[1][1]) * VIEWPORT_SIZE.y * 0.5;
 	// cos of the phase angle at the body's centre, +1 at full and -1 at new: what the wing's
 	// offset and the disc integral want, and NOT what lights the limb (see limb_sun_angles).
@@ -264,7 +271,7 @@ void vertex() {
 	// FRACTION is by eye -- a Lambert sphere's lit centroid is at 4/(3*PI) of the radius at
 	// quarter phase against this curve's 0.5, and closing that gap would mean carrying the disc
 	// integral of whichever BRDF the body renders with.
-	v_wing_centre = v_sun_direction * ((1.0 - phase_cos) * 0.5) * limb_sun_px;
+	v_wing_centre = sun_clip * ((1.0 - phase_cos) * 0.5) * limb_sun_px;
 	// THE RIM'S SKY SIDE (see the header). Amplitude first: the body's whole flux is
 	// intensity * 2*PI*sigma^2 -- what its Gaussian core integrates to -- and a Lambert sphere
 	// spreads that over its projected disc as flux/(area * J) per unit mu0, with J the disc
@@ -277,6 +284,7 @@ void vertex() {
 	// semi-axis alone cost the rim wherever the offset pointed: the round mask cut the limb,
 	// and with it every fragment the spread had to be drawn on.
 	float limb_major_px = (limb_semi_axes.x + limb_centre_offset) * v_focal_px;
+	float limb_minor_px = (limb_semi_axes.y - limb_centre_offset) * v_focal_px;
 	float limb_area_px = limb_semi_axes.x * limb_semi_axes.y * v_focal_px * v_focal_px;
 	// The sun's angles at the limb point nearest it, where the spread is brightest: the sun
 	// below that point's horizon is below every limb point's, and there is no rim at all.
@@ -294,6 +302,10 @@ void vertex() {
 				sun_angles_peak.y, 0.0, limb_sun_px, psf_sigma);
 		v_rim_reach = 0.5 * psf_visible_size(limb_peak, psf_sigma);
 	}
+	// The band the silhouette can fall in, from the ellipse's own extremes: no fragment outside
+	// it has a rim, whatever direction it lies in. The disc's interior is most of a resolved
+	// body's quad, and this is what keeps the conic solve off it.
+	v_rim_band = vec2(limb_minor_px - RIM_SEAM_PX, limb_major_px + v_rim_reach);
 	// The quad must span whichever component reaches further. psf_visible_size returns a
 	// DIAMETER and psf_glare_draw_size a RADIUS, so the core halves and the wing does not.
 	// The wing's reach is measured from its own offset centre, so that distance is added --
@@ -334,7 +346,7 @@ void fragment() {
 	// fragments are inside the branch's reach test and skip the kernel: the depth test drops
 	// them, but a shader with a discard in it cannot be trusted to be rejected before it runs.
 	float rim = 0.0;
-	if (v_rim_amplitude > 0.0 && radius_px > 0.0) {
+	if (v_rim_amplitude > 0.0 && radius_px > max(v_rim_band.x, 0.0) && radius_px < v_rim_band.y) {
 		vec2 direction_up = (offset_px / radius_px) * vec2(1.0, sign(PROJECTION_MATRIX[1][1]));
 		float limb_tangent = limb_tangent_along(direction_up);
 		float limb_px = limb_tangent * v_focal_px;
