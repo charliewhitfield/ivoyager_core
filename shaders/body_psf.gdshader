@@ -90,9 +90,9 @@ uniform float angular_radius = 0.0;       // body radius / camera distance; the 
 uniform float handoff_low = 1.0;          // px radius at/below which this fully replaces the disc
 uniform float handoff_high = 2.5;         // px at/above which the disc fully replaces this core
 
-// Where the WING is centred, as a screen-space offset in units of the body's own pixel radius,
-// set each frame by IVBodyPSF: the direction is the sun's on screen and the magnitude grows
-// with phase, reaching the limb as the crescent vanishes.
+// Where the WING is centred, as a screen-space offset (+Y up) in units of the body's own pixel
+// radius, set each frame by IVBodyPSF: the direction is the sun's on screen and the magnitude
+// grows with phase, reaching the limb as the crescent vanishes.
 //
 // A CRESCENT'S LIGHT IS NOT CENTRED ON THE BODY, and while the wing was, the glare sat
 // symmetrically around a disc whose lit part was a sliver off to one side. What that costs is
@@ -140,11 +140,14 @@ void vertex() {
 			handoff_high));
 	v_glare = psf_glare_amplitude(intensity, glare_scale, glare_gamma,
 			glare_max_px * resolution_scale);
+	// The offset arrives in the camera's own screen terms (+Y up) while the corner offsets below
+	// are clip space, whose +Y points DOWN under Vulkan and up under GL. Unsigned, the wing draws
+	// mirrored across the body on one renderer of the two -- a second light on the dark limb.
+	v_wing_centre = wing_offset * pixel_radius * vec2(1.0, sign(PROJECTION_MATRIX[1][1]));
 	// The quad must span whichever component reaches further. psf_visible_size returns a
 	// DIAMETER and psf_glare_draw_size a RADIUS, so the core halves and the wing does not.
 	// The wing's reach is measured from its own offset centre, so that distance is added --
 	// without it the quad would clip the wing on the lit side, which is the side it moved to.
-	v_wing_centre = wing_offset * pixel_radius;
 	v_radius = max(0.5 * psf_visible_size(v_intensity, psf_sigma),
 			psf_glare_draw_size(v_glare) + length(v_wing_centre));
 	// One NDC unit is half the viewport, and the corner offset is in clip units, so it

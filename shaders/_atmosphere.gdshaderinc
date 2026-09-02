@@ -694,8 +694,8 @@ const int ATM_RING_MAX_TAPS = 8;
 // which is correct and still leaves the arc a one-pixel line — and a one-pixel line following a
 // shallow curve is a staircase, in runs as long as the curve stays within a row. Reconstructing
 // over rather more than a pixel is what gives the arc a soft cross-section, so consecutive rows
-// overlap and the steps blur into each other. It is the same width as the camera's own PSF, and
-// the same answer [code]limb_fade_factor()[/code] gives the silhouette.
+// overlap and the steps blur into each other. It is the same width as the camera's own PSF --
+// the same camera [code]limb_mean_incidence()[/code] measures a silhouette's coverage through.
 const float ATM_RING_FILTER_PX = 2.5;
 
 // Altitude above which the ring carries nothing worth sampling, so the taps can be spent on the
