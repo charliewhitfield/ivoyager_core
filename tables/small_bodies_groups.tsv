@@ -14,5 +14,5 @@ JUPITER_L5_TROJANS	Jupiter_trojan	JT5	ASTEROIDS	res://addons/ivoyager_assets/ast
 SUSPECT_JUPITER_TROJANS	Jupiter_trojan	XJTX	ASTEROIDS	res://addons/ivoyager_assets/asteroid_binaries	15	x			STAR_SUN						5.5			discarded; we don't have elements for libration
 CENTAURS	Centaur_(small_Solar_System_body)	CE	ASTEROIDS	res://addons/ivoyager_assets/asteroid_binaries	15		FE9C33		STAR_SUN			5.2			30.1			
 TRANS_NEPTUNE	Trans-Neptunian_object	TN	ASTEROIDS	res://addons/ivoyager_assets/asteroid_binaries	15		3E69FF		STAR_SUN									
-# ivbinary_maker assigns																		
-# to 1st row that passes																		
+# build_asteroid_binaries.py																		
+# assigns to 1st row that passes																		

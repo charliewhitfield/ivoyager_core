@@ -18,7 +18,7 @@ See 3rd-party copyright and license information in [3RD_PARTY.md](3RD_PARTY.md),
 
 **[Asteroids Dynamic Site](https://newton.spacedys.com/astdys)** - Source data for asteroid proper orbits.
 
-**[NASA, JPL Small-Body Database](https://ssd.jpl.nasa.gov/tools/sbdb_query.html)** - Source data for asteroid names.
+**[NASA, JPL Small-Body Database](https://ssd.jpl.nasa.gov/tools/sbdb_query.html)** - Source data for asteroid names and discovery designations.
 
 **[ESA, Hipparcos Catalogue](https://www.cosmos.esa.int/web/hipparcos)** - Source data for stars (ESA, 1997; ESA SP-1200) - positions, magnitudes and B-V colors - converted to binaries and displayed by shader code.
 
