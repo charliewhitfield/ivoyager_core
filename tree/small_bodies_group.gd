@@ -32,8 +32,9 @@ extends Node
 ## TODO: It's possible to modify MultiMesh if it's not a resize. We could build
 ## signals and modify API to allow for that.[br][br]
 ##
-## 'de' is not currently implemented (amplitude of e libration in secular
-## resonence).
+## Elements are AstDyS proper elements, whose 'n' is the rate of the mean
+## LONGITUDE. Mean anomaly therefore advances at 'n' - 'g'; see [method
+## get_mean_anomaly_rate].
 
 signal group_appended(previous_size: int, new_size: int)
 
@@ -58,7 +59,7 @@ const PERSIST_PROPERTIES: Array[StringName] = [
 	&"names",
 	&"e_i_lan_ap",
 	&"a_m0_n",
-	&"s_g_mag_de",
+	&"s_g_mag",
 	&"da_d_f_th0",
 ]
 
@@ -76,9 +77,9 @@ var lp_integer := -1 # -1, 4 & 5 are currently supported
 var max_apoapsis := 0.0
 
 var names := PackedStringArray()
-var e_i_lan_ap := PackedFloat32Array() # fixed & precessing (except e in sec res)
-var a_m0_n := PackedFloat32Array() # librating in l-point objects
-var s_g_mag_de := PackedFloat32Array() # orbit precessions, magnitude, & e amplitude (sec res only)
+var e_i_lan_ap := PackedFloat32Array() # fixed & precessing
+var a_m0_n := PackedFloat32Array() # 'n' is the mean longitude rate; librating in l-point objects
+var s_g_mag := PackedFloat32Array() # node & perihelion precessions, and magnitude
 var da_d_f_th0 := PackedFloat32Array() # Trojans only
 
 
@@ -122,38 +123,19 @@ func _exit_tree() -> void:
 
 ## Append all data before adding this node to the tree.
 func append_data(names_append: PackedStringArray, e_i_lan_aop_append: PackedFloat32Array,
-		a_m0_n_append: PackedFloat32Array, s_g_mag_de_append: PackedFloat32Array,
+		a_m0_n_append: PackedFloat32Array, s_g_mag_append: PackedFloat32Array,
 		da_d_f_th0_append := NULL_PF32ARRAY, suppress_max_apoapsis_update := false) -> void:
 	var n_bodies := names_append.size()
 	assert(e_i_lan_aop_append.size() == n_bodies * 4)
 	assert(a_m0_n_append.size() == n_bodies * 3)
-	assert(s_g_mag_de_append.size() == n_bodies * 4)
+	assert(s_g_mag_append.size() == n_bodies * 3)
 	assert(da_d_f_th0_append.size() == (0 if lp_integer == -1 else n_bodies * 4))
-	
-	
-	# *************************************************************************
-	# FIXME: WORKS FOR UNKNOWN REASON! The adjustment here fixes precessions
-	# so that the Hildas maintain position correctly over 3000 BC - 3000 AD.
-	# This strongly suggests a conversion error somewhere. HOWEVER, the print
-	# statement shows that our conversion from source to internal units is correct.
-	
-	# Print statement unconverts internal rad/s back to source units "/yr. This
-	# prints -59.1700357686738, 54.0702746719668 for Ceres, which agrees w/ source.
-	#printt(rad_to_deg(s_g_mag_de_append[0]) * 3600 * IVUnits.YEAR,
-			#rad_to_deg(s_g_mag_de_append[1]) * 3600 * IVUnits.YEAR, sbg_alias, names_append[0])
-	
-	# Here is the mystery fix...
-	for i in n_bodies:
-		s_g_mag_de_append[i * 4] /= 3.0 # s
-		s_g_mag_de_append[i * 4 + 1] /= 3.0 # g
-	# *************************************************************************
-	
-	
+
 	var previous_size := names.size()
 	names.append_array(names_append)
 	e_i_lan_ap.append_array(e_i_lan_aop_append)
 	a_m0_n.append_array(a_m0_n_append)
-	s_g_mag_de.append_array(s_g_mag_de_append)
+	s_g_mag.append_array(s_g_mag_append)
 	if lp_integer != -1:
 		da_d_f_th0.append_array(da_d_f_th0_append)
 	
@@ -210,10 +192,18 @@ func get_unit_circle_transform(index: int) -> Transform3D:
 	return IVOrbit.get_unit_circle_transform_from_elements(a, e, i, lan, ap)
 
 
-## Returns an element list [a, e, i, lan, ap, m0, n]. FIXME: Trojan elements
-## vary with libration. This is reflected in shader point calculations but not
-## in elements here (yet).
-## @experimental: The element list will change in the future to be more in line with [IVOrbit]. 
+## Rate the member's mean anomaly advances at, in radians/s. The stored 'n' is the
+## AstDyS proper mean motion, which is the rate of the mean LONGITUDE, so the perihelion
+## precession has to come back out of it.
+func get_mean_anomaly_rate(index: int) -> float:
+	return a_m0_n[index * 3 + 2] - s_g_mag[index * 3 + 1]
+
+
+## Returns an element list [a, e, i, lan, ap, m0, n], where 'n' is the mean longitude
+## rate rather than the mean anomaly rate; see [method get_mean_anomaly_rate].
+## FIXME: Trojan elements vary with libration. This is reflected in shader point
+## calculations but not in elements here (yet).
+## @experimental: The element list will change in the future to be more in line with [IVOrbit].
 func get_orbit_elements(index: int) -> Array[float]:
 	
 	return [

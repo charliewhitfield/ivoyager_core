@@ -45,13 +45,13 @@ const FRAGMENT_SBG_POINT := IVFragmentIdentifier.FRAGMENT_SBG_POINT
 const ARRAY_FLAGS = (
 	Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
 	| Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT
-	| Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT
+	| Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT
 )
 
 const L4L5_ARRAY_FLAGS = (
 	Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
 	| Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT
-	| Mesh.ARRAY_CUSTOM_RGBA_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT
+	| Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM2_SHIFT
 )
 
 
@@ -124,25 +124,30 @@ func _init(sbg: IVSmallBodiesGroup) -> void:
 	shader_material.set_shader_parameter(&"broadcast_id", broadcast_id)
 	material_override = shader_material
 
-	# ArrayMesh construction
-	var points_mesh := ArrayMesh.new()
-	var arrays := [] # packed arrays
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = _vec3ids
-	arrays[Mesh.ARRAY_CUSTOM0] = sbg.e_i_lan_ap
-	arrays[Mesh.ARRAY_CUSTOM1] = sbg.a_m0_n if _lp_integer == -1 else sbg.da_d_f_th0
-	arrays[Mesh.ARRAY_CUSTOM2] = sbg.s_g_mag_de
-	var array_flags := ARRAY_FLAGS if _lp_integer == -1 else L4L5_ARRAY_FLAGS
-	points_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_POINTS, arrays, [], {}, array_flags)
-	var half_aabb_size := sbg.max_apoapsis
-	if IVCoreSettings.apply_farwarp:
-		# Frustum culling tests this true-scale AABB against the far plane, but
-		# farwarp-remapped points are on-screen even when that test fails;
-		# make the test always pass wherever the camera can be.
-		half_aabb_size = maxf(half_aabb_size, IVCoreSettings.max_camera_distance)
-	var half_aabb := Vector3.ONE * half_aabb_size
-	points_mesh.custom_aabb = AABB(-half_aabb, 2.0 * half_aabb)
-	mesh = points_mesh
+	# ArrayMesh construction. A group can be empty if its binaries are missing or predate
+	# the current format, in which case there is nothing to draw; add_surface_from_arrays()
+	# rejects a zero-vertex surface, so skip it and leave 'mesh' unset.
+	if number == 0:
+		push_warning("No small bodies loaded for '%s'; drawing no points" % sbg.sbg_alias)
+	else:
+		var points_mesh := ArrayMesh.new()
+		var arrays := [] # packed arrays
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = _vec3ids
+		arrays[Mesh.ARRAY_CUSTOM0] = sbg.e_i_lan_ap
+		arrays[Mesh.ARRAY_CUSTOM1] = sbg.a_m0_n if _lp_integer == -1 else sbg.da_d_f_th0
+		arrays[Mesh.ARRAY_CUSTOM2] = sbg.s_g_mag
+		var array_flags := ARRAY_FLAGS if _lp_integer == -1 else L4L5_ARRAY_FLAGS
+		points_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_POINTS, arrays, [], {}, array_flags)
+		var half_aabb_size := sbg.max_apoapsis
+		if IVCoreSettings.apply_farwarp:
+			# Frustum culling tests this true-scale AABB against the far plane, but
+			# farwarp-remapped points are on-screen even when that test fails;
+			# make the test always pass wherever the camera can be.
+			half_aabb_size = maxf(half_aabb_size, IVCoreSettings.max_camera_distance)
+		var half_aabb := Vector3.ONE * half_aabb_size
+		points_mesh.custom_aabb = AABB(-half_aabb, 2.0 * half_aabb)
+		mesh = points_mesh
 
 	# set shader parameters
 	var asset_preloader: IVAssetPreloader = IVGlobal.program[&"AssetPreloader"]

@@ -18,6 +18,8 @@ See 3rd-party copyright and license information in [3RD_PARTY.md](3RD_PARTY.md),
 
 **[Asteroids Dynamic Site](https://newton.spacedys.com/astdys)** - Source data for asteroid proper orbits.
 
+**[NASA, JPL Small-Body Database](https://ssd.jpl.nasa.gov/tools/sbdb_query.html)** - Source data for asteroid names.
+
 **[ESA, Hipparcos Catalogue](https://www.cosmos.esa.int/web/hipparcos)** - Source data for stars (ESA, 1997; ESA SP-1200) - positions, magnitudes and B-V colors - converted to binaries and displayed by shader code.
 
 **[Natural Earth](https://www.naturalearthdata.com)** - Public-domain 1:10m ocean and lake polygons: the water mask behind Earth's roughness (Sun-glint) map. Made with Natural Earth.

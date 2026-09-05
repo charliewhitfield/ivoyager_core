@@ -850,7 +850,8 @@ textures — three sets of nine, for backscatter, forward scatter and the unlit 
 
 Asteroid proper orbital elements from the
 [Asteroids Dynamic Site (AstDyS)](https://newton.spacedys.com/astdys), packed by orbital group
-and magnitude limit.
+and magnitude limit. Asteroid names are from NASA/JPL's
+[Small-Body Database](https://ssd.jpl.nasa.gov/tools/sbdb_query.html).
 
 ---
 
