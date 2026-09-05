@@ -847,8 +847,9 @@ backscattered light, forward-scattered light at a phase angle of 139°, and the 
 tinted by his colour profile and paired with his transparency profile as the fraction of the
 background each radius occludes. His profiles are measured in Voyager images over the Voyager
 stellar occultation optical depth, sampled every 5 km from 74,510 to 140,390 km from Saturn's
-centre; the file holds them in linear light, already multiplied by their own coverage, which is
-the form the shader composites.
+centre. The file holds them in linear light with each one's own observing geometry divided out,
+so that what it carries is the ring's scattering strength and the shader can re-apply the
+geometry at the angles it is rendering; his data is otherwise unaltered.
 
 - Please credit Björn Jónsson.
 
