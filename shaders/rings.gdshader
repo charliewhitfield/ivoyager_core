@@ -20,24 +20,39 @@
 shader_type spatial;
 // skip_vertex_transform: for the farwarp vertex remap; see _farwarp.gdshaderinc.
 // ambient_light_disabled: ambient is rebuilt as emission; see _sun_occlusion.gdshaderinc.
-render_mode cull_disabled, skip_vertex_transform, ambient_light_disabled;
+// blend_premul_alpha: the texture is premultiplied; see THE TEXTURE below.
+render_mode cull_disabled, skip_vertex_transform, ambient_light_disabled, blend_premul_alpha;
 
-// Source data and color/phase-angle tips: https://bjj.mmedia.is/data/s_rings.
-// See https://github.com/ivoyager/ivbinary_maker for conversion of source data
-// to the 3 png files. The 3 images have the same alpha channel.
+// THE TEXTURE. One imported CompressedTexture2DArray of three width x 1 layers, built by
+// addons/tools/build_saturn_rings.py from Bjoern Joensson's radial ring profiles
+// (https://bjj.mmedia.is/data/s_rings). Read that script's docstring for what the file
+// holds and why; the two properties this shader depends on are:
+//
+//   rgb  LINEAR radiance, PREMULTIPLIED -- the ring's own light over black sky, which is
+//        what Joensson measured in the Voyager frames. So it composites as
+//        `radiance + transmission * background` (blend_premul_alpha) and must NOT be
+//        multiplied by alpha again; and the sampler is NOT source_color, because the
+//        values are already linear on both renderers.
+//   a    1 - transparency: the fraction of the background this radius occludes at normal
+//        incidence, from the Voyager stellar occultation optical depth.
+//
+// The three layers are the same rings at three geometries -- backscatter (lit side near
+// the sun's direction), forward scatter (lit side, phase 139 deg) and the unlit side --
+// so alpha is identical in all three and one fetch answers the unlit branch completely.
+//
+// Mipmaps come from the import and are averaged in linear light, so a distant ring is the
+// correct radial average of the rings it stands for. The LOD is computed here rather than
+// left to the hardware because the discard below would leave a partly-killed quad's
+// derivatives undefined -- the same reason dFdx()/dFdy() run before the fork.
+//
+// Colour and level: the tint, the phase mix and the boosts below are OUR appearance model,
+// not Joensson's data. He states that the rings dim and redden as phase angle rises, and
+// gives the unlit side a flat colour, which is baked into layer 2 as the only colour he
+// publishes for it.
 //
 // Adjusted to match https://bjj.mmedia.is/3dtest/saturn/saturn_montage.jpg
 // on the lit side. Those are rendered (not real) so we still need ground truth
 // comparisons to Cassini images (lit and unlit sides).
-//
-// The png files must be imported as Texture2D without compression and all
-// options off or disabled. Mipmaps are broken as of Godot 4.3 for our "1D"
-// textures, so we code LOD levels explicitely. (In 4.2.x and earlier, we had
-// n x 2 textures that were mipmapped to n/2 x 1, n/4 x 1, n/8 x 1, etc.)
-//
-// ALBEDO is set with color values >> 1.0. It's necessary to get proper
-// brightness given the 'thinness' (i.e., transparency) of our material with
-// black space as background.
 //
 // IVRings flips the plane to keep the front face on the sun-facing side so the
 // lit/unlit-side test below (the sign of camera_model_elevation) stays correct;
@@ -53,19 +68,12 @@ const float DFDR_MULTIPLIER = 1.0; // smaller for more detail & more aliasing
 const float PHASE_EXPONENT = 6.0; // larger narrows the low phase-angle effect
 
 // set by rings.gd once
-uniform float texture_width;
-uniform float texture_start; // from center
-uniform float inner_margin; // from center, includes padding (> texture_start)
-uniform float outer_margin; // from center, includes padding (< 1.0)
-uniform sampler2DArray textures0 : source_color; // backscatter/forwardscatter/unlitside for LOD 0
-uniform sampler2DArray textures1 : source_color;
-uniform sampler2DArray textures2 : source_color;
-uniform sampler2DArray textures3 : source_color;
-uniform sampler2DArray textures4 : source_color;
-uniform sampler2DArray textures5 : source_color;
-uniform sampler2DArray textures6 : source_color;
-uniform sampler2DArray textures7 : source_color;
-uniform sampler2DArray textures8 : source_color;
+uniform sampler2DArray rings_textures : filter_linear_mipmap, repeat_disable;
+uniform float texture_width; // texels across one layer
+uniform float texture_start; // texture's inner edge, as a fraction of the plane's radius
+uniform float texture_end; // texture's outer edge, same units (> texture_start)
+uniform float inner_margin; // discard inside this; includes render margin (< texture_start)
+uniform float outer_margin; // discard outside this; includes render margin (> texture_end)
 
 // set by rings.gd every frame
 uniform vec3 illumination_position;
@@ -92,110 +100,63 @@ void vertex() {
 }
 
 
-vec4 sample_color(int texel, float texel_fraction, int index, int lod) {
-	// index: [0] backscatter, [1] forwardscatter, [2] unlitside.
-	// Mipmaps are broken as of Godot 4.3 for our "1D" textures, so we code
-	// LOD levels explicitely.
-
-	switch (lod) {
-		case 0:
-			vec4 sample = texelFetch(textures0, ivec3(texel, 0, index), 0) * (1.0 - texel_fraction);
-			sample += texelFetch(textures0, ivec3(texel + 1, 0, index), 0) * texel_fraction;
-			return sample;
-		case 1:
-			vec4 sample = texelFetch(textures1, ivec3(texel, 0, index), 0) * (1.0 - texel_fraction);
-			sample += texelFetch(textures1, ivec3(texel + 1, 0, index), 0) * texel_fraction;
-			return sample;
-		case 2:
-			vec4 sample = texelFetch(textures2, ivec3(texel, 0, index), 0) * (1.0 - texel_fraction);
-			sample += texelFetch(textures2, ivec3(texel + 1, 0, index), 0) * texel_fraction;
-			return sample;
-		case 3:
-			vec4 sample = texelFetch(textures3, ivec3(texel, 0, index), 0) * (1.0 - texel_fraction);
-			sample += texelFetch(textures3, ivec3(texel + 1, 0, index), 0) * texel_fraction;
-			return sample;
-		case 4:
-			vec4 sample = texelFetch(textures4, ivec3(texel, 0, index), 0) * (1.0 - texel_fraction);
-			sample += texelFetch(textures4, ivec3(texel + 1, 0, index), 0) * texel_fraction;
-			return sample;
-		case 5:
-			vec4 sample = texelFetch(textures5, ivec3(texel, 0, index), 0) * (1.0 - texel_fraction);
-			sample += texelFetch(textures5, ivec3(texel + 1, 0, index), 0) * texel_fraction;
-			return sample;
-		case 6:
-			vec4 sample = texelFetch(textures6, ivec3(texel, 0, index), 0) * (1.0 - texel_fraction);
-			sample += texelFetch(textures6, ivec3(texel + 1, 0, index), 0) * texel_fraction;
-			return sample;
-		case 7:
-			vec4 sample = texelFetch(textures7, ivec3(texel, 0, index), 0) * (1.0 - texel_fraction);
-			sample += texelFetch(textures7, ivec3(texel + 1, 0, index), 0) * texel_fraction;
-			return sample;
-		case 8:
-			vec4 sample = texelFetch(textures8, ivec3(texel, 0, index), 0) * (1.0 - texel_fraction);
-			sample += texelFetch(textures8, ivec3(texel + 1, 0, index), 0) * texel_fraction;
-			return sample;
-	}
-}
-
-
 void fragment() {
 
 	float r = length(UV * 2.0 - vec2(1.0));
 
 	// dFdx() & dFdy() must be before the 'if' fork to avoid edge artifacts!
-	float texture_fraction = (r - texture_start) / (1.0 - texture_start);
-	float texel_position = texture_fraction * texture_width;
-	float dfdx = dFdx(texel_position); // texels per horizontal screen pixel
-	float dfdy = dFdy(texel_position); // texels per vertical screen pixel
+	float texel_position = texture_width * (r - texture_start) / (texture_end - texture_start);
+	float footprint = length(vec2(dFdx(texel_position), dFdy(texel_position))); // texels per pixel
 
 	if (r < inner_margin || r > outer_margin) {
 		discard; // out of rings area
 
 	} else {
 
-		// LOD for anti-aliasing
-		float dfdr = length(vec2(dfdx, dfdy));
-		float lod_map = log2(dfdr * DFDR_MULTIPLIER);
-		lod_map = clamp(round(lod_map), 0.0, 8.0);
-		int lod = int(lod_map);
+		float lod = log2(max(footprint * DFDR_MULTIPLIER, 1.0));
+		float u = texel_position / texture_width;
 
-		// debug mipmaps
-		//lod = 4;
-
-		// position in the LOD texture
-		texel_position /= float(1 << lod);
-		int texel = int(texel_position);
-		float texel_fraction = fract(texel_position);
+		// The texture holds the rings and nothing else, so its two ends are where the
+		// data stops and not where the rings do (the innermost C ring and the F ring
+		// region are both faintly occupied at the boundary sample). Fade the last texel
+		// out over this fragment's own footprint: at a distance that is one texel of
+		// anti-aliasing, and close up it is the half-texel step clamp-to-edge would
+		// otherwise smear across the whole render margin.
+		float texels_inside = min(texel_position, texture_width - texel_position);
+		float edge = clamp(texels_inside / max(footprint, 1.0) + 0.5, 0.0, 1.0);
 
 		// phase effects (phase_mix = 1.0 corresponds to phase angle = 0.0)
 		float phase_mix = dot(illumination_direction, VIEW) / 2.0 + 0.5;
 		phase_mix = pow(phase_mix, PHASE_EXPONENT);
 
-		// Decoded here and encoded at the end (see _display.gdshaderinc): the phase mix and
-		// the boosts below are linear coefficients, and the ambient added as emission is a
-		// linear radiance.
-		vec4 color;
-		vec3 albedo;
+		// The sampled rgb is premultiplied linear radiance and the boosts are linear
+		// coefficients, so everything here is a straight multiply; the encode for a
+		// display-referred renderer happens once, at the end.
+		vec4 ring;
 
 		if (camera_model_elevation > 0.0) {
 			// lit side
-			vec4 backscatter = sample_color(texel, texel_fraction, 0, lod);
-			vec4 forwardscatter = sample_color(texel, texel_fraction, 1, lod);
+			vec4 backscatter = textureLod(rings_textures, vec3(u, 0.5, 0.0), lod);
+			vec4 forwardscatter = textureLod(rings_textures, vec3(u, 0.5, 1.0), lod);
 			forwardscatter.r *= forwardscatter_redshift;
-			color = mix(forwardscatter, backscatter, phase_mix);
-			albedo = display_decode(color.rgb) * (litside_phase_boost * phase_mix + 1.0);
+			// Alpha is the same in both layers, so the mix leaves it exactly alone.
+			ring = mix(forwardscatter, backscatter, phase_mix);
+			ring.rgb *= litside_phase_boost * phase_mix + 1.0;
 		} else {
 			// unlit side
-			color = sample_color(texel, texel_fraction, 2, lod);
-			albedo = display_decode(color.rgb) * unlitside_boost;
-			albedo *= (unlitside_phase_boost * phase_mix + 1.0);
+			ring = textureLod(rings_textures, vec3(u, 0.5, 2.0), lod);
+			ring.rgb *= unlitside_boost * (unlitside_phase_boost * phase_mix + 1.0);
 		}
 
-		// debug lod mapping
-		//albedo = vec3(lod_map / 8.0, lod_map / 8.0, 1.0 - lod_map / 8.0);
+		// Coverage scales the premultiplied radiance and the occlusion together, which is
+		// what makes a partly covered fragment composite correctly.
+		ring *= edge;
 
-		ALBEDO = albedo;
-		ALPHA = color.a;
+		// debug lod mapping
+		//ring.rgb = vec3(lod / 8.0, lod / 8.0, 1.0 - lod / 8.0);
+
+		ALBEDO = ring.rgb;
+		ALPHA = ring.a;
 
 		// Rebuilt ambient (engine ambient is disabled; see render_mode). Added
 		// before the shadow so occlusion removes sunlight, not starlight. The
@@ -223,15 +184,13 @@ void fragment() {
 		}
 
 		if (iv_display_encode >= 0.5) {
-			// The alpha blend runs on display-referred values, which dims a partially
-			// transparent sheet: alpha * enc(C) against the linear pipeline's enc(alpha * C),
-			// 0.84x over this ring's lit face. Restate the whole mix instead (display_mix),
-			// self-lighting on the engine's own convention -- the engine lights only the
-			// sunlit face (the unlit face is ambient alone), and the existing model-space
-			// side test says which this fragment is. The pedestal is 0.0 -- a CONSTANT, not
-			// an estimate of another shell's render (see display_mix's hazard note): the
-			// ring stands over empty sky almost everywhere, and where it crosses the disc
-			// the escalation case is pedestal-blind anyway.
+			// A premultiplied fragment's colour IS its whole term, so there is nothing to
+			// restate against what lies behind (see display_mix's hazard note): the ring's
+			// finished radiance goes through display_write() and the blend's own
+			// (1 - alpha) attenuation of the background is left to the hardware. Self-lit,
+			// because an engine-lit ALBEDO arrives one stage too late to encode -- on the
+			// engine's own convention, which lights only the sunlit face (the unlit face is
+			// ambient alone), and the existing model-space side test says which this is.
 			// Lambert, not the engine's Burley: with the legacy Compatibility boost
 			// overrides retired, the end-to-end measurement puts a Lambert restatement at
 			// 0.99x of Forward+'s ring face and a Burley one at 1.23x -- at this
@@ -240,12 +199,8 @@ void fragment() {
 			float diffuse_factor = camera_model_elevation > 0.0
 					? max(dot(normalize(NORMAL), illumination_direction), 0.0) : 0.0;
 			vec3 ring_radiance = ALBEDO * (diffuse_factor * sun_light_energy) + EMISSION;
-			vec3 mix_color;
-			float mix_alpha;
-			display_mix(ring_radiance, ALPHA, vec3(0.0), mix_color, mix_alpha);
 			ALBEDO = vec3(0.0);
-			EMISSION = mix_color;
-			ALPHA = mix_alpha;
+			EMISSION = display_write(ring_radiance);
 		} else {
 			ALBEDO = display_write_albedo(ALBEDO);
 			EMISSION = display_write(EMISSION);

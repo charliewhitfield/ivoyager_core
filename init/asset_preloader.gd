@@ -27,10 +27,6 @@ extends RefCounted
 ## on [signal IVStateManager.core_initialized]. When finished, emits [signal
 ## IVStateManager.assets_preloaded].
 
-## Number of LOD textures expected per rings entry. Must agree with the asset
-## bundle, [IVBody] ([code]body.gd[/code]) and [code]rings.shader[/code].
-const RINGS_LOD_LEVELS := 9
-
 # VRAM color formats a normal map must never have (would mean it was imported as
 # sRGB color, not as a Normal Map). Load-time push_warning only.
 const _NORMAL_COLOR_FORMATS := [
@@ -215,11 +211,14 @@ func get_body_mesh_scale(body_name: StringName) -> float:
 	return _body_resources[body_name][7]
 
 
-func get_rings_texture_arrays(rings_name: StringName) -> Array[Texture2DArray]:
+## The rings' three-layer scattering texture: backscatter, forward scatter and unlit side,
+## each a width x 1 profile of premultiplied linear radiance plus occluded fraction. See
+## [code]shaders/rings.gdshader[/code] for what the channels mean.
+func get_rings_texture_array(rings_name: StringName) -> TextureLayered:
 	return _rings_resources[rings_name][0]
 
 
-## Full-resolution (LOD 0) mipmapped alpha profile for the analytic ring-shadow
+## Full-resolution mipmapped alpha profile for the analytic ring-shadow
 ## term (see [code]shaders/_sun_occlusion.gdshaderinc[/code]): the shader picks
 ## the mip that matches the physical penumbra footprint.
 func get_rings_shadow_profile_texture(rings_name: StringName) -> Texture2D:
@@ -825,52 +824,33 @@ func _deep_freeze_body_resources() -> void:
 
 
 func _load_rings_resources() -> void:
-	
-	const BACKSCATTER_FILE_FORMAT := "%s.backscatter.%s"
-	const FORWARDSCATTER_FILE_FORMAT := "%s.forwardscatter.%s"
-	const UNLITSIDE_FILE_FORMAT := "%s.unlitside.%s"
-	
+
 	for row in IVTableData.get_n_rows(&"rings"):
 		var rings_name := IVTableData.get_db_entity_name(&"rings", row)
 		var file_prefix := IVTableData.get_db_string(&"rings", &"file_prefix", row)
 
-		var texture_arrays: Array[Texture2DArray] = []
-		var profile_image_rgba: Image
-		for lod in RINGS_LOD_LEVELS:
-			var file_elements := [file_prefix, lod]
-			var backscatter_file := BACKSCATTER_FILE_FORMAT % file_elements
-			var backscatter: Texture2D = IVFiles.find_and_load_resource(rings_search, backscatter_file)
-			assert(backscatter, "Failed to load '%s'" % backscatter_file)
-			var forwardscatter_file := FORWARDSCATTER_FILE_FORMAT % file_elements
-			var forwardscatter: Texture2D = IVFiles.find_and_load_resource(rings_search, forwardscatter_file)
-			assert(forwardscatter, "Failed to load '%s'" % forwardscatter_file)
-			var unlitside_file := UNLITSIDE_FILE_FORMAT % file_elements
-			var unlitside: Texture2D = IVFiles.find_and_load_resource(rings_search, unlitside_file)
-			assert(unlitside, "Failed to load '%s'" % unlitside_file)
-			
-			# We load as textures, convert to images, then reconvert back to
-			# texture arrays. This is not ideal, but I was unable to save
-			# Texture2DArray as a file resource as of Godot 4.2 (it's a
-			# Resource, so it should be saveable).
-			var backscatter_image := backscatter.get_image()
-			var forwardscatter_image := forwardscatter.get_image()
-			var unlitside_image := unlitside.get_image()
-			var lod_images: Array[Image] = [backscatter_image, forwardscatter_image, unlitside_image]
-			var texture_array := Texture2DArray.new() # backscatter/forwardscatter/unlitside for LOD
-			texture_array.create_from_images(lod_images)
-			texture_arrays.append(texture_array)
-			if lod == 0:
-				profile_image_rgba = backscatter_image # all have the same alpha channel
+		# One imported CompressedTexture2DArray holds all three geometries as layers.
+		# NB: CompressedTexture2DArray does NOT extend Texture2DArray -- both derive from
+		# TextureLayered, so `is Texture2DArray` would be false for every imported one.
+		var texture_array: TextureLayered = IVFiles.find_and_load_resource(rings_search,
+				file_prefix)
+		assert(texture_array, "Failed to load rings texture '%s.*'" % file_prefix)
+		assert(texture_array.get_layers() == 3,
+				"Rings texture '%s' has %s layers; expected 3 (backscatter, forward scatter,"
+				% [file_prefix, texture_array.get_layers()] + " unlit side)")
+		assert(texture_array.has_mipmaps(),
+				"Rings texture '%s' has no mipmaps; a radial profile viewed at any distance"
+				% file_prefix + " is nothing but its own mip chain")
 
-		# Full-resolution mipmapped alpha profile for the analytic ring-shadow
-		# term; the source image is retained for CPU sampling. See
-		# get_rings_shadow_profile_texture() / get_rings_shadow_profile_image().
-		var shadow_profile_image := _make_alpha_r8_image(profile_image_rgba)
+		# Full-resolution mipmapped alpha profile for the analytic ring-shadow term; the
+		# source image is retained for CPU sampling. All three layers carry the same alpha.
+		# See get_rings_shadow_profile_texture() / get_rings_shadow_profile_image().
+		var shadow_profile_image := _make_alpha_r8_image(texture_array.get_layer_data(0))
 		@warning_ignore("return_value_discarded")
 		shadow_profile_image.generate_mipmaps() # can't fail: R8 is uncompressed
 		var shadow_profile_texture := ImageTexture.create_from_image(shadow_profile_image)
 
-		_rings_resources[rings_name] = [texture_arrays, shadow_profile_texture,
+		_rings_resources[rings_name] = [texture_array, shadow_profile_texture,
 				shadow_profile_image]
 
 

@@ -841,8 +841,14 @@ memory.
 ### `/rings/*`
 
 Saturn ring light-scattering data created by
-[Björn Jónsson](https://bjj.mmedia.is/data/s_rings/index.html), converted to shader-sampler
-textures — three sets of nine, for backscatter, forward scatter and the unlit side.
+[Björn Jónsson](https://bjj.mmedia.is/data/s_rings/index.html), converted to a shader-sampler
+texture: one half-float image carrying his three radial brightness profiles as layers —
+backscattered light, forward-scattered light at a phase angle of 139°, and the unlit side —
+tinted by his colour profile and paired with his transparency profile as the fraction of the
+background each radius occludes. His profiles are measured in Voyager images over the Voyager
+stellar occultation optical depth, sampled every 5 km from 74,510 to 140,390 km from Saturn's
+centre; the file holds them in linear light, already multiplied by their own coverage, which is
+the form the shader composites.
 
 - Please credit Björn Jónsson.
 

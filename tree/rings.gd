@@ -34,9 +34,10 @@ extends MeshInstance3D
 ##
 ## Not persisted. [IVBodyFinisher] adds when [IVBody] is added to the tree.[br][br]
 
-const END_PADDING := 0.05 # must be same as ivbinary_maker that generated images
-const RENDER_MARGIN := 0.01 # render outside of image data for smoothing
-const LOD_LEVELS := 9 # must agree w/ assets, body.gd and rings.shader
+## How far outside the ring system the plane extends and the shader still draws, as a
+## fraction of the ring span. Pure geometry: the texture's own radial extent is derived
+## from the data it holds (see [member texture_inner_radius]), not from this.
+const RENDER_MARGIN := 0.01
 
 
 # All built from table rings.tsv.
@@ -49,18 +50,20 @@ var outer_radius: float
 ## Name of the [IVBody] star casting light through the rings.
 var illuminating_star: StringName
 
-## Radial extent of the ring textures' inner edge (inside [member inner_radius]
-## by END_PADDING), in simulator units. The shadow profile texture spans
-## [member texture_inner_radius] to [member texture_outer_radius]. Read-only!
+## Radius of the ring texture's inner edge, in simulator units: half a texel inside
+## [member inner_radius], which is the radius of its first texel's centre. The shadow
+## profile texture spans [member texture_inner_radius] to [member texture_outer_radius].
+## Read-only!
 var texture_inner_radius: float
-## Radial extent of the ring textures' outer edge (the plane's edge, outside
-## [member outer_radius] by END_PADDING), in simulator units. Read-only!
+## Radius of the ring texture's outer edge, half a texel outside [member outer_radius].
+## Read-only!
 var texture_outer_radius: float
 
 
 var _rings_material := ShaderMaterial.new()
-var _texture_arrays: Array[Texture2DArray] # backscatter/forwardscatter/unlitside for each LOD
+var _texture_array: TextureLayered # backscatter/forwardscatter/unlitside layers
 var _texture_start: float
+var _texture_end: float
 var _inner_margin: float
 var _outer_margin: float
 var _body: IVBody
@@ -75,7 +78,7 @@ func _init(body: IVBody) -> void:
 	assert(row != -1, "Could not find row in rings.tsv for %s" % body.name)
 	IVTableData.db_build_object(self, &"rings", row)
 	var asset_preloader: IVAssetPreloader = IVGlobal.program[&"AssetPreloader"]
-	_texture_arrays = asset_preloader.get_rings_texture_arrays(name)
+	_texture_array = asset_preloader.get_rings_texture_array(name)
 	cast_shadow = SHADOW_CASTING_SETTING_OFF # ring shadows are analytic; see class doc
 	mesh = IVGlobal.resources[&"plane_mesh"] # shared subdivided 2x2 plane (farwarp needs subdivision)
 	rotation.x = PI / 2.0 # z up astronomy
@@ -87,17 +90,22 @@ func _ready() -> void:
 	_illuminating_star = IVBody.bodies.get(illuminating_star)
 	assert(_illuminating_star, "Could not find illuminating star '%s'" % illuminating_star)
 	
-	# distances in sim scale
+	# Distances in sim scale. The texture's texels are the source's own radial samples,
+	# the first centred on inner_radius and the last on outer_radius, so its edges sit
+	# half a texel outside both -- derived from the width, never a shared constant.
 	var ring_span := outer_radius - inner_radius
-	texture_outer_radius = outer_radius + END_PADDING * ring_span # edge of plane
-	texture_inner_radius = inner_radius - END_PADDING * ring_span # texture start from center
+	var texel_span := ring_span / float(_texture_array.get_width() - 1)
+	texture_inner_radius = inner_radius - 0.5 * texel_span
+	texture_outer_radius = outer_radius + 0.5 * texel_span
+	var plane_radius := outer_radius + RENDER_MARGIN * ring_span # edge of plane
 
 	# normalized distances from center of 2x2 plane
-	_texture_start = texture_inner_radius / texture_outer_radius
-	_inner_margin = (inner_radius - RENDER_MARGIN * ring_span) / texture_outer_radius # render boundary
-	_outer_margin = (outer_radius + RENDER_MARGIN * ring_span) / texture_outer_radius # render boundary
+	_texture_start = texture_inner_radius / plane_radius
+	_texture_end = texture_outer_radius / plane_radius
+	_inner_margin = (inner_radius - RENDER_MARGIN * ring_span) / plane_radius # render boundary
+	_outer_margin = 1.0 # render boundary; the plane's own inscribed circle
 
-	scale = Vector3(texture_outer_radius, 1.0, texture_outer_radius)
+	scale = Vector3(plane_radius, 1.0, plane_radius)
 	visibility_range_end = outer_radius * IVCoreSettings.radius_multiplier_visibility_range_end
 	if IVCoreSettings.apply_farwarp:
 		# Frustum culling tests the true-scale AABB against the far plane, but the farwarp
@@ -106,10 +114,10 @@ func _ready() -> void:
 		custom_aabb = AABB(-Vector3.ONE * extent, 2.0 * Vector3.ONE * extent)
 
 	_rings_material.shader = IVGlobal.resources[&"rings_shader"]
-	for lod in LOD_LEVELS:
-		_rings_material.set_shader_parameter("textures%s" % lod, _texture_arrays[lod])
-	_rings_material.set_shader_parameter(&"texture_width", float(_texture_arrays[0].get_width()))
+	_rings_material.set_shader_parameter(&"rings_textures", _texture_array)
+	_rings_material.set_shader_parameter(&"texture_width", float(_texture_array.get_width()))
 	_rings_material.set_shader_parameter(&"texture_start", _texture_start)
+	_rings_material.set_shader_parameter(&"texture_end", _texture_end)
 	_rings_material.set_shader_parameter(&"inner_margin", _inner_margin)
 	_rings_material.set_shader_parameter(&"outer_margin", _outer_margin)
 	set_surface_override_material(0, _rings_material)

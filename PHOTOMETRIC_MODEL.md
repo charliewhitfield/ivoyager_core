@@ -848,6 +848,14 @@ exposure the whole sky rides `exposure_max_ev` above the authored look.
 
 Saturn's rings (`rings.gdshader`, `rings.tsv`) carry their authored scatter model
 (forward/back-scatter, unlit-side transmission), riding `light_energy` like a surface.
+Their texture is one `CompressedTexture2DArray` of three radial profiles, each holding
+**premultiplied linear radiance** in rgb and `1 - exp(-tau_normal)` in alpha, built by
+`addons/tools/build_saturn_rings.py` from Bjoern Joensson's Voyager profiles. The shader
+therefore composites with `blend_premul_alpha` -- `radiance + transmission * background`
+-- rather than scaling the radiance by its own opacity a second time, and the sampler is
+not `source_color`, the file already being linear. Alpha is the occultation's own optical
+depth, so a photometric model that wants the slab formula has `tau = -ln(1 - a)` without
+re-deriving anything; layers 0 and 1 are two phase samples of the same surface.
 Their shadows — on the planet and from the planet on them — and all eclipse and transit
 dimming come from the **analytic occlusion system** (`IVSunOcclusionManager` with
 `_sun_occlusion.gdshaderinc`), which computes sun visibility per fragment instead of
@@ -1066,8 +1074,11 @@ as SPECULAR². Mimas in eclipse lands within one code of Forward+.
 **The rings' restatement is the one blend correction kept.** A partially transparent sheet is
 dimmed by the display-referred blend itself — `alpha * enc(C)` against the linear
 pipeline's `enc(alpha * C)`, 0.73x over Saturn's lit ring face — so the ring self-lights on
-the display-referred branch and hands `display_mix` a zero pedestal: it stands over empty
-sky almost everywhere, and the escalation case is pedestal-blind. The engine lights only
+the display-referred branch. Since the ring texture became premultiplied the fragment's
+colour is its whole term, so it goes through `display_write()` alone and the `display_mix`
+pair is no longer needed; what stays approximate is the blend's own `(1 - alpha)`
+attenuation of what lies behind, exact over the empty sky the ring stands on almost
+everywhere. The engine lights only
 the sunlit face (the unlit face is ambient alone), and the shader's existing model-space
 side test — `IVRings` keeps +y sunward — says which this is;
 `IVSunOcclusionManager._feed_ring_material` now passes `sun_light_energy` beside the sun's

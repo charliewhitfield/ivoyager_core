@@ -50,7 +50,8 @@ Global maps of Callisto, Ganymede, Io, Neptune and Saturn downloaded from https:
   - `/cubemaps/Io.normal.512.png` — his Io DEM, scaled as he recommends and converted to surface normals. The conversion is mechanical; the map is his.
   - `/cubemaps/Neptune.clouds.albedo.512.l03864.lr02738.h09663.hg11302.hb09756.png` — **his light clouds and dark spots only**, cut into a translucent overlay; the banding pattern beneath it is generated in shader code.
   - `/cubemaps/Saturn.albedo.1024.l03864.lg03094.lb01682.h08149.hb05395.png` — his color and his detail as downloaded; level and map projection adjusted.
-  - `/rings/*` — **his ring light-scattering data**, converted to shader-sampler textures.
+  - `/rings/saturn.rings.13177.exr` — **his ring light-scattering data**: his five radial
+    profiles, wholly, converted to one shader-sampler texture. Format only.
 - **Copyright:** Björn Jónsson
 - **License:** From "Use of the planetary maps" on his [acknowledgements page](https://bjj.mmedia.is/acknow.html):
 ```

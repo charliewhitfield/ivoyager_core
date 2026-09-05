@@ -206,15 +206,16 @@ var snap_ev_threshold := 6.0
 ## Albedo assumed for bodies without an [code]albedo[/code] table value.
 var default_albedo := 0.3
 ## The ring metering candidate's base reflectance: the bright-ring level
-## (area-weighted 90th percentile x transparency) of the lit-side backscatter
-## profile, BEFORE the shader's phase boost, which the candidate mirrors per
-## frame - the boosted product near opposition well exceeds any Lambert
-## sphere's albedo, which is why lit rings clip white when only the globe
-## meters. Anchored at the bright-ring level rather than the ring mean so
-## metering protects the B-ring highlights; the fainter rings then render
-## mid-dim, as real photographs show them. Measured from the shipped Saturn
-## assets.
-var ring_meter_albedo := 0.55
+## (area-weighted 90th percentile) of the lit-side backscatter profile, BEFORE
+## the shader's phase boost, which the candidate mirrors per frame - the
+## boosted product near opposition well exceeds any Lambert sphere's albedo,
+## which is why lit rings clip white when only the globe meters. Anchored at
+## the bright-ring level rather than the ring mean so metering protects the
+## B-ring highlights; the fainter rings then render mid-dim, as real
+## photographs show them. Measured from the shipped Saturn assets: it is the
+## premultiplied linear radiance the texture holds, which is what the shader
+## now hands the light multiply directly.
+var ring_meter_albedo := 0.84
 ## The camera's fully dark-adapted exposure, in EV above the authored sky
 ## look (exposure 1.0): the RESTING exposure with nothing metered - the empty
 ## sky far from any body - and the bound that night-side metering rides to,
