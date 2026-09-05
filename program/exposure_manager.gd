@@ -205,17 +205,16 @@ var adapt_brighten_ev_per_second := 8.0
 var snap_ev_threshold := 6.0
 ## Albedo assumed for bodies without an [code]albedo[/code] table value.
 var default_albedo := 0.3
-## The ring metering candidate's base reflectance: the bright-ring level
-## (area-weighted 90th percentile) of the lit-side backscatter profile, BEFORE
-## the shader's phase boost, which the candidate mirrors per frame - the
-## boosted product near opposition well exceeds any Lambert sphere's albedo,
-## which is why lit rings clip white when only the globe meters. Anchored at
-## the bright-ring level rather than the ring mean so metering protects the
-## B-ring highlights; the fainter rings then render mid-dim, as real
-## photographs show them. Measured from the shipped Saturn assets: it is the
-## premultiplied linear radiance the texture holds, which is what the shader
-## now hands the light multiply directly.
-var ring_meter_albedo := 0.84
+## The ring metering candidate's base level: the bright ring's SCATTERING
+## STRENGTH, times the ring system's [code]scattering_scale[/code]. The
+## candidate multiplies it by CPU mirrors of the ring shader's slab geometry
+## and phase function, whose product near opposition well exceeds any Lambert
+## sphere's albedo - which is why lit rings clip white when only the globe
+## meters. Anchored at the bright-ring level rather than the ring mean so
+## metering protects the B-ring highlights; the fainter rings then render
+## mid-dim, as real photographs show them. Measured from the shipped Saturn
+## assets (B ring, 95th percentile 1.826, times scattering_scale 0.6).
+var ring_meter_albedo := 1.10
 ## The camera's fully dark-adapted exposure, in EV above the authored sky
 ## look (exposure 1.0): the RESTING exposure with nothing metered - the empty
 ## sky far from any body - and the bound that night-side metering rides to,
@@ -271,12 +270,12 @@ var _captured_ambient_energy := NAN
 var _captured_tonemap_exposure := NAN
 var _ambient_energy_base := 0.0 # Environment ambient at exposure 1.0; x exposure per frame
 var _ring_meter_data: Dictionary[StringName, Vector2] = {} # body name -> (inner, outer) radius
+var _ring_phase_data: Dictionary[StringName, PackedFloat64Array] = {} # -> the shader's phase cells
 var _ring_meter_data_built := false
 var _limb_geometry: Dictionary[StringName, Vector2] = {} # body name -> (disc, shell) radius
 var _exposure_ceilings: Dictionary[StringName, Array] = {} # body name -> [(shell radius, ceiling)]
 var _limb_ceilings: Dictionary[StringName, float] = {} # body name -> limb_exposure_ceiling
 var _shell_meter_data_built := false
-var _ring_litside_phase_boost := 3.0 # rings.gdshader default
 
 
 func _ready() -> void:
@@ -445,9 +444,18 @@ func _build_ring_meter_data() -> void:
 	for row in IVTableData.get_n_rows(&"rings"):
 		var inner_radius := IVTableData.get_db_float(&"rings", &"inner_radius", row)
 		var outer_radius := IVTableData.get_db_float(&"rings", &"outer_radius", row)
+		# The same cells rings.gdshader takes, so the mirror cannot drift from the render.
+		var phase := PackedFloat64Array([
+			IVTableData.get_db_float(&"rings", &"back_phase", row),
+			IVTableData.get_db_float(&"rings", &"forward_phase", row),
+			IVTableData.get_db_float(&"rings", &"forward_level", row),
+			IVTableData.get_db_float(&"rings", &"opposition_surge", row),
+			IVTableData.get_db_float(&"rings", &"opposition_width", row),
+		])
 		var ring_bodies: Array[StringName] = IVTableData.get_db_array(&"rings", &"bodies", row)
 		for ring_body_name: StringName in ring_bodies:
 			_ring_meter_data[ring_body_name] = Vector2(inner_radius, outer_radius)
+			_ring_phase_data[ring_body_name] = phase
 
 
 func _build_shell_meter_data() -> void:
@@ -649,9 +657,10 @@ func _get_metering_target() -> float:
 					dark_weight, log_rest, rest_exposure))
 		if _ring_meter_data.has(body_name):
 			min_exposure = minf(min_exposure, _get_ring_candidate_exposure(body,
-					_ring_meter_data[body_name], camera_vector, camera_distance, star_vector,
-					star_distance, illuminance, shadow_fraction, fraction_per_theta_sq,
-					view_size, tan_half_fov, aspect, log_rest, rest_exposure))
+					_ring_meter_data[body_name], _ring_phase_data[body_name], camera_vector,
+					camera_distance, star_vector, star_distance, illuminance, shadow_fraction,
+					fraction_per_theta_sq, view_size, tan_half_fov, aspect, log_rest,
+					rest_exposure))
 		if _exposure_ceilings.has(body_name):
 			var ceilings: Array[Vector2] = _exposure_ceilings[body_name]
 			for shell in ceilings:
@@ -727,24 +736,23 @@ func _get_view_factor(global_position: Vector3, angular_radius: float, view_size
 
 ## Metering candidate for a lit ring face (rings.tsv bodies): a flat annulus
 ## whose screen fraction is its area foreshortened by the camera's elevation
-## from the ring plane, lit as a Lambert surface at the sun's elevation, with
-## [member ring_meter_albedo] and a CPU mirror of the ring shader's
-## backscatter phase boost carrying the map and phase response. A thin layer
-## shows its bright face only from the sun's side of the plane, so the unlit
-## side needs no candidate - it stays correctly exposed at the globe's own
-## metering. Returns rest_exposure when the ring doesn't meter.
-func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2, camera_vector: Vector3,
-		camera_distance: float, star_vector: Vector3, star_distance: float, illuminance: float,
+## from the ring plane, at [member ring_meter_albedo] times CPU mirrors of the
+## ring shader's two photometric terms - the single-scattering slab's geometry
+## at the two elevations, and the phase function with its opposition surge. A
+## thin layer shows its bright face only from the sun's side of the plane, so
+## the unlit side needs no candidate - it stays correctly exposed at the
+## globe's own metering. Returns rest_exposure when the ring doesn't meter.
+func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2,
+		ring_phase: PackedFloat64Array, camera_vector: Vector3, camera_distance: float,
+		star_vector: Vector3, star_distance: float, illuminance: float,
 		shadow_fraction: float, fraction_per_theta_sq: float, view_size: Vector2,
 		tan_half_fov: float, aspect: float, log_rest: float, rest_exposure: float) -> float:
-	const PHASE_EXPONENT := 6.0 # rings.gdshader
 	var axis := body.rotation_axis
 	var sin_camera_elevation := -camera_vector.dot(axis) / camera_distance
 	var sin_sun_elevation := star_vector.dot(axis) / star_distance
 	if sin_camera_elevation * sin_sun_elevation <= 0.0:
 		return rest_exposure # camera on the unlit side
-	var annulus_theta_sq := (ring_radii.y * ring_radii.y - ring_radii.x * ring_radii.x) \
-			* absf(sin_camera_elevation) / (camera_distance * camera_distance)
+	var annulus_theta_sq := (ring_radii.y * ring_radii.y - ring_radii.x * ring_radii.x) 			* absf(sin_camera_elevation) / (camera_distance * camera_distance)
 	var ring_fraction := fraction_per_theta_sq * annulus_theta_sq
 	var view_factor := _get_view_factor(body.global_position,
 			minf(ring_radii.y / camera_distance, 1.0), view_size, tan_half_fov, aspect)
@@ -752,16 +760,24 @@ func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2, camera_vect
 			meter_fraction_start, meter_fraction_full)
 	if ring_weight <= 0.0:
 		return rest_exposure
-	# Phase mirror of the shader's backscatter boost: phase_mix is 1.0 at zero
-	# phase angle (sun straight behind the camera), where the boost peaks. The
-	# boost value is per-renderer, which is why ring_meter_albedo is defined
-	# before it.
+	# Slab geometry, in the saturated limit: the candidate is anchored on the BRIGHT ring,
+	# which is by definition the optically thick one, and there the shader's
+	# 1 - exp(-tau (1/mu + 1/mu0)) is 1 to within a fraction of a percent whenever the sun
+	# stands low enough for rings to matter at all. So mu0/(mu + mu0) is the whole term and
+	# no optical depth has to cross into this file.
+	var mu := absf(sin_camera_elevation)
+	var mu0 := absf(sin_sun_elevation)
+	var geometry := mu0 / maxf(mu + mu0, 1e-6)
+	# Phase mirror of the shader's level: a straight line in magnitudes between the two lit
+	# profiles' own phase angles, plus the narrow opposition surge. The cells come from
+	# rings.tsv, which is also what the shader reads, so the two cannot drift apart.
 	var to_sun := (star_vector + camera_vector).normalized() # camera -> sun
-	var phase_mix_base := (to_sun.dot(-camera_vector / camera_distance) + 1.0) * 0.5
-	var phase_mix := phase_mix_base ** PHASE_EXPONENT
-	var phase_factor := _ring_litside_phase_boost * phase_mix + 1.0
-	var ring_luminance := ring_meter_albedo * phase_factor * (illuminance * shadow_fraction
-			* absf(sin_sun_elevation) + ambient_starlight_illuminance) / PI
+	var phase := acos(clampf(to_sun.dot(-camera_vector / camera_distance), -1.0, 1.0))
+	var phase_fraction := (phase - ring_phase[0]) / maxf(ring_phase[1] - ring_phase[0], 1e-4)
+	var level := maxf(ring_phase[2], 1e-6) ** phase_fraction
+	level *= 1.0 + ring_phase[3] * exp(-phase / maxf(ring_phase[4], 1e-6))
+	var ring_luminance := ring_meter_albedo * geometry * level * (illuminance * shadow_fraction
+			+ ambient_starlight_illuminance) / PI
 	if ring_luminance <= 0.0:
 		return rest_exposure
 	return _get_candidate_exposure(ring_luminance, ring_weight, log_rest, rest_exposure)

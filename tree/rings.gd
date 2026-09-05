@@ -39,6 +39,11 @@ extends MeshInstance3D
 ## from the data it holds (see [member texture_inner_radius]), not from this.
 const RENDER_MARGIN := 0.01
 
+## Table columns that are also shader uniforms of the same name, forwarded verbatim.
+const PHOTOMETRY_PARAMETERS: Array[StringName] = [&"back_phase", &"forward_phase",
+		&"forward_level", &"forward_reddening", &"unlit_level", &"unlit_floor",
+		&"opposition_surge", &"opposition_width", &"scattering_scale"]
+
 
 # All built from table rings.tsv.
 ## Asset file prefix used to locate ring textures.
@@ -49,6 +54,30 @@ var inner_radius: float
 var outer_radius: float
 ## Name of the [IVBody] star casting light through the rings.
 var illuminating_star: StringName
+
+# Photometry. These are the whole appearance model: rings.gdshader is generic, so a
+# different real or invented ring system is a new texture and a new table row. See that
+# shader's header for what each one does, and addons/tools/build_saturn_rings.py for
+# where Saturn's come from.
+## Phase angle of texture layer 0, in radians.
+var back_phase: float
+## Phase angle of texture layer 1, in radians.
+var forward_phase: float
+## Lit-face brightness at [member forward_phase] relative to [member back_phase].
+var forward_level: float
+## Red-channel multiplier at [member forward_phase].
+var forward_reddening: float
+## Texture layer 2's level relative to layer 0.
+var unlit_level: float
+## Transmitted light the single-scattering slab does not explain. Must match the value
+## the texture was built with.
+var unlit_floor: float
+## Fractional brightening added at zero phase angle.
+var opposition_surge: float
+## Angular e-folding width of that surge, in radians.
+var opposition_width: float
+## Overall level. The source profiles are peak-normalized, so nothing else sets it.
+var scattering_scale: float
 
 ## Radius of the ring texture's inner edge, in simulator units: half a texel inside
 ## [member inner_radius], which is the radius of its first texel's centre. The shadow
@@ -120,22 +149,21 @@ func _ready() -> void:
 	_rings_material.set_shader_parameter(&"texture_end", _texture_end)
 	_rings_material.set_shader_parameter(&"inner_margin", _inner_margin)
 	_rings_material.set_shader_parameter(&"outer_margin", _outer_margin)
+	for parameter: StringName in PHOTOMETRY_PARAMETERS:
+		_rings_material.set_shader_parameter(parameter, get(parameter))
 	set_surface_override_material(0, _rings_material)
-	
+
 
 
 func _process(_delta: float) -> void:
 	if !visible or !_illuminating_star: # null after _clear_procedural, before free
 		return
 
-	# rings.gdshader expects the front face toward the sun (its lit-side test is
-	# the camera's model-space elevation), so flip as needed.
-	var illumination_position := _illuminating_star.global_position
-	var cos_illumination_angle := global_basis.y.dot(illumination_position.normalized())
-	if cos_illumination_angle < 0.0:
-		rotation.x *= -1
-
-	_rings_material.set_shader_parameter(&"illumination_position", illumination_position)
+	# The shader decides lit face against unlit per fragment, from the signs of the
+	# camera's and the sun's elevation above the plane, so nothing here has to keep the
+	# front face sunward any more (it used to flip rotation.x every frame for that).
+	_rings_material.set_shader_parameter(&"illumination_position",
+			_illuminating_star.global_position)
 
 
 func _clear_procedural() -> void:

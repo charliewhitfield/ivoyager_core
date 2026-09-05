@@ -1,7 +1,10 @@
-	bodies	illuminating_star	file_prefix	inner_radius	outer_radius
-Type	ARRAY[STRING_NAME]	STRING_NAME	STRING	FLOAT	FLOAT
-Unit				km	km
-Prefix/RINGS_					
-SATURN	PLANET_SATURN	STAR_SUN	saturn.rings	74510	140390
-# See comments in rings.gdshader. Ring shadows (both directions) are analytic;					
-# see IVSunOcclusionManager and shaders/_sun_occlusion.gdshaderinc.					
+	bodies	illuminating_star	file_prefix	inner_radius	outer_radius	back_phase	forward_phase	forward_level	forward_reddening	unlit_level	unlit_floor	opposition_surge	opposition_width	scattering_scale
+Type	ARRAY[STRING_NAME]	STRING_NAME	STRING	FLOAT	FLOAT	FLOAT	FLOAT	FLOAT	FLOAT	FLOAT	FLOAT	FLOAT	FLOAT	FLOAT
+Unit				km	km	deg	deg						deg	
+Prefix/RINGS_														
+SATURN	PLANET_SATURN	STAR_SUN	saturn.rings	74510	140390	0	139	0.25	1.05	1.0	0.0985	0.25	2	0.6
+# Photometry: see rings.gdshader's header for the model and addons/tools/														
+# build_saturn_rings.py for where these numbers come from. `unlit_floor` must														
+# match the value that build printed; the rest are appearance.														
+# Ring shadows (both directions) are analytic; see IVSunOcclusionManager and														
+# shaders/_sun_occlusion.gdshaderinc.														
