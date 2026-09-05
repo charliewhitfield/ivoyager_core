@@ -898,17 +898,31 @@ supplies the eclipse factor metering uses, so an eclipsed moon meters dark and n
 adaptation opens up inside a totality. The same term covers a spacecraft passing into its
 planet's shadow, confirmed in-app.
 
-The lit ring face is brighter per unit area than any Lambert sphere near opposition, so a
-camera metering the globe alone would clip the rings white. The lit face therefore meters
-as its **own candidate**: a flat annulus whose screen fraction is its area foreshortened by
-the camera's elevation, at `ring_meter_albedo` (the bright ring's scattering strength times
-`scattering_scale`) times CPU mirrors of the slab geometry and the phase function. The
-geometry mirror takes the saturated limit `mu0/(mu+mu0)`, which is exact for the bright ring
-by definition and keeps optical depth out of the manager. Near opposition and toward grazing
-the candidate pulls exposure below the globe's and the B ring holds detail; at quadrature or
-near ring-plane equinox the dim rings stop mattering and the globe meters as before. The
-unlit face never needs a candidate -- a thin layer shows its bright face only from the sun's
-side of the plane.
+A ring face is brighter per unit area than any Lambert sphere near opposition, so a camera
+metering the globe alone would clip the rings white. **Both faces** therefore meter as their
+own candidate: a flat annulus whose screen fraction is its area foreshortened by the
+camera's elevation, at `ring_meter_albedo` or `ring_meter_unlit_albedo` (the bright ring's
+scattering strength times `scattering_scale`, derived per face) times CPU mirrors of the slab
+geometry and the phase function. The unlit face is not the faint object it looks like from
+the other side: an optically thin ring transmits nearly as much as it reflects, so at a low
+opening angle the C ring and the Cassini Division come through bright while the B ring goes
+dark.
+
+The geometry mirror takes each face's slab term at **its own maximum over optical depth** --
+the saturated limit `mu0/(mu+mu0)` on the lit face, where the term is monotone, and an
+interior peak at `tau = ln(b/a)/(b-a)` on the unlit one. That keeps optical depth out of the
+manager and makes the two branches MEET at the plane instead of switching (measured, 0.998
+lit against 0.988 unlit at a 0.05 deg opening) -- a thin ring really does look the same from
+either side.
+
+`ring_meter_grazing_tracking` decides how much of the rings' own brightening toward edge-on
+the camera follows. Their surface brightness rises toward grazing while their screen area
+falls -- measured on Saturn, the brightest lit radiance goes 0.57 to 2.04 between a 26 deg
+opening and 0.2 deg -- so a camera that tracks it all the way down stops the whole frame for
+a sliver. 1.0 tracks it exactly; 0.0 meters the rings as though they stayed at the brightness
+they have when the camera stands at the sun's own elevation, so they blow out as the rings
+close. The knob's whole range is about 0.5 EV on Saturn's lit face, that being how much
+brighter than the globe the rings ever meter.
 
 ## Renderer parity
 
@@ -1651,11 +1665,20 @@ lever a capped pass cannot offer is one the shader does not need.
 
 - **Rings: what is left after the 2026-09-05 photometric overhaul.** Three measured
   defects were fixed (below), and each of these is a judgment call rather than a bug:
-  - **The overall level is one table cell and nothing anchors it.** Joensson publishes all
-    three profiles independently peak-normalized, so the absolute level is not in the data.
-    `scattering_scale` 0.6 puts the brightest ring at I/F 0.52 just outside the opposition
-    surge and 0.72 at exact opposition, which is where the literature puts the B ring, and
-    it is the number to move if the rings read wrong against the globe.
+  - **The overall level is one table cell and the one reference that can anchor it says it
+    should be higher.** Joensson publishes all three profiles independently peak-normalized,
+    so the absolute level is not in the data. What IS available is the ratio to Saturn's own
+    globe, which both ride one exposure and which a gain therefore cancels out of: Hubble's
+    OPAL portrait (heic1917a, 24 deg opening, phase under a degree) gives B ring / globe =
+    **1.62**, where `scattering_scale` 0.6 renders **0.81** at the same opening. The globe is
+    not the suspect -- rendered, its disc reads I/F 0.734 against 0.749 for a Lambert sphere
+    at its catalog geometric albedo of 0.499. Correcting for our own opposition surge (the
+    render is at phase 4 deg, the lowest that geometry reaches, and Hubble is under 1 deg),
+    `scattering_scale` **0.96** reproduces the reference. The stretch on the Hubble release
+    is not published, but its direction is known: a stretch that lifts shadows compresses the
+    bright end and pulls a ratio TOWARD 1, so 1.62 is a lower bound rather than an upper one.
+    Rendered candidates at 0.6 / 0.8 / 0.96 are in the assets build tree
+    (`scratch/rings/level_candidates.py`), unjudged.
   - **`forward_level` 0.25 is a continuity anchor, not a measurement.** It is what the
     retired shader implied (its `litside_phase_boost` of 3 made phase 0 four times phase
     139), and with `opposition_surge` 0.25 at a 2 deg width it reproduces the source's own
@@ -1679,6 +1702,16 @@ lever a capped pass cannot offer is one the shader does not need.
     candidate meters as though the whole system were surging and pulls exposure down about
     16 % more than it needs to. The error is in the safe direction and vanishes with
     distance.
+  - **One anchor per face cannot hold across the whole opening range.** Derived from the
+    brightest radiance the shader actually produces, the lit face's implied anchor is stable
+    at 1.126-1.130 from a 26 deg opening down to 12 deg and then climbs to 2.06 by 0.2 deg,
+    as the optically thin dusty regions saturate; the unlit face's runs the other way, 1.049
+    down to 0.626. So a constant anchor under-defends the lit face toward grazing and
+    over-defends the unlit one. `ring_meter_grazing_tracking` is the knob that decides how
+    much of that is wanted rather than a correction for it.
+  - **Neither face clips at any distance tested** (3.5 to 30 body radii, both faces, 18 deg
+    opening: 0.00 % of every frame above 0.99, p99.9 between 0.25 and 0.65). So a ring that
+    reads too bright is a level judgment, not an exposure failure.
   - Per-star: rings would need a lit face and a phase level per star; see the multistar
     entry above.
 
