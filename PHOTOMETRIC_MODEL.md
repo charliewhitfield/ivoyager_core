@@ -876,12 +876,22 @@ to zero along with everything else.
 Phase carries the LEVEL and the texture carries only the shape, because the two lit
 profiles are published independently peak-normalized: `forward_level` is the lit face's
 brightness at `forward_phase` relative to `back_phase`, interpolated as a straight line in
-magnitudes, with `opposition_surge` adding the narrow spike the source quantifies (a
-"20-25 %" drop over the first 6 degrees, which no smooth curve delivers). Phase is
-evaluated per fragment, so a close camera gets the local opposition spot under it. Which
-face a fragment shows is also decided per fragment, from the signs of the two elevations,
-so a camera near the plane sees the lit face on one side of itself and the unlit face on
-the other.
+magnitudes, with `opposition_surge` and `opposition_width` adding the narrow spike on top.
+Phase is evaluated per fragment, so a close camera gets the local opposition spot under it.
+Which face a fragment shows is also decided per fragment, from the signs of the two
+elevations, so a camera near the plane sees the lit face on one side of itself and the
+unlit face on the other.
+
+**The lit face's level and its surge are anchored on SATURN'S OWN MAGNITUDE**, which is
+disc-integrated photometry and therefore immune to the stretch on any image. Mallama &
+Hilton (2018) publish the system (globe plus rings) and the globe alone as separate
+equations, and their difference is the rings' own flux; adding back the 6.0 % of the globe
+the rings occult (at zero phase the ring shadow hides behind that same silhouette, so it is
+the whole loss) and dividing by the projected areas gives the rings' area-weighted mean I/F.
+`scattering_scale`, `opposition_surge` and `opposition_width` are fitted to that relation
+over its stated validity range and reproduce it to within 3.6 % from zero phase to 6
+degrees. The published curve is much steeper than the source's own prose: a 40.3 % drop
+from 0 to 6 degrees against Joensson's stated "20-25 %".
 
 The fragment is **self-lit on both renderers** and its output is premultiplied: rgb is the
 ring's own light over black sky and alpha is the SLANT occlusion `1 - (1-a)^(1/mu)`, so a
@@ -1665,31 +1675,21 @@ lever a capped pass cannot offer is one the shader does not need.
 
 - **Rings: what is left after the 2026-09-05 photometric overhaul.** Three measured
   defects were fixed (below), and each of these is a judgment call rather than a bug:
-  - **The overall level is one table cell and the one reference that can anchor it says it
-    should be higher.** Joensson publishes all three profiles independently peak-normalized,
-    so the absolute level is not in the data. What IS available is the ratio to Saturn's own
-    globe, which both ride one exposure and which a gain therefore cancels out of: Hubble's
-    OPAL portrait (heic1917a, 24 deg opening, phase under a degree) gives B ring / globe =
-    **1.62**, where `scattering_scale` 0.6 renders **0.81** at the same opening. The globe is
-    not the suspect -- rendered, its disc reads I/F 0.734 against 0.749 for a Lambert sphere
-    at its catalog geometric albedo of 0.499. Correcting for our own opposition surge (the
-    render is at phase 4 deg, the lowest that geometry reaches, and Hubble is under 1 deg),
-    `scattering_scale` **0.96** reproduces the reference. The stretch on the Hubble release
-    is not published, but its direction is known: a stretch that lifts shadows compresses the
-    bright end and pulls a ratio TOWARD 1, so 1.62 is a lower bound rather than an upper one.
-    Rendered candidates at 0.6 / 0.8 / 0.96 are in the assets build tree
-    (`scratch/rings/level_candidates.py`), unjudged.
-  - **`forward_level` 0.25 is a continuity anchor, not a measurement.** It is what the
-    retired shader implied (its `litside_phase_boost` of 3 made phase 0 four times phase
-    139), and with `opposition_surge` 0.25 at a 2 deg width it reproduces the source's own
-    quantitative claim -- a 23.7 % drop from phase 0 to 6 deg against its stated "20-25 %".
-    Joensson's own caveat is that his high-phase end "should probably be even darker", so
-    a larger phase coefficient is defensible; the 71-frame reference set
-    (`MANIFEST.tsv`, `Saturn.rings.reference#*`) is better evidence than his montage.
-  - **`unlit_level` 1.0 is untested against anything.** The unlit profile takes no phase
-    term at all -- the source publishes one unlit appearance and no phase information for
-    it, and the lit face's phase curve describes light returned by large backscattering
-    particles where transmitted light is forward-scattered by small ones.
+  - **`forward_level` 0.25 is a continuity anchor, not a measurement** -- it is what the
+    retired shader implied, its `litside_phase_boost` of 3 having made phase 0 four times
+    phase 139. Nothing constrains it: the published magnitude relation that anchors the
+    level and the surge stops at 6.5 deg of phase, so everything past that is this cell's
+    extrapolation. Joensson's own caveat is that his high-phase end "should probably be
+    even darker", so a smaller value is defensible; the 71-frame reference set
+    (`MANIFEST.tsv`, `Saturn.rings.reference#*`, 54 with a stated phase from 0 to 179 deg)
+    is better evidence than his montage.
+  - **`unlit_level` 1.0 is untested against anything, and cannot be tested the way the lit
+    face was.** Mallama & Hilton define their effective ring inclination as ZERO when the
+    Sun and the observer are on opposite sides of the ring plane, so the published relation
+    says nothing whatever about the unlit face. The unlit profile also takes no phase term:
+    the source publishes one unlit appearance and no phase information for it, and the lit
+    face's phase curve is the wrong one to borrow, describing light returned by large
+    backscattering particles where transmitted light is forward-scattered by small ones.
   - **At solar equinox the rings go essentially black, and that is the model rather than a
     defect.** Every term rides mu0, so a sun in the ring plane takes the whole system to
     ~1e-3 of its normal level (rendered: the rings vanish, leaving a shadow line on the
@@ -1712,6 +1712,13 @@ lever a capped pass cannot offer is one the shader does not need.
   - **Neither face clips at any distance tested** (3.5 to 30 body radii, both faces, 18 deg
     opening: 0.00 % of every frame above 0.99, p99.9 between 0.25 and 0.65). So a ring that
     reads too bright is a level judgment, not an exposure failure.
+  - **The ring candidate rarely wins, now that the level is anchored.** At the photometric
+    level the rings meter DIMMER than Saturn's globe over most of the opening range, so the
+    globe's own candidate holds and the ring branch does nothing -- correctly, since nothing
+    clips. Measured after the level change, the lit face pulls at most 0.17 EV and the unlit
+    face none at all, where at the pre-anchor level they pulled 0.53 and 0.28. The branch is
+    live rather than dead code (it produces a candidate at every geometry; the globe's is
+    simply lower), and it would take control for a brighter or more open ring system.
   - Per-star: rings would need a lit face and a phase level per star; see the multistar
     entry above.
 

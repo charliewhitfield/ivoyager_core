@@ -215,15 +215,16 @@ var default_albedo := 0.3
 ## real photographs show them. Derived from the shipped Saturn assets by
 ## dividing the brightest radiance the shader produces over the whole radial
 ## profile by the geometry term's own maximum: stable at 1.126-1.130 from a
-## 26 deg opening angle down to 12 deg, and rising toward grazing, where
+## 26 deg opening angle down to 12 deg (times `scattering_scale`, so 0.88 at the
+## shipped 0.465), and rising toward grazing, where
 ## [member ring_meter_grazing_ev] is what decides how much of that is defended.
-var ring_meter_albedo := 1.13
+var ring_meter_albedo := 0.88
 ## The same for the UNLIT face, which is dimmer per unit geometry because the
 ## optically thick B ring is nearly opaque there. Derived the same way (1.049
 ## at a 26 deg opening, 1.001 at 18 deg). The unlit face needs its own
 ## candidate: it is not the faint object it looks like from the lit side, and
 ## without one the camera stays metered on the globe and the rings clip.
-var ring_meter_unlit_albedo := 1.00
+var ring_meter_unlit_albedo := 0.78
 ## How much of the rings' own brightening toward edge-on the camera follows.
 ## A ring's surface brightness RISES toward grazing while its screen area falls
 ## - measured on the shipped Saturn assets, the brightest lit radiance goes 0.57
