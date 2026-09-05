@@ -1613,3 +1613,70 @@ lever a capped pass cannot offer is one the shader does not need.
   - **Cost.** Six stars in the uniform interface cost nothing; per-fragment cost is linear in
     the fed count under uniform loop bounds, and the atmosphere quadrature is the term that
     multiplies. The engine's directional-light count is the only hard limit (sibling).
+
+- **Rings: the shader models one of the three angles that decide a ring's appearance, and
+  the third profile in its asset is dead code.** Measured 2026-09-05 with
+  `scratch/rings/phase_sweep.py` in the assets build tree, which poses Saturn by SOLVED
+  phase and by ring opening angle read back from the renderer (`get_rings_geometry` in the
+  project probe suite; `move_camera` needs `tracking: "ground"` or its latitude is an
+  ecliptic latitude and sweeps neither angle). Three defects, all measured with the sun
+  held 26.7° above the plane so viewing geometry is isolated:
+  - **No response to opening angle.** From B = 26° to B = 0.5° the ansa's screen height
+    falls 334 → 7 px, exactly `sin B`, while its surface brightness stays flat — peak
+    linear luma 0.371 → 0.386. The view path through the layer grew 50× and nothing
+    changed. The optically thin parts should brighten hard toward grazing while the B ring
+    saturates; that inversion is the content of every low-opening reference frame.
+  - **At exactly B = 0 the rings vanish** (lit pixels outside the planet: 260 at B = 0.2°,
+    1 at B = 0.0°). Effectively invisible fully edge-on is the wanted behaviour — a 10 m
+    ring against a 140,390 km radius is 7e-8, sub-pixel until ~10 km from the plane, so
+    **the quad stays and nothing models thickness geometrically** (settled with the
+    maintainer). What is wrong is the approach to it: a flat-brightness sliver that snaps
+    off rather than a coverage that falls with `sin B`.
+  - **The unlit face renders no light at all.** At B = −26°, rings wide open on their dark
+    side, the ansa measures peak linear luma **0.00028** and zero lit pixels — they occlude
+    but scatter nothing. The shader hands `ALBEDO` to the engine and Godot flips the normal
+    on back faces under `cull_disabled`, so `N·L` clamps to zero; the Compatibility branch
+    already hard-codes `diffuse_factor = 0.0` there. So layer 2 of the asset, and the whole
+    B-ring-dark / Cassini-bright inversion, is unreachable. **This is the largest of the
+    three.**
+
+  **What the source's own pages establish** (bjj.mmedia.is/data/s_rings and /3dtest/saturn,
+  the montage `rings.gdshader` says the app is tuned to), each checked against the profile
+  data:
+  - **The three profiles are independently normalized to a peak of 1** (measured maxima
+    0.9767, 1.0000, 0.9875), so the RELATIVE LEVEL of the three geometries is not in the
+    files. `mix(forwardscatter, backscatter, phase_mix)` therefore blends two shapes
+    carrying no level information, and "the overall brightness of the rings decreases
+    significantly with increasing phase angle" is absent entirely. **The profiles are the
+    SHAPE; the phase function has to supply the LEVEL.**
+  - **The opposition surge is narrow and quantified: "as the phase angle increases from 0 to
+    6 degrees the brightness of the rings drops substantially (20-25%)".** The shipped
+    `pow(phase_mix, 6)` delivers **1.22 %** over that span — **18× too weak**. It is also
+    already evaluated per fragment (from `VIEW`), so the local opposition spot the source
+    renders at close range, and notes most renderers omit, comes free once the function is
+    right.
+  - **The A-ring contrast reversal and the rising B-ring contrast are IN the data**, so the
+    two-profile mix is validated as the shape basis rather than merely convenient: outer/
+    inner A-ring mean runs 0.814 in backscatter against 1.192 in forward scatter, and the
+    B ring's p95/p5 runs 1.432 → 1.563.
+  - **"The brightness of the rings changes only slightly with changes in solar elevation
+    angle as seen from roughly the direction to the sun."** The single-scattering slab
+    passes this rather than contradicting it: at µ = µ0 and large τ both the saturation and
+    the `µ0/(µ+µ0)` factor go µ-independent, so only the thin parts move.
+  - **The reference geometry of each profile is not stated** (Voyager 1 Nov 1980 and
+    Voyager 2 Aug 1981, both shortly after the March 1980 equinox, so a low solar
+    elevation), and his own model is "crude", built from Earth-based and HST measurements
+    plus one Cassini point at 45°, with two stated caveats: the high-phase end "should
+    probably be even darker", and the reddening "starts too quickly". So the montage is
+    guidance and the 71-frame reference set (`MANIFEST.tsv`, `Saturn.rings.reference#*`,
+    54 with a stated phase from 0° to 179°) is the better evidence.
+
+  **The shape of the fix**, none of it geometric: a slant path (`tau_view = tau/|sin B|`,
+  with the lit face saturating as `1 - exp(-tau(1/mu + 1/mu0))` — the asset carries tau in
+  alpha as `-ln(1-a)` and `_sun_occlusion.gdshaderinc` already does this for the sun leg); a
+  self-lit fragment on BOTH faces so the transmitted branch is reached; a phase function
+  carrying the level with a narrow surge term hit against the 20-25 % figure and the
+  reference set; and a coverage term falling with `sin B` and no thickness floor, which
+  removes the aliasing and reaches zero at edge-on. Genericity for other ring systems wants
+  `rings.tsv` to carry the per-profile reference geometry and the photometric parameters
+  rather than leaving them as shader constants.
