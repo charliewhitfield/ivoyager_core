@@ -1557,3 +1557,48 @@ lever a capped pass cannot offer is one the shader does not need.
 - **Sun surface tuning**: in-app judgment of the procedural photosphere (every parameter
   is a uniform) and granulation time evolution, which is static by decision rather than
   oversight — a granule lives ~10 minutes, so the time input belongs on the sim clock.
+- **Multiple stars: metering, star colour, and the star field from elsewhere.** Audited
+  2026-09-05 for 3–6 light sources at a location and more than one system at once; the light
+  rig, the engine's light budget and how occlusion reaches each light are the sibling
+  document's entry. Nothing here is persisted, and `IVPhotometry`'s conversions are already
+  star-parameterized — every call site is not.
+  - **Metering lights every body from the camera's star.** `IVExposureManager._star` comes
+    from `camera_tree_changed`; each body's illuminance, parent-shadow fraction, lit fraction,
+    ring and limb candidates take that one star, and any other star is skipped as a candidate
+    outright. Per body, over its fed stars (the sibling's selection): lit luminance sums
+    `albedo × Σ Eᵢ × shadowᵢ / π`, each star's disc is its own candidate with its own
+    camera-point fraction, and the ring and limb ceilings take the brightest star's geometry.
+    The lit/dark split assumes one terminator: start with the dominant star driving the
+    phase, night-side ramp and horizon cutoff, and secondaries adding their own visible-lit
+    share to BOTH candidates — a 1 % companion lights the "dark" side ~7 EV under the day
+    side, and the night ramp must not carry the camera past it to starlight. Exposure,
+    `iv_exposure`, the emission globals and the ambient floor stay one scalar each.
+  - **Nonphysical light cannot sum.** `nonphysical_energy_at_1_au / d^0.5` was tuned for one
+    sun: two curves add to blowout, and a companion at 100 au reads at a tenth of the primary
+    instead of 1e-4. Require physical light for multi-star, or normalize the curve to the
+    dominant star and scale the others by their physical ratio.
+  - **Star colour and white balance.** `light_color` is never set: every surface is lit white
+    while discs, points and the catalog take `color_from_b_v()` (the Sun's 0.63 tints its
+    disc, not its light). A per-star light colour wants the same ramp, luminance-normalized
+    so V-band illuminance still meters, through a CPU mirror that cannot drift from the
+    shader's. Then decide the white point: tinting the Sun's light shifts every calibrated
+    map, so white-balance to the home star and let an M dwarf read red *relative* to it. The
+    photosphere's limb darkening and Planck anchors are solar (5777 K) and stand as an
+    approximation for other types.
+  - **Per-star terms in the shell shaders.** The disc laws, `limb_mean_incidence()`,
+    `atm_sun_transmittance`, the twilight excess and the atmosphere's shadow cylinder each
+    take one sun; the `atm_sky_*` curve is a function of µ₀ scaling linearly with
+    illuminance, so it reuses per star with no refit. `IVBodyPSF` should sum reflected flux
+    over stars, each through its own phase law, while its geometry — phase, wing offset, limb
+    sun angles — is one star's: dominant-star geometry with summed flux is the starting
+    approximation, and a binary's crescent glow is the view that tests it. Rings: per-star
+    lit face and phase boost, no mesh flip.
+  - **The star field is Earth-centric.** `CUSTOM0.x` is V at the Sun; from another system
+    each catalog star shifts by `5 log10(d_camera / d_catalog)`, computable per vertex from
+    the model-space position (f32 is fine at parsec magnitudes), but a star the catalog
+    carries at a placeholder distance for want of a parallax shifts wrongly. The visited star
+    must leave the catalog and the Sun must appear from there (its quad; sibling document).
+    The panorama needs no parallax at these ranges.
+  - **Cost.** Six stars in the uniform interface cost nothing; per-fragment cost is linear in
+    the fed count under uniform loop bounds, and the atmosphere quadrature is the term that
+    multiplies. The engine's directional-light count is the only hard limit (sibling).

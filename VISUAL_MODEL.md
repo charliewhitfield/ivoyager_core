@@ -306,7 +306,8 @@ set, and one AO value scales all direct light uniformly — a fragment eclipsed 
 but lit by star B cannot be expressed in it. The occlusion math itself is already
 sun-parameterized and reusable per star; only the application is single-sun (per-light
 attenuation in a custom `light()`, viable now that the METER scale-sensitivity that once
-ruled it out is resolved, or additive per-star passes). See the shaderinc header.
+ruled it out is resolved, or additive per-star passes). See the shaderinc header and the
+multistar entry in the TODO.
 
 ## Local shadow maps
 
@@ -823,6 +824,66 @@ this is the spatial one.
   but an eclipse by another body is not; `sun_occlusion_visible_fraction` at the
   tangent point would add it (also listed in the sibling document's atmosphere TODO —
   it is this system's one missing consumer).
-- **Multistar occlusion application** — the math is per-star already; the application
-  (one sun direction, one AO factor) is not. See the shaderinc header for the two
-  viable routes.
+- **Multiple stars: the light rig, the engine budget, and per-star occlusion.** Audited
+  2026-09-05 for 3–6 light sources at a location and more than one system running at once.
+  The occlusion math is per-star already; every *application* is single-sun, and the engine
+  sets the hard limits. Metering, star colour and the star field seen from another system
+  are the sibling document's entry.
+  - **The engine budget is the wall, and per-star light stacks hit it first.** Every renderer
+    caps directional lights at 8 (`RendererSceneRender::MAX_DIRECTIONAL_LIGHTS`); the one
+    directional shadow atlas splits among all shadowed directional lights in powers of two
+    (`_get_directional_shadow_rect`); and Compatibility draws each *shadowed* directional
+    light as one more full additive geometry pass per lit instance, where unshadowed ones
+    ride the base pass for ALU only. A star's `IVDynamicLight` stack is three lights, two
+    shadowed: two stars take six of the eight slots and a third overflows. Decouple the jobs —
+    shadow maps only for the one or two stars dominant at the camera by illuminance, the rest
+    an unshadowed light or no engine light at all (next entry). `dynamic_lights.tsv` keys its
+    rows to `STAR_SUN` by name, and its `apply_sun_occlusion` rows read the one
+    `camera_sun_visible_fraction`, which must become per-star.
+  - **Two routes to per-star occlusion, each with a trap.** (a) Attenuate per light in a
+    custom `light()`. Godot's `light()` has no light index, so a star is identified by
+    matching `LIGHT` to the fed directions (or `LIGHT_COLOR` to the fed energies) — and the
+    top light is aimed star→*camera* while the fed direction is body→star, so they differ by
+    the body's parallax seen from the star: nil in the camera's own system, tens of degrees
+    across it, where a close pair of stars can be confused. (That parallax already lights
+    every body with the *camera's* sun direction; a far planet under a zoomed camera renders
+    the wrong phase today.) (b) Make the shell shaders self-lit from a fed star array: they
+    already carry the whole per-sun interface and rebuild ambient, and the rings and the limb
+    already re-apply `sun_light_energy` by hand. That takes the astronomical domain out of
+    the engine's light count, aims every body's light exactly, and — `unshaded` — compiles
+    ONE GL program per shell shader under any local light configuration, the trade
+    `apply_gl_compatibility_shadows` makes today. It costs re-implementing the engine's
+    diffuse, GGX specular and normal-map application, re-verifying `_display.gdshaderinc` on
+    a lit path the renderer no longer multiplies for us, and map self-shadowing for
+    middle-domain shells (Phobos), which would keep the engine path or forgo it.
+  - **Either way the single-sun coupling lives in the ALBEDO-riding terms.** Lunar-Lambert,
+    Minnaert, `atm_sun_transmittance`, the rim ratio and the compat albedo/specular shadow
+    all multiply ALBEDO to divide out the engine's ONE µ₀; two stars sum two µ₀ and no ALBEDO
+    factor separates them, so each becomes a per-star weight on that star's diffuse, and the
+    twilight and limb-remainder EMISSION terms become per-star sums. `atmosphere_limb`'s
+    `light()` ignores `LIGHT` and would scale one star's integral by the sum of every light.
+    `rings.gdshader` takes a second sun channel (`illumination_position`) and one phase
+    angle, and `IVRings` flips its mesh sunward — with two stars there is no sunward side.
+    `body_psf` folds one phase into `apparent_magnitude` and offsets one glare wing toward
+    one lit limb.
+  - **Per-body star selection replaces `body.star`.** `star` is one ancestor (`_index()`
+    stops at the first star up the tree): a circumbinary body has none, and a planet of the
+    secondary never sees the primary. Rank every star by illuminance at the receiver and feed
+    the top `MAX_STARS` (6) above a floor — most bodies get one or two, which keeps
+    per-fragment cost linear in the *fed* count rather than the cap — as arrays of direction,
+    angular radius, energy, colour and `MAX_STARS × MAX_OCCLUDERS` occluders with a count per
+    star. Loop bounds must be uniforms ([SHADER_COMPILE_COST.md](SHADER_COMPILE_COST.md)): a
+    constant six-way loop around the atmosphere quadrature is exactly the unrolling that cost
+    24 s. Candidate lists stay star-independent but the sunward filter and ranking run per
+    star, so CPU cost goes as stars × receivers × candidates; stars must be admitted as
+    occluders of *other* stars' light; and the same selection serves concurrent systems,
+    since a star 4 ly away never qualifies. The opt-in (`occluder_data_a` by name) and every
+    feeder of the old uniforms (`IVBody2DCapturer`, `IVShaderWarmup`, the probe suites)
+    follow the interface.
+  - **Concurrent systems, the spatial part.** Every always-pass `custom_aabb` is sized to
+    `max_camera_distance` about its own body, so a star's PSF quad — what would show the Sun
+    from α Cen — frustum-culls from the next system; the catalog field must drop in-scene
+    stars (build-time, by a catalog id column in `stars.tsv`) or the visited star draws
+    twice; `camera_tree_changed` carries one star and is the funnel every consumer subscribes
+    to; and `IVSleepManager` sleeps and hides the sleepable bodies outside the camera's
+    planetary system, so a second system's planets stay awake while its moons do not.
