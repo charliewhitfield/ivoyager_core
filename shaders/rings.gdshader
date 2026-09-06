@@ -43,12 +43,34 @@ render_mode cull_disabled, skip_vertex_transform, ambient_light_disabled, blend_
 //   layer 0  the lit face at `back_phase`     |  layer 2  the unlit face
 //   layer 1  the lit face at `forward_phase`  |
 //
-// THE MODEL. A plane-parallel single-scattering slab, which is the same physics
-// _sun_occlusion.gdshaderinc already applies to the sun's leg through the rings. With
-// mu and mu0 the sines of the camera's and the sun's elevation above the ring plane:
+// THE MODEL. A plane-parallel single-scattering slab that is CLUMPY rather than uniform,
+// which is the same physics _sun_occlusion.gdshaderinc applies to the sun's leg through the
+// rings. With mu and mu0 the sines of the camera's and the sun's elevation above the ring
+// plane, and `T(rate)` the layer's transmission at that rate through the beam:
 //
-//   lit    mu0/(mu+mu0) * (1 - exp(-tau (1/mu + 1/mu0)))
-//   unlit  mu0/(mu0-mu) * (exp(-tau/mu0) - exp(-tau/mu))  + unlit_floor * mu0
+//   lit    mu0/(mu+mu0) * (1 - T(1/mu + 1/mu0))
+//   unlit  mu0/(mu0-mu) * (T(1/mu0) - T(1/mu))  + unlit_floor * mu0
+//
+// A real ring is not a uniform sheet: self-gravity wakes make optical depth vary across the
+// beam, and a clumpy layer saturates more SLOWLY than a homogeneous one, because the thin
+// lanes keep contributing after the dense parts have gone opaque. Taking tau as
+// gamma-distributed about its mean with shape `clumping` gives
+// `T = (1 + rate tau / clumping)^-clumping`, whose limit at large `clumping` is exactly
+// exp(-rate tau). Saturn's is FITTED ON THE UNLIT PROFILE, which is the one that measures
+// transmission, and comes out at 22.8 -- so the layer is nearly homogeneous, and the cell is
+// here because that is a measurement rather than an assumption. Fitting it on the LIT
+// profile instead is what it must not do: the lit fit's R2 moves 0.8733 to 0.8787 across the
+// entire family, so it constrains nothing, and the 1.7 it happens to prefer let the dense B
+// ring pass 15 % of the sun's light and rendered its unlit face nearly as bright as the C
+// ring's, where every real unlit image has it far darker.
+//
+// What DOES set the bands' contrast is the reference geometry the build divides out, which
+// is PINNED at the ring system's own maximum opening angle rather than fitted. Fitted, it
+// wanted 33.5 degrees against Saturn's maximum of 26.7 -- a geometry that cannot occur -- so
+// every render saturated harder than the reference had and washed the bands out: the B ring
+// against the C ring fell to 3.52 at Saturn's widest and 2.05 at 12 degrees, where the source
+// profile has 3.84. Pinned, the render reproduces the source exactly at that opening and
+// flattens only below it, which is the real physics.
 //
 // This is what makes the rings answer to their opening angle. As the camera drops toward
 // the plane the path through the layer lengthens without bound, so the optically thin
@@ -58,15 +80,15 @@ render_mode cull_disabled, skip_vertex_transform, ambient_light_disabled, blend_
 // Both faces saturate rather than diverge (a grazing ray's light comes from the layer's
 // last little bit of depth), so nothing here needs a clamp.
 //
-// `unlit_floor` is the residual the model cannot reach: measured, the densest B ring's
-// unlit face is ~800x brighter than transmission alone allows and flat over tau 1.8 to
-// 3.6, so the term stands in for multiple scattering, light between self-gravity wakes,
-// or the source's own image floor - the data cannot separate them. The build divides by
-// the SAME constant, so the dense B ring renders at its published value there rather
-// than as a ratio of two near-zeros. It rides mu0, as diffusely transmitted light must
-// and as the single-scattering terms themselves do at small mu0: a floor that survives an
-// equinox, which takes every other term to zero, makes the two faces of one ring disagree
-// under geometry that is symmetric between them.
+// `unlit_floor` is the residual the model still cannot reach: measured, the densest B ring's
+// unlit face is far brighter than transmission alone allows and flat over tau 1.8 to 3.6, so
+// the term stands in for multiple scattering, light between self-gravity wakes, or the
+// source's own image floor - the data cannot separate them. The build divides by the SAME
+// constant, so the dense B ring renders at its published value there rather than as a ratio
+// of two near-zeros. It rides
+// mu0, as diffusely transmitted light must and as the single-scattering terms themselves do
+// at small mu0: a floor that survives an equinox, which takes every other term to zero,
+// makes the two faces of one ring disagree under geometry that is symmetric between them.
 //
 // PHASE carries the level, and the texture carries only the shape: the two lit profiles
 // are published independently peak-normalized, so their relative brightness is not in
@@ -79,10 +101,17 @@ render_mode cull_disabled, skip_vertex_transform, ambient_light_disabled, blend_
 // cannot do. Phase is per fragment, so a close camera gets the local opposition spot
 // under it for free.
 //
-// The UNLIT face takes no phase term. The source publishes one unlit appearance and no
-// phase information for it, and the lit face's phase curve is the wrong one to borrow -
-// it describes light returned by large backscattering particles, where transmitted light
-// is forward-scattered by small ones. `unlit_level` folds the whole of it into a level.
+// BOTH faces take the same phase term, and that is physics rather than convenience: the
+// phase angle is the sun-ring-observer angle, so a photon's scattering angle is 180 - phase
+// WHICHEVER side the observer is on, and one phase function therefore serves both faces.
+// What differs between them is the geometry term above, which the model already has. (This
+// shader once gave the unlit face no phase term at all, on the reasoning that its light is
+// forward-scattered where the lit face's is returned - true, and already accounted for by
+// the phase angle itself being large there. The cost was an unlit face 1.8 to 2.8 times too
+// bright at the phases it can actually be seen at, since a low phase angle on the unlit
+// side is geometrically impossible: reaching one means standing near the sun's direction,
+// and the sun is on the other side of the plane.) `unlit_level` is then only the ratio
+// between the two published profiles' independent peak normalizations.
 //
 // WHICH FACE is decided per fragment, from the signs of the camera's and the sun's
 // elevation, so a camera close to the plane correctly sees the lit face on one side of
@@ -132,11 +161,12 @@ uniform float back_phase = 0.0; // radians; phase angle of texture layer 0
 uniform float forward_phase = 2.4260765; // radians; phase angle of texture layer 1
 uniform float forward_level = 0.25; // lit brightness at forward_phase, relative to back_phase
 uniform float forward_reddening = 1.05; // red multiplier at forward_phase
-uniform float unlit_level = 1.0; // texture layer 2's level, relative to layer 0
-uniform float unlit_floor = 0.0513; // see the header; must match the value the build used
+uniform float unlit_level = 2.121; // texture layer 2's level, relative to layer 0
+uniform float unlit_floor = 0.1168; // see the header; must match the build's value
+uniform float clumping = 22.77; // the layer's optical-depth spread; must match the build
 uniform float opposition_surge = 0.25; // fractional brightening added at zero phase
 uniform float opposition_width = 0.0349066; // radians; e-folding width of that surge
-uniform float scattering_scale = 1.0; // overall level; the profiles are peak-normalized
+uniform float scattering_scale = 0.486; // overall level; the profiles are peak-normalized
 
 // set by rings.gd every frame
 uniform vec3 illumination_position;
@@ -147,24 +177,41 @@ varying flat vec3 plane_normal; // unit, world space; either sign works
 varying flat float plane_screen_thickness; // the whole ring system's minor axis, in pixels
 
 
-// The single-scattering slab's lit face: what a unit scattering strength emits toward a
-// camera at elevation sine [param mu] under a sun at elevation sine [param mu0].
+// The layer's transmission at [param rate] through the beam, for optical depth
+// [param tau] gamma-distributed about its mean with shape `clumping`. The large-clumping
+// branch is the homogeneous limit and is taken explicitly: `1.0 + rate * tau / clumping`
+// loses every bit of the quotient once clumping is large enough.
+float ring_beam_transmission(float tau, float rate) {
+	if (clumping > 1e4) {
+		return exp(-rate * tau);
+	}
+	return pow(1.0 + rate * tau / clumping, -clumping);
+}
+
+
+// The slab's lit face: what a unit scattering strength emits toward a camera at elevation
+// sine [param mu] under a sun at elevation sine [param mu0]. Monotone in tau, saturating
+// at mu0/(mu+mu0) - which is what the metering candidate anchors on.
 float ring_reflection(float tau, float mu, float mu0) {
-	return mu0 / (mu + mu0) * (1.0 - exp(-tau * (1.0 / mu + 1.0 / mu0)));
+	return mu0 / (mu + mu0) * (1.0 - ring_beam_transmission(tau, 1.0 / mu + 1.0 / mu0));
 }
 
 
 // The same slab's unlit face: light scattered once and emerging through the far side.
-// Written as exp(-p) * b * (1 - exp(-d)) / d, which is the same expression with the
-// SMALLER exponent factored out - the direct form overflows to inf where the camera is
-// far off the plane and the sun near it, and the 0/0 at mu == mu0 has to be taken as a
-// limit in any case (there it is (tau/mu) exp(-tau/mu)).
+// `mu0/(mu0-mu)` is `b/(b-a)` in the two rates, so the whole term is written over that
+// difference - and the 0/0 at mu == mu0 has to be taken as a limit, which is the
+// transmission's own derivative there.
 float ring_transmission(float tau, float mu, float mu0) {
-	float a = tau / mu0;
-	float b = tau / mu;
-	float d = abs(b - a);
-	float ratio = (d < 1e-3) ? (1.0 - 0.5 * d) : ((1.0 - exp(-d)) / d);
-	return exp(-min(a, b)) * b * ratio;
+	float a = 1.0 / mu0;
+	float b = 1.0 / mu;
+	float d = b - a;
+	if (abs(d) < 1e-4 * max(a, b)) {
+		if (clumping > 1e4) {
+			return b * tau * exp(-a * tau);
+		}
+		return b * tau * pow(1.0 + a * tau / clumping, -clumping - 1.0);
+	}
+	return b * (ring_beam_transmission(tau, a) - ring_beam_transmission(tau, b)) / d;
 }
 
 
@@ -247,18 +294,16 @@ void fragment() {
 		bool lit_face = cos_view * cos_sun > 0.0;
 		vec4 texel;
 		if (lit_face) {
-			// lit face
 			vec4 back = textureLod(rings_textures, vec3(u, 0.5, 0.0), lod);
 			vec4 forward = textureLod(rings_textures, vec3(u, 0.5, 1.0), lod);
 			forward.r *= forward_reddening;
 			// Alpha is the same in both layers, so the mix leaves it exactly alone.
 			texel = mix(back, forward, shape_mix);
-			texel.rgb *= level;
 		} else {
-			// unlit face
 			texel = textureLod(rings_textures, vec3(u, 0.5, 2.0), lod);
 			texel.rgb *= unlit_level;
 		}
+		texel.rgb *= level; // one phase function, both faces; see the header
 
 		float tau = -log(max(1.0 - texel.a, MIN_TRANSMISSION));
 		float geometry = lit_face ? ring_reflection(tau, mu, mu0)

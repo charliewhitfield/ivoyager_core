@@ -854,33 +854,50 @@ texture and a new table row.
 Their texture is one `CompressedTexture2DArray` of three radial profiles, built by
 `addons/tools/build_saturn_rings.py` from Bjoern Joensson's Voyager profiles. Its alpha is
 `1 - exp(-tau_normal)` from the stellar occultation, and its rgb is **scattering
-strength** -- the published brightness with the slab's geometry term at the geometry the
-source's images were taken at DIVIDED OUT, so what the file holds is a property of the
-particles rather than of one observing geometry. That geometry is not published and is
-fitted from each profile's own tau dependence; the fit works, which is the check on the
-construction: one exponent explains most of each profile's radial contrast, and the
-quotient left over is nearly flat across the C ring, the B ring, the Cassini Division and
-the A ring. The shader multiplies the term back at the angles it is actually rendering:
+strength** -- the published brightness with the slab's geometry term DIVIDED OUT, so what
+the file holds is a property of the particles rather than of one observing geometry. The
+shader multiplies the term back at the angles it is actually rendering:
 
-    lit    mu0/(mu+mu0) * (1 - exp(-tau (1/mu + 1/mu0)))
-    unlit  mu0/(mu0-mu) * (exp(-tau/mu0) - exp(-tau/mu)) + unlit_floor * mu0
+    lit    mu0/(mu+mu0) * (1 - T(1/mu + 1/mu0))
+    unlit  mu0/(mu0-mu) * (T(1/mu0) - T(1/mu)) + unlit_floor * mu0
 
-with mu and mu0 the sines of the camera's and the sun's elevation above the plane. That is
-what makes the rings answer to their opening angle -- as the camera drops toward the plane
-the optically thin rings brighten toward the saturated value while the B ring, already
-saturated, barely moves. `unlit_floor` is the residual single scattering cannot reach (the
-densest B ring's unlit face is ~800x brighter than transmission alone allows, and flat over
-tau 1.8 to 3.6); it rides mu0, as diffusely transmitted light must, so an equinox takes it
-to zero along with everything else.
+with mu and mu0 the sines of the camera's and the sun's elevation above the plane and
+`T(rate) = (1 + rate tau / clumping)^-clumping` the layer's transmission -- optical depth
+taken as gamma-distributed across the beam, self-gravity wakes being what makes it vary,
+with the homogeneous slab as the large-`clumping` limit. That is what makes the rings answer
+to their opening angle: as the camera drops toward the plane the optically thin rings
+brighten toward the saturated value while the B ring, already saturated, barely moves.
 
-Phase carries the LEVEL and the texture carries only the shape, because the two lit
-profiles are published independently peak-normalized: `forward_level` is the lit face's
-brightness at `forward_phase` relative to `back_phase`, interpolated as a straight line in
-magnitudes, with `opposition_surge` and `opposition_width` adding the narrow spike on top.
-Phase is evaluated per fragment, so a close camera gets the local opposition spot under it.
-Which face a fragment shows is also decided per fragment, from the signs of the two
-elevations, so a camera near the plane sees the lit face on one side of itself and the
-unlit face on the other.
+**The reference geometry the build divides out is PINNED at the ring system's maximum
+opening angle**, and that decides how much radial contrast survives. Fitted instead, it
+wants a geometry Saturn never reaches (33.5 degrees against a maximum of 26.7), so every
+render saturates harder than the reference did and washes the bands out -- measured, the B
+ring against the C ring fell to 3.52 at Saturn's widest and 2.05 at 12 degrees, where the
+source profile has 3.84. **`clumping` is fitted on the UNLIT profile**, which is the one
+that measures transmission; the lit fit's R2 moves 0.8733 to 0.8787 across the entire
+family and so constrains nothing. Saturn's comes out at 22.8, i.e. nearly homogeneous.
+`unlit_floor` is the residual single scattering still cannot reach (the densest B ring's
+unlit face is far brighter than transmission alone allows, and flat over tau 1.8 to 3.6);
+it rides mu0, as diffusely transmitted light must, so an equinox takes it to zero along
+with everything else.
+
+Phase carries the LEVEL and the texture carries only the shape, because all three profiles
+are published independently peak-normalized: `forward_level` is the lit face's brightness at
+`forward_phase` relative to `back_phase`, interpolated as a straight line in magnitudes,
+with `opposition_surge` and `opposition_width` adding the narrow spike on top. Phase is
+evaluated per fragment, so a close camera gets the local opposition spot under it. Which
+face a fragment shows is also decided per fragment, from the signs of the two elevations,
+so a camera near the plane sees the lit face on one side of itself and the unlit face on
+the other.
+
+**Both faces take that same phase term**, which is physics rather than convenience: the
+phase angle is the sun-ring-observer angle, so a photon's scattering angle is `180 - phase`
+whichever side the observer is on, and one phase function serves both. What differs is the
+geometry term above. Giving the unlit face no phase term left it 1.8 to 2.8 times too
+bright at the phases it can actually be seen at -- a low phase angle on the unlit side is
+geometrically impossible, since reaching one means standing near the sun's direction and
+the sun is on the other side of the plane. `unlit_level` is then only the ratio between the
+two profiles' independent peak normalizations.
 
 **The lit face's level and its surge are anchored on SATURN'S OWN MAGNITUDE**, which is
 disc-integrated photometry and therefore immune to the stretch on any image. Mallama &
@@ -1683,13 +1700,26 @@ lever a capped pass cannot offer is one the shader does not need.
     even darker", so a smaller value is defensible; the 71-frame reference set
     (`MANIFEST.tsv`, `Saturn.rings.reference#*`, 54 with a stated phase from 0 to 179 deg)
     is better evidence than his montage.
-  - **`unlit_level` 1.0 is untested against anything, and cannot be tested the way the lit
-    face was.** Mallama & Hilton define their effective ring inclination as ZERO when the
-    Sun and the observer are on opposite sides of the ring plane, so the published relation
-    says nothing whatever about the unlit face. The unlit profile also takes no phase term:
-    the source publishes one unlit appearance and no phase information for it, and the lit
-    face's phase curve is the wrong one to borrow, describing light returned by large
-    backscattering particles where transmitted light is forward-scattered by small ones.
+  - **The unlit face's level is derived rather than measured, and cannot be measured the
+    way the lit face was.** Mallama & Hilton define their effective ring inclination as ZERO
+    when the Sun and the observer are on opposite sides of the ring plane, so the published
+    relation says nothing whatever about the unlit face. What stands in for it is the
+    physics: one phase function serves both faces, so `unlit_level` is only the ratio
+    between the two profiles' peak normalizations and everything else follows from the
+    geometry term. What that leaves untested is the DEPTH of the inversion at a wide
+    opening: the model has the unlit B ring at 0.51 of the C ring at 26 degrees, where the
+    source profile has 0.11 at its own 3-degree camera elevation and PIA08840 (a 49-degree
+    unlit view) reads about 0.11 as well. Either real transmission through the B ring is
+    far lower than its measured optical depth implies -- plausible, the occultation
+    saturating at 500 radii -- or the press frame's dark end is floored. Not resolved.
+  - **Saturnshine is missing, and it is the reason a ring shadow renders truly black.** A
+    shadowed ring is still lit by the planet beside it: estimated from the geometry, the
+    irradiance on a ring element from Saturn's disc is about 6 % of direct sunlight at
+    100,000 km, so the shadow should sit a few percent of the lit ring rather than at
+    ambient starlight. The same term the other way -- ringshine on the globe's night side --
+    is what makes Saturn's dark hemisphere visible beside unlit rings in a single exposure
+    (PIA12590), which no ring level can reproduce without it. Both need a light term rather
+    than a ring-shader change.
   - **At solar equinox the rings go essentially black, and that is the model rather than a
     defect.** Every term rides mu0, so a sun in the ring plane takes the whole system to
     ~1e-3 of its normal level (rendered: the rings vanish, leaving a shadow line on the

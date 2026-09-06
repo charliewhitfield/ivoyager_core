@@ -214,17 +214,19 @@ var default_albedo := 0.3
 ## protects the B-ring highlights; the fainter rings then render mid-dim, as
 ## real photographs show them. Derived from the shipped Saturn assets by
 ## dividing the brightest radiance the shader produces over the whole radial
-## profile by the geometry term's own maximum: stable at 1.126-1.130 from a
-## 26 deg opening angle down to 12 deg (times `scattering_scale`, so 0.88 at the
-## shipped 0.465), and rising toward grazing, where
+## profile by the geometry term's own maximum: stable at 0.909-0.913 from a
+## 26 deg opening angle down to 8 deg, and rising toward grazing, where
 ## [member ring_meter_grazing_ev] is what decides how much of that is defended.
-var ring_meter_albedo := 0.88
-## The same for the UNLIT face, which is dimmer per unit geometry because the
-## optically thick B ring is nearly opaque there. Derived the same way (1.049
-## at a 26 deg opening, 1.001 at 18 deg). The unlit face needs its own
-## candidate: it is not the faint object it looks like from the lit side, and
-## without one the camera stays metered on the globe and the rings clip.
-var ring_meter_unlit_albedo := 0.78
+var ring_meter_albedo := 0.91
+## The same for the UNLIT face, derived the same way (1.87 at a 26 deg opening,
+## 1.74 at 18 deg). It is LARGER than the lit face's, which looks wrong and is
+## not: both faces take the same phase term, and an unlit view is only reachable
+## at a large phase angle, so the phase level is what makes that face dim. The
+## unlit face needs its own candidate at all because it is not the faint object
+## it looks like from the lit side - an optically thin ring transmits nearly as
+## much as it reflects, so the C ring and the Cassini Division come through
+## bright there while the B ring goes dark.
+var ring_meter_unlit_albedo := 1.74
 ## How much of the rings' own brightening toward edge-on the camera follows.
 ## A ring's surface brightness RISES toward grazing while its screen area falls
 ## - measured on the shipped Saturn assets, the brightest lit radiance goes 0.57
@@ -475,6 +477,7 @@ func _build_ring_meter_data() -> void:
 			IVTableData.get_db_float(&"rings", &"opposition_surge", row),
 			IVTableData.get_db_float(&"rings", &"opposition_width", row),
 			IVTableData.get_db_float(&"rings", &"unlit_floor", row),
+			IVTableData.get_db_float(&"rings", &"clumping", row),
 		])
 		var ring_bodies: Array[StringName] = IVTableData.get_db_array(&"rings", &"bodies", row)
 		for ring_body_name: StringName in ring_bodies:
@@ -802,12 +805,13 @@ func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2,
 	var open_geometry: float # the same term with the camera at the sun's own elevation
 	var ring_albedo: float
 	if sin_camera_elevation * sin_sun_elevation > 0.0:
-		geometry = mu0 / maxf(mu + mu0, 1e-6)
+		geometry = mu0 / maxf(mu + mu0, 1e-6) # monotone in tau, so this is its saturated limit
 		open_geometry = 0.5
 		ring_albedo = ring_meter_albedo
 	else:
-		geometry = _get_ring_transmission_peak(mu, mu0, ring_photometry[5])
-		open_geometry = _get_ring_transmission_peak(mu0, mu0, ring_photometry[5])
+		geometry = _get_ring_transmission_peak(mu, mu0, ring_photometry[5], ring_photometry[6])
+		open_geometry = _get_ring_transmission_peak(mu0, mu0, ring_photometry[5],
+				ring_photometry[6])
 		ring_albedo = ring_meter_unlit_albedo
 	# Follow only `ring_meter_grazing_tracking` of the rise toward edge-on; see the member.
 	if ring_meter_grazing_tracking < 1.0:
@@ -832,21 +836,41 @@ func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2,
 	return _get_candidate_exposure(ring_luminance, ring_weight, log_rest, rest_exposure)
 
 
-## Maximum over optical depth of the slab's transmitted term,
-## [code]mu0/(mu0-mu) (exp(-tau/mu0) - exp(-tau/mu)) + floor mu0[/code]. The exponential
-## difference peaks at [code]tau = ln(b/a)/(b-a)[/code] for a < b, which is the optical
-## depth that looks brightest through a ring at this geometry - the C ring and the Cassini
-## Division at a wide opening, the B ring itself once the camera is near the plane.
-func _get_ring_transmission_peak(mu: float, mu0: float, floor_term: float) -> float:
+## Maximum over optical depth of the slab's transmitted term - the optical depth that looks
+## brightest through a ring at this geometry, which is the C ring and the Cassini Division
+## at a wide opening and the B ring itself once the camera is near the plane.
+##
+## Scanned rather than solved. The homogeneous form peaks at the closed
+## [code]tau = ln(b/a)/(b-a)[/code], but the CLUMPY one the shader uses has no such form, and
+## a scan cannot drift from whatever the shader does the way a second closed form would. 24
+## logarithmic samples span every optical depth a ring reaches and cost nothing once a frame.
+func _get_ring_transmission_peak(mu: float, mu0: float, floor_term: float,
+		clumping: float) -> float:
 	var a := 1.0 / maxf(mu0, 1e-4)
 	var b := 1.0 / maxf(mu, 1e-4)
-	var low := minf(a, b)
-	var span := maxf(a, b) - low
-	var peak := exp(-1.0) # the mu == mu0 limit, (tau/mu) exp(-tau/mu) maximized at tau = mu
-	if span > 1e-6:
-		var tau := log(maxf(a, b) / low) / span
-		peak = exp(-low * tau) * b * (1.0 - exp(-span * tau)) / span
+	var span := b - a
+	var peak := 0.0
+	for index in 24:
+		var tau: float = 0.002 * (50.0 ** (index / 23.0))
+		var value := b * (_get_ring_beam_transmission(tau, a, clumping)
+				- _get_ring_beam_transmission(tau, b, clumping)) / span
+		if absf(span) < 1e-4 * maxf(a, b):
+			# The a == b limit is the transmission's own derivative there.
+			value = b * tau * _get_ring_beam_transmission(tau, a, clumping)
+			if clumping <= 1e4:
+				value /= 1.0 + a * tau / maxf(clumping, 1e-4)
+		peak = maxf(peak, value)
 	return peak + floor_term * mu0
+
+
+## The ring layer's transmission at [param rate] through the beam, mirroring
+## [code]ring_beam_transmission()[/code] in rings.gdshader: optical depth taken as
+## gamma-distributed about its mean with shape [param clumping], whose large-clumping limit
+## is exactly [code]exp(-rate * tau)[/code].
+func _get_ring_beam_transmission(tau: float, rate: float, clumping: float) -> float:
+	if clumping > 1e4:
+		return exp(-rate * tau)
+	return (1.0 + rate * tau / clumping) ** -clumping
 
 
 ## Metering candidate for a shell that asserts an [code]exposure_ceiling[/code] in
