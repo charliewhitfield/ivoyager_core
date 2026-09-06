@@ -214,19 +214,22 @@ var default_albedo := 0.3
 ## protects the B-ring highlights; the fainter rings then render mid-dim, as
 ## real photographs show them. Derived from the shipped Saturn assets by
 ## dividing the brightest radiance the shader produces over the whole radial
-## profile by the geometry term's own maximum: stable at 0.909-0.913 from a
-## 26 deg opening angle down to 8 deg, and rising toward grazing, where
-## [member ring_meter_grazing_ev] is what decides how much of that is defended.
-var ring_meter_albedo := 0.91
-## The same for the UNLIT face, derived the same way (1.87 at a 26 deg opening,
-## 1.74 at 18 deg). It is LARGER than the lit face's, which looks wrong and is
+## profile by the geometry term the manager uses - for this face the SATURATED
+## LIMIT, the term being monotone in optical depth, which makes the number
+## exactly independent of opening angle (1.040 at 26, 18, 12 and 8 deg alike).
+## Re-derive it with scratch/rings/meter_albedos.py whenever the asset's radial
+## distribution changes; it is not a property of the rings but of the file.
+var ring_meter_albedo := 1.04
+## The same for the UNLIT face, whose term has an interior peak instead, so this
+## one does drift a little with opening (2.08 at 26 deg, 1.60-1.65 from 18 deg
+## down to 8); the median is taken. It is LARGER than the lit face's, which looks wrong and is
 ## not: both faces take the same phase term, and an unlit view is only reachable
 ## at a large phase angle, so the phase level is what makes that face dim. The
 ## unlit face needs its own candidate at all because it is not the faint object
 ## it looks like from the lit side - an optically thin ring transmits nearly as
 ## much as it reflects, so the C ring and the Cassini Division come through
 ## bright there while the B ring goes dark.
-var ring_meter_unlit_albedo := 1.74
+var ring_meter_unlit_albedo := 1.63
 ## How much of the rings' own brightening toward edge-on the camera follows.
 ## A ring's surface brightness RISES toward grazing while its screen area falls
 ## - measured on the shipped Saturn assets, the brightest lit radiance goes 0.57
@@ -841,14 +844,22 @@ func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2,
 ## Scanned rather than solved. The homogeneous form peaks at the closed
 ## [code]tau = ln(b/a)/(b-a)[/code], but the CLUMPY one the shader uses has no such form, and
 ## a scan cannot drift from whatever the shader does the way a second closed form would. 24
-## logarithmic samples span every optical depth a ring reaches and cost nothing once a frame.
+## logarithmic samples cost nothing once a frame.
+##
+## The span has to reach the optical depths a ring ACTUALLY has, and it did not until
+## 2026-09-06: it stopped at 0.1, where the transmitted term is still climbing, so it
+## returned a point on the rising side instead of the peak - 2.6x low at a 26 deg sun and
+## a 58 deg camera, since that peak sits near tau 0.6. It read as calibrated only because
+## [member ring_meter_unlit_albedo] was derived through the same truncated scan, which
+## cancels the error at one geometry and nowhere else. The shader clamps transmission at
+## 0.001, i.e. tau 6.91, so the scan now runs to 10.
 func _get_ring_transmission_peak(mu: float, mu0: float, clumping: float) -> float:
 	var a := 1.0 / maxf(mu0, 1e-4)
 	var b := 1.0 / maxf(mu, 1e-4)
 	var span := b - a
 	var peak := 0.0
 	for index in 24:
-		var tau: float = 0.002 * (50.0 ** (index / 23.0))
+		var tau: float = 0.002 * (5000.0 ** (index / 23.0)) # 0.002 to 10; see the doc
 		var value := b * (_get_ring_beam_transmission(tau, a, clumping)
 				- _get_ring_beam_transmission(tau, b, clumping)) / span
 		if absf(span) < 1e-4 * maxf(a, b):

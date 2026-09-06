@@ -868,12 +868,30 @@ with the homogeneous slab as the large-`clumping` limit. That is what makes the 
 to their opening angle: as the camera drops toward the plane the optically thin rings
 brighten toward the saturated value while the B ring, already saturated, barely moves.
 
-**The reference geometry the build divides out is PINNED at the ring system's maximum
-opening angle**, and that decides how much radial contrast survives. Fitted instead, it
-wants a geometry Saturn never reaches (33.5 degrees against a maximum of 26.7), so every
-render saturates harder than the reference did and washes the bands out -- measured, the B
-ring against the C ring fell to 3.52 at Saturn's widest and 2.05 at 12 degrees, where the
-source profile has 3.84.
+**The reference geometry the build divides out is PINNED at the geometry the images were
+taken at**, and that decides how much radial contrast every render carries. Joensson's
+profiles are Voyager, 1980-81 -- within 1.5 years of Saturn's 1980 equinox, when the sun
+stood a FEW degrees above the ring plane (Voyager 1 in November 1980 at 4.0 degrees,
+Voyager 2 in August 1981 at 7.8, and the unlit profile independently fits its own shallower
+leg at 2.7). Saturn's cells are 6.0 and 3.1 degrees.
+
+A fit cannot supply that, and the two Voyager 1 profiles prove it between them:
+`forwardscattered` and `unlitside` are the same spacecraft at the same encounter, a lit fit
+determines only `k = 1/mu + 1/mu0`, and k can never be less than 1/mu0 -- yet forwardscatter
+fits k = 5.62 where the unlit profile's own sun elevation demands at least 14.4, and
+backscatter fits 3.61 against at least 7.3. Both are impossible. What the fit absorbs is the
+RADIAL VARIATION OF PARTICLE ALBEDO, which the model has no term for.
+
+Getting it wrong flattens the bands. Pinned at Saturn's 26.7 degree maximum -- which is what
+shipped until 2026-09-06, chosen only because the free fit wanted an impossible 33.5 -- the
+B ring against the C ring rendered 3.81 at Saturn's widest and 2.23 at 12 degrees. Pinned at
+the encounter geometry it renders 9.67 and 5.51, against published Cassini radial scans of 6
+to 12 at low phase, and the rendered radial spread across a lit ansa roughly doubles
+(p90/p10 2.55 to 5.23 at a 12 degree opening). The independent check is the particle strength
+each reference implies: the C ring and the Cassini Division are the known dark, contaminated
+regions, at roughly 0.2-0.5 of the A and B rings' albedo, and a 26.7 degree reference put
+them at 0.83 and 1.33 -- the Division BRIGHTER than the A ring, which nothing supports --
+against 0.39 and 0.73 at 6 degrees.
 
 **`clumping` is PINNED, because nothing in these profiles measures it.** It always looks
 fitted and never is: the lit profile cannot see it (that fit's R2 moves 0.8733 to 0.8787
@@ -917,7 +935,13 @@ the sun is on the other side of the plane. `unlit_level` is then DERIVED rather 
 it is the reciprocal of the measured unlit/lit strength ratio, which is what puts both faces
 on one scattering strength -- the two profiles are peak-normalized independently AND were
 observed at different phase angles, and that one number undoes both at once. The build
-prints the cell.
+prints the cell. That ratio is a ratio of PHASE FUNCTIONS, so it is not flat in radius: the
+dustier C ring and Cassini Division forward-scatter more than the B ring, and it runs 17.7
+at optical depth 0.02-0.1 down to 6.2 by 0.7-1.2. It reads flat only while both references
+are fitted, because two fits absorb the same radial albedo variation and it cancels in the
+quotient. The build therefore measures it twice -- once over the whole live profile for the
+level, and once on the densest tenth for the fallback that carries the deep B ring, which is
+the material that fallback adjoins.
 
 **The lit face's level and its surge are anchored on SATURN'S OWN MAGNITUDE**, which is
 disc-integrated photometry and therefore immune to the stretch on any image. Mallama &
