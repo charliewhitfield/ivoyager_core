@@ -917,6 +917,17 @@ lighting is not a stylistic choice -- the engine flips a double-sided primitive'
 an engine-lit ALBEDO clamps N.L to zero on whichever face is turned away, which is what made
 the unlit profile unreachable for as long as it shipped.
 
+**A self-lit fragment must zero SPECULAR as well as ALBEDO.** A spatial shader that sets
+neither gets Godot's defaults (SPECULAR 0.5, so F0 = 0.04), and the engine adds that lobe on
+top of the self-lit EMISSION -- unshadowed, since the shader's own occlusion multiplies only
+its own term, and Fresnel-amplified toward 1.0 at grazing incidence, which is exactly where
+a ring is seen. Measured on an 8.3 degree view at phase 145: with every light term in the
+ring shader disabled, the ring plane still rendered a solid 0.157 linear grey -- 29 % of the
+lit ansa, and the whole of what was filling the planet's shadow. It was an additive floor on
+every ring pixel, so it compressed the radial contrast everywhere and not only at grazing.
+`rings.gdshader` was the only shader in the plugin that neither set SPECULAR nor declared
+`unshaded`.
+
 Their shadows -- on the planet and from the planet on them -- and all eclipse and transit
 dimming come from the **analytic occlusion system** (`IVSunOcclusionManager` with
 `_sun_occlusion.gdshaderinc`), which computes sun visibility per fragment instead of shadow
@@ -1712,14 +1723,17 @@ lever a capped pass cannot offer is one the shader does not need.
     unlit view) reads about 0.11 as well. Either real transmission through the B ring is
     far lower than its measured optical depth implies -- plausible, the occultation
     saturating at 500 radii -- or the press frame's dark end is floored. Not resolved.
-  - **Saturnshine is missing, and it is the reason a ring shadow renders truly black.** A
-    shadowed ring is still lit by the planet beside it: estimated from the geometry, the
-    irradiance on a ring element from Saturn's disc is about 6 % of direct sunlight at
-    100,000 km, so the shadow should sit a few percent of the lit ring rather than at
-    ambient starlight. The same term the other way -- ringshine on the globe's night side --
-    is what makes Saturn's dark hemisphere visible beside unlit rings in a single exposure
-    (PIA12590), which no ring level can reproduce without it. Both need a light term rather
-    than a ring-shader change.
+  - **A ring shadow renders truly black, and the real one is not.** What lights it is NOT
+    Saturnshine off the lit hemisphere, as claimed here on 2026-09-06 and corrected the same
+    day: a ring element inside the shadow sees the planet's NIGHT side by construction, the
+    lit hemisphere being on the other side of the terminator, so the only planetary light
+    reaching it is the thin crescent near the terminator's limb. The larger term is the
+    rings' own -- the shadowed region is surrounded by brilliantly lit ring, and multiple
+    scattering carries light into it. Neither is modelled and neither is estimated here.
+    (The same term the other way, ringshine on the globe's night side, is what makes
+    Saturn's dark hemisphere visible beside unlit rings in one exposure, as in PIA12590 --
+    though that frame cannot constrain the ring LEVEL, ringshine being proportional to it.)
+    Both need a light term rather than a ring-shader change.
   - **At solar equinox the rings go essentially black, and that is the model rather than a
     defect.** Every term rides mu0, so a sun in the ring plane takes the whole system to
     ~1e-3 of its normal level (rendered: the rings vanish, leaving a shadow line on the

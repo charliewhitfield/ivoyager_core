@@ -335,7 +335,16 @@ void fragment() {
 		// restate against what lies behind (see display_mix's hazard note): the ring's
 		// finished radiance goes through display_write() and the blend's own (1 - alpha)
 		// attenuation of the background is left to the hardware.
+		// SPECULAR to zero, not just ALBEDO. A spatial shader that sets neither gets
+		// Godot's defaults (SPECULAR 0.5, so F0 = 0.04), and the engine adds that lobe on
+		// top of a self-lit EMISSION - unshadowed, since the occlusion above multiplies
+		// only our own term, and Fresnel-amplified toward 1.0 at grazing incidence, which
+		// is exactly where a ring is seen. Measured on a 8.3 deg view at phase 145: with
+		// every light term in this shader disabled the ring plane still rendered a solid
+		// 0.157 linear grey, which is 29 % of the lit ansa and the whole of what filled
+		// the planet's shadow.
 		ALBEDO = vec3(0.0);
+		SPECULAR = 0.0;
 		EMISSION = display_write(radiance * coverage);
 		ALPHA = (1.0 - exp(-tau / mu)) * coverage;
 	}
