@@ -34,9 +34,10 @@ extends MeshInstance3D
 ##
 ## Not persisted. [IVBodyFinisher] adds when [IVBody] is added to the tree.[br][br]
 
-## How far outside the ring system the plane extends and the shader still draws, as a
-## fraction of the ring span. Pure geometry: the texture's own radial extent is derived
-## from the data it holds (see [member texture_inner_radius]), not from this.
+## How far outside the ring system the plane extends, as a fraction of the ring span.
+## Pure geometry, and only outward: the shader's own footprint coverage decides where it
+## draws, so nothing inside the ring needs a margin. The texture's radial extent is
+## derived from the data it holds (see [member texture_inner_radius]), not from this.
 const RENDER_MARGIN := 0.01
 
 ## Table columns that are also shader uniforms of the same name, forwarded verbatim.
@@ -92,7 +93,6 @@ var _rings_material := ShaderMaterial.new()
 var _texture_array: TextureLayered # backscatter/forwardscatter/unlitside layers
 var _texture_start: float
 var _texture_end: float
-var _inner_margin: float
 var _outer_margin: float
 var _body: IVBody
 var _illuminating_star: IVBody
@@ -130,8 +130,7 @@ func _ready() -> void:
 	# normalized distances from center of 2x2 plane
 	_texture_start = texture_inner_radius / plane_radius
 	_texture_end = texture_outer_radius / plane_radius
-	_inner_margin = (inner_radius - RENDER_MARGIN * ring_span) / plane_radius # render boundary
-	_outer_margin = 1.0 # render boundary; the plane's own inscribed circle
+	_outer_margin = 1.0 # the plane's own inscribed circle; the shader discards outside it
 
 	scale = Vector3(plane_radius, 1.0, plane_radius)
 	visibility_range_end = outer_radius * IVCoreSettings.radius_multiplier_visibility_range_end
@@ -146,7 +145,6 @@ func _ready() -> void:
 	_rings_material.set_shader_parameter(&"texture_width", float(_texture_array.get_width()))
 	_rings_material.set_shader_parameter(&"texture_start", _texture_start)
 	_rings_material.set_shader_parameter(&"texture_end", _texture_end)
-	_rings_material.set_shader_parameter(&"inner_margin", _inner_margin)
 	_rings_material.set_shader_parameter(&"outer_margin", _outer_margin)
 	for parameter: StringName in PHOTOMETRY_PARAMETERS:
 		_rings_material.set_shader_parameter(parameter, get(parameter))

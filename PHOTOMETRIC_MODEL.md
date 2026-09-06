@@ -980,6 +980,31 @@ supplies the eclipse factor metering uses, so an eclipsed moon meters dark and n
 adaptation opens up inside a totality. The same term covers a spacecraft passing into its
 planet's shadow, confirmed in-app.
 
+**Going edge-on is a sampling problem, and it breaks in two places.** A pixel's cone meets
+the ring plane in a segment that lengthens as `1/mu`, so the share of the pixel that is ring
+falls as the sine of the opening angle -- that share is computed exactly (the segment's
+radius is quadratic in its parameter, and its crossings of the two circles are closed form)
+and scales the fragment's radiance and its occlusion together. It is the same quantity
+`limb_mean_incidence()` calls coverage, one dimension lower: a fraction of the camera's own
+aperture, derived rather than tuned. The aperture here is a box of one pixel rather than the
+PSF, which is what makes the flux come out right and is the one place the two differ.
+
+The other half no coverage term can argue with. Without MSAA a fragment exists only where
+the primitive covers a pixel CENTRE, so once the ring's image is thinner than a pixel the
+line goes dashed and then, when it falls between two rows of centres, disappears whole
+(measured at 1080p from six ring radii: the lit-pixel count went 996, 682, 408, 0 as the
+projected minor axis passed 1.5, 1.2, 1.0 and 0.8 pixels). So the plane is TILTED about the
+camera's own ground line until its projected minor axis reaches `MIN_SCREEN_THICKNESS`
+pixels, and its light divided by exactly the factor it was thickened. A rigid tilt magnifies
+the image by ONE number, so a pixel's footprint on the true plane shrinks by that same
+number and the division conserves flux exactly: measured in the app, the rendered flux is
+proportional to the sine of the opening angle to 0.3 % over a 24-fold range in angle, the
+lit-pixel count is constant across it, and the brightest ring pixel falls 0.68, 0.46, 0.29,
+0.17, 0.11, 0.057, 0.031 to nothing. `MIN_SCREEN_THICKNESS` is the one tuned number, and
+what it buys is the sub-pixel middle of the ring, whose own band is a fifth of the minor
+axis and dashes below the threshold: 2.0 renders 0.86 of the true flux there against 0.92 at
+6.0, which recovers it and smears the ring over 2.4 times as many rows.
+
 A ring face is brighter per unit area than any Lambert sphere near opposition, so a camera
 metering the globe alone would clip the rings white. **Both faces** therefore meter as their
 own candidate: a flat annulus whose screen fraction is its area foreshortened by the
@@ -997,14 +1022,29 @@ manager and makes the two branches MEET at the plane instead of switching (measu
 lit against 0.988 unlit at a 0.05 deg opening) -- a thin ring really does look the same from
 either side.
 
-`ring_meter_grazing_tracking` decides how much of the rings' own brightening toward edge-on
-the camera follows. Their surface brightness rises toward grazing while their screen area
-falls -- measured on Saturn, the brightest lit radiance goes 0.57 to 2.04 between a 26 deg
-opening and 0.2 deg -- so a camera that tracks it all the way down stops the whole frame for
-a sliver. 1.0 tracks it exactly; 0.0 meters the rings as though they stayed at the brightness
-they have when the camera stands at the sun's own elevation, so they blow out as the rings
-close. The knob's whole range is about 0.5 EV on Saturn's lit face, that being how much
-brighter than the globe the rings ever meter.
+**What holds that candidate is the ring's own geometry, in two parts** -- the same shape as
+a body's lit candidate, which is held by its lit AREA and then again by its lit FRACTION.
+The annulus is sampled in azimuth at radii spaced by equal area, and each sample counts by
+how far inside the frame it lands (`meter_edge_fraction`); their share scales the annulus'
+screen area. A ring is not a disc, so its body's screen position says little about whether
+it is the view. That, with the disc's own gate no longer skipping a body whose ring or shell
+reaches outside it, is what lets the rings meter with the rings filling the frame and the
+globe panned off the side: measured over a yaw sweep at six body radii, the globe's disc
+gate is exactly 0.000 from 50 to 60 degrees of yaw while the rings are still 19 % to 0.5 %
+in frame and hold the exposure at -14.92 EV. That whole window used to sit at the
+dark-adapted rest, 17.9 stops brighter, with the rings blown white.
+
+Then the **openness ramp**, `ring_meter_onset_openness` down to
+`ring_meter_full_openness`, on the sine of the camera's elevation above the ring plane.
+This is the shape term the area cannot supply: the area carries one power of the
+foreshortening against a ramp that spans decades. Measured by disabling the ramp in the
+same app run, area alone holds the exposure within half a stop of its metered value from a
+12 deg opening all the way down to 0.5, and then dumps 13.9 stops between 0.2 deg and the
+plane -- the rings hold the camera until they are almost exactly edge-on and then let go all
+at once, which is the flash. With the ramp the release runs from 8 deg to 1.5 and spans 17.6
+stops, symmetric about the plane. Purely a taste
+setting, and the reason it is one: a ring at a low opening angle is a bright line, and this
+is how readily the camera stops the whole frame down for one.
 
 ## Renderer parity
 
@@ -1479,6 +1519,7 @@ lever a capped pass cannot offer is one the shader does not need.
 | | `meter_edge_fraction` | Screen-edge gate width: compensation completes when a body's center is this fraction of the frame inside. |
 | | `limb_meter_edge_fraction` | The same gate on the limb ring's own samples (taken at the limb's foot), wider: it is also the centrality test. |
 | | `ring_meter_albedo` | Lit-ring metering reflectance (bright-ring level of the shipped assets, before the phase boost). |
+| | `ring_meter_onset_openness` / `ring_meter_full_openness` | Camera elevation sines where the rings begin to hand the meter back / hold none of it. The shape term beside their screen area, as the nightside lit fractions are beside a body's. |
 | | `exposure_max_ev` | Dark-adapted resting exposure, in EV above the authored sky. The empty-sky and deep-night state. |
 | | `meter_transition_exponent` | Shapes zoom-out: slower climb into overexposure, faster star arrival. |
 | | `nightside_onset_lit_fraction` / `nightside_full_lit_fraction` | Lit-disc fractions where night adaptation begins / completes. |
@@ -1803,8 +1844,8 @@ lever a capped pass cannot offer is one the shader does not need.
     at 1.126-1.130 from a 26 deg opening down to 12 deg and then climbs to 2.06 by 0.2 deg,
     as the optically thin dusty regions saturate; the unlit face's runs the other way, 1.049
     down to 0.626. So a constant anchor under-defends the lit face toward grazing and
-    over-defends the unlit one. `ring_meter_grazing_tracking` is the knob that decides how
-    much of that is wanted rather than a correction for it.
+    over-defends the unlit one. What decides how much of that is wanted is the openness
+    ramp above, which releases the candidate as the rings close rather than re-levelling it.
   - **Neither face clips at any distance tested** (3.5 to 30 body radii, both faces, 18 deg
     opening: 0.00 % of every frame above 0.99, p99.9 between 0.25 and 0.65). So a ring that
     reads too bright is a level judgment, not an exposure failure.

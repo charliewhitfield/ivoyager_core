@@ -131,8 +131,53 @@ render_mode cull_disabled, skip_vertex_transform, ambient_light_disabled, blend_
 // what it occludes, so the blend forms `light + (1 - alpha) * background` and rgb must
 // never be scaled by alpha again. Alpha is the SLANT occlusion, `1 - (1-a)^(1/mu)`: a
 // ring seen edge-on hides what is behind it however thin it is at normal incidence.
-// Both are scaled together by the coverage terms, which is what makes a partly covered
-// fragment composite correctly.
+// Both are scaled together by COVERAGE, which is what makes a partly covered fragment
+// composite correctly.
+//
+// COVERAGE IS THE WHOLE OF WHAT A ZERO-THICKNESS PLANE HAS TO SAY ABOUT GOING EDGE-ON,
+// and going edge-on breaks it in two separate places - what a covered pixel is worth, and
+// whether the pixel is drawn at all. Both were wrong, and neither is fixed by the other.
+//
+// FIRST, THE VALUE. A pixel's cone meets the plane in a segment that lengthens as 1/mu,
+// so at a low opening angle one pixel spans the whole ring and out the far side, and the
+// share of it that is ring falls as sin(elevation). That share is computed exactly here:
+// the radius along the segment obeys `r(t)^2 = r^2 + 2 t (p.u) + t^2`, and a line whose
+// closest approach to the centre is `across` crosses a circle of radius R over a
+// half-chord `sqrt(R^2 - across^2)`, so both ends of the annulus close in four lines. The
+// retired term instead took a FIRST-ORDER radial footprint from a screen derivative and
+// measured it against the texture's span, which is a different quantity and over-reports:
+// at an ansa the ray runs tangent to a circle of constant radius, so the derivative
+// carries almost nothing of the radial spread the pixel really holds (a quad's one-pixel
+// difference recovers some of the curvature, which is the only reason it was not worse).
+// Measured against ray-cast truth at 1080p from six ring radii, its rendered flux ran
+// 0.79, 1.01 and 1.19 of truth as the projected minor axis passed 3, 2 and 1.5 pixels -
+// its brightest pixel pinned at a full 1.000 the whole way - where the segment holds 0.86
+// to 0.88 flat and its brightest pixel falls 1.000, 0.751, 0.501, 0.300, 0.150. The same
+// segment sets the texture filter and where it is sampled, for the same reason.
+//
+// SECOND, THE RASTERIZER, which no coverage term can argue with. Without MSAA a fragment
+// exists only where the primitive covers a pixel CENTRE, so once the ring's image is
+// thinner than a pixel the line goes dashed - a fraction t of it lit, each lit pixel worth
+// t, so flux falls as t SQUARED - and then, when the band falls between two rows of pixel
+// centres, it disappears whole. Measured, the lit count goes 996, 682, 408, 0 as the minor
+// axis passes 1.5, 1.2, 1.0 and 0.8 pixels, and the last pixels drawn stand at half
+// brightness. So vertex() TILTS the plane about the camera's own ground line until its
+// projected minor axis is MIN_SCREEN_THICKNESS pixels, and fragment() divides the ring's
+// light by exactly the factor it was thickened.
+//
+// The tilt is exact rather than a fudge, and the reason is that a rigid tilt magnifies the
+// image by ONE number: a screen pixel's footprint on the true plane shrinks by that same
+// number, so evaluating the coverage at the TILTED elevation and dividing by the
+// magnification conserves flux at every local thickness that still rasterizes, while the
+// per-pixel value keeps falling with the TRUE opening angle. Measured, the lit count is
+// then constant at 1162 from a 2-pixel minor axis down to 0.3, the flux is proportional to
+// sin(elevation) over that whole range to better than 1 %, and the brightest pixel falls
+// 0.751, 0.501, 0.300, 0.150 - which is what the last visible line fading to black looks
+// like. What it costs is the sub-pixel middle of the ring, whose own band is only 0.23 of
+// the minor axis for Saturn's radius ratio and so still dashes: 0.86 of the true flux
+// against 0.92 at MIN_SCREEN_THICKNESS 6.0, which buys that back and smears the ring over
+// 2.4 times as many rows. Only the footprint and the divide see the tilt; every
+// photometric term takes the real geometry.
 //
 // SELF-LIT ON BOTH RENDERERS. The engine flips a double-sided primitive's normal, so an
 // engine-lit ALBEDO renders N.L = 0 on whichever face is turned away and the unlit layer
@@ -154,14 +199,21 @@ const float MIN_MU = 1e-4;
 // measurement of it. The source's own deepest MEASURED value is 5.55, so capping
 // transmission here keeps the derived tau in the range the data actually covers.
 const float MIN_TRANSMISSION = 0.001;
+// Pixels of projected minor axis the plane is tilted up to when it would render thinner;
+// see THE OUTPUT. The ring's own band is a fraction of that minor axis - 0.85 of it at an
+// ansa and 0.23 across the middle for Saturn's radius ratio - and what has to clear a
+// pixel is the band, so this is set for the ansa, which is the part of a nearly edge-on
+// ring anyone is looking at. The ceiling only guards the degenerate view from inside the
+// plane at the ring's own centre.
+const float MIN_SCREEN_THICKNESS = 2.0;
+const float MAX_MAGNIFICATION = 64.0;
 
 // set by rings.gd once
 uniform sampler2DArray rings_textures : filter_linear_mipmap, repeat_disable;
 uniform float texture_width; // texels across one layer
 uniform float texture_start; // texture's inner edge, as a fraction of the plane's radius
 uniform float texture_end; // texture's outer edge, same units (> texture_start)
-uniform float inner_margin; // discard inside this; includes render margin (< texture_start)
-uniform float outer_margin; // discard outside this; includes render margin (> texture_end)
+uniform float outer_margin; // the plane's own inscribed circle, in plane radii
 
 // photometry, all from rings.tsv; see the header
 uniform float back_phase = 0.0; // radians; phase angle of texture layer 0
@@ -177,10 +229,16 @@ uniform float scattering_scale = 0.486; // overall level; the profiles are peak-
 // set by rings.gd every frame
 uniform vec3 illumination_position;
 
-// varyings
+// varyings. The coverage term works in the ring plane's OWN 2D frame, measured in plane
+// radii: the numbers there are of order one whatever the world scale, and a fragment's
+// position in it is just the mesh's own x and z.
 varying vec3 v_world_position; // true world position; VERTEX is farwarp-remapped
+varying vec2 v_plane_position; // the fragment in the ring plane, in plane radii
 varying flat vec3 plane_normal; // unit, world space; either sign works
-varying flat float plane_screen_thickness; // the whole ring system's minor axis, in pixels
+varying flat vec2 camera_plane_position; // the camera's own, same frame and units
+varying flat float camera_plane_height; // its signed height above the plane, same units
+varying flat float pixel_angle; // radians of frame height subtended by one pixel
+varying flat float magnification; // the edge-on tilt's image scale; 1.0 unless sub-pixel
 
 
 // The layer's transmission at [param rate] through the beam, for optical depth
@@ -224,23 +282,39 @@ float ring_transmission(float tau, float mu, float mu0) {
 void vertex() {
 	plane_normal = normalize(MODEL_NORMAL_MATRIX * vec3(0.0, 1.0, 0.0));
 	v_world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	// The shared plane mesh is 2 x 2 in its own x and z and is scaled by the plane radius,
+	// so VERTEX.xz IS the fragment's position in the ring plane, in plane radii.
+	v_plane_position = VERTEX.xz;
 
-	// A zero-thickness plane really does vanish edge-on, and modelling a ring's true
-	// thickness would not change that: 10 m against a 140,000 km radius is 7e-8, sub-pixel
-	// until the camera is within ~10 km of the plane. What has to be handled is the
-	// APPROACH - the rasterizer's coverage goes binary once the whole system projects
-	// thinner than a pixel, so a bright sliver would dash and snap off instead of fading
-	// (measured on the retired shader: 260 lit pixels at a 0.2 deg opening, 1 at 0.0 deg).
-	// This is that fade's measure and it is a rendering boundary, not physics: the minor
-	// axis of the projected annulus, in pixels. The far-field form (2 R sin B / d) is used
-	// at every distance because it only bites when it is small, which is when the far
-	// field holds.
+	// The camera in that same frame. MODEL_MATRIX's x and z columns are the plane's own
+	// axes scaled by the plane radius, so dividing the projection onto them by that scale
+	// twice lands a world offset straight in plane radii. A zero-thickness plane really
+	// does vanish edge-on, and modelling a ring's true thickness would not change that
+	// (10 m against a 140,000 km radius is 7e-8, sub-pixel until the camera is within
+	// ~10 km of the plane); what the coverage term in fragment() has to handle is the
+	// APPROACH, where the rasterizer's own coverage goes binary.
 	vec3 center_to_camera = CAMERA_POSITION_WORLD - MODEL_MATRIX[3].xyz;
-	float camera_distance = max(length(center_to_camera), 1e-6);
-	float plane_radius = length(MODEL_MATRIX[0].xyz); // the model's own x scale
-	float focal_pixels = 0.5 * VIEWPORT_SIZE.y * abs(PROJECTION_MATRIX[1][1]);
-	plane_screen_thickness = 2.0 * plane_radius * focal_pixels
-			* abs(dot(plane_normal, center_to_camera)) / (camera_distance * camera_distance);
+	float plane_radius = max(length(MODEL_MATRIX[0].xyz), 1e-9); // the model's own x scale
+	camera_plane_position = vec2(dot(center_to_camera, MODEL_MATRIX[0].xyz),
+			dot(center_to_camera, MODEL_MATRIX[2].xyz)) / (plane_radius * plane_radius);
+	camera_plane_height = dot(center_to_camera, plane_normal) / plane_radius;
+	pixel_angle = 2.0 / max(VIEWPORT_SIZE.y * abs(PROJECTION_MATRIX[1][1]), 1e-9);
+
+	// THE EDGE-ON TILT. The projected minor axis is `2 R sin B / d` in radians, which the
+	// far-field form gives at every distance because it only bites when it is small - and
+	// small is when the far field holds. Lifting each point by its own distance along the
+	// camera's ground direction, times `(M - 1) tan B`, scales the image by M and leaves
+	// the surface a PLANE: it is a rotation about the ground line, not a distortion, which
+	// is what lets one number describe the whole change.
+	float ground_length = max(length(camera_plane_position), 1e-6);
+	float camera_range_squared = ground_length * ground_length
+			+ camera_plane_height * camera_plane_height;
+	float minor_axis = 2.0 * abs(camera_plane_height)
+			/ max(pixel_angle * camera_range_squared, 1e-30);
+	magnification = clamp(MIN_SCREEN_THICKNESS / max(minor_axis, 1e-30), 1.0,
+			MAX_MAGNIFICATION);
+	VERTEX.y -= (magnification - 1.0) * camera_plane_height * plane_radius
+			* dot(VERTEX.xz, camera_plane_position) / (ground_length * ground_length);
 
 	// Farwarp remap under skip_vertex_transform. NORMAL is transformed identically to the
 	// engine default (farwarp_lit_vertex); only the depth is compressed.
@@ -250,40 +324,72 @@ void vertex() {
 
 void fragment() {
 
-	float r = length(UV * 2.0 - vec2(1.0));
+	float r = length(v_plane_position);
 
-	// dFdx() & dFdy() must be before the 'if' fork to avoid edge artifacts!
-	float texel_position = texture_width * (r - texture_start) / (texture_end - texture_start);
-	float footprint = length(vec2(dFdx(texel_position), dFdy(texel_position))); // texels per pixel
-
-	if (r < inner_margin || r > outer_margin) {
-		discard; // out of rings area
+	if (r > outer_margin) {
+		discard; // outside the plane's own inscribed circle
 
 	} else {
 
-		float lod = log2(max(footprint * DFDR_MULTIPLIER, 1.0));
-		float u = texel_position / texture_width;
+		// COVERAGE, exactly: the share of this pixel's footprint on the ring plane that
+		// lands on the ring. The footprint runs along the view direction's own in-plane
+		// component and is `pixel_angle * distance / mu` long, so it is sub-texel face on
+		// and reaches out past the far edge of the system at a low opening angle. Its
+		// radius obeys `r(t)^2 = r^2 + 2 t (p.u) + t^2`, and a line whose closest approach
+		// to the centre is `across` crosses a circle of radius R over a half-chord
+		// `sqrt(R^2 - across^2)`, so both ends of the annulus close in four lines. This is
+		// the only term standing between a sub-pixel ring and the rasterizer's binary
+		// coverage, so it is also what discards: a fragment inside the hole whose footprint
+		// reaches the ring has to draw, and one whose footprint does not must not.
+		vec2 camera_to_fragment = v_plane_position - camera_plane_position;
+		float ground_distance = length(camera_to_fragment);
+		float slant_distance = max(sqrt(ground_distance * ground_distance
+				+ camera_plane_height * camera_plane_height), 1e-9);
+		float mu = max(abs(camera_plane_height) / slant_distance, MIN_MU);
+		// Face on the footprint is isotropic and this direction is arbitrary; radially
+		// outward is then the conservative choice, being where the ring's own edges are.
+		vec2 footprint_axis = ground_distance > 1e-6 ? camera_to_fragment / ground_distance
+				: (r > 1e-6 ? v_plane_position / r : vec2(1.0, 0.0));
+		// The tilt shrinks a pixel's footprint on the true plane by its own magnification,
+		// so the footprint takes the RENDERED elevation and the coverage is divided by the
+		// same number below; every photometric term keeps the true `mu`.
+		float rendered_mu = min(mu * magnification, 1.0);
+		float half_footprint = max(0.5 * pixel_angle * slant_distance / rendered_mu, 1e-12);
+		float along = dot(v_plane_position, footprint_axis);
+		float across_squared = max(r * r - along * along, 0.0);
+		float outer_half_chord = sqrt(max(texture_end * texture_end - across_squared, 0.0));
+		float inner_half_chord = sqrt(max(texture_start * texture_start - across_squared, 0.0));
+		float outer_length = max(min(half_footprint, -along + outer_half_chord)
+				- max(-half_footprint, -along - outer_half_chord), 0.0);
+		float inner_length = max(min(half_footprint, -along + inner_half_chord)
+				- max(-half_footprint, -along - inner_half_chord), 0.0);
+		float coverage = clamp((outer_length - inner_length) / (2.0 * half_footprint),
+				0.0, 1.0) / magnification;
+		if (coverage <= 0.0) {
+			discard; // this pixel's footprint holds no ring
+		}
 
-		// COVERAGE. Two terms, both areal, both scaling radiance and occlusion together.
-		// The texture holds the rings and nothing else, so its two ends are where the data
-		// stops and not where the rings do; this fragment's share of it is the overlap of
-		// its own radial footprint with the texture's span, which is a half-texel step
-		// close up and a full anti-aliasing fade at a distance. Then the edge-on fade from
-		// vertex(), which is the only thing standing between a sub-pixel ring and the
-		// rasterizer's binary coverage.
-		float half_footprint = 0.5 * max(footprint, 1e-4);
-		float inside = min(texel_position + half_footprint, texture_width)
-				- max(texel_position - half_footprint, 0.0);
-		float coverage = clamp(inside / (2.0 * half_footprint), 0.0, 1.0)
-				* clamp(plane_screen_thickness, 0.0, 1.0);
+		// The same segment picks the filter and where it is read: the radial span the
+		// covered part actually crosses, which at an ansa is most of the outer ring where
+		// a derivative reports nothing at all.
+		float begin = max(-half_footprint, -along - outer_half_chord);
+		float end = min(half_footprint, -along + outer_half_chord);
+		float begin_radius = sqrt(max(r * r + 2.0 * along * begin + begin * begin, 0.0));
+		float end_radius = sqrt(max(r * r + 2.0 * along * end + end * end, 0.0));
+		float min_radius = (begin <= -along && -along <= end) ? sqrt(across_squared)
+				: min(begin_radius, end_radius);
+		min_radius = max(min_radius, texture_start); // the hole is not part of the average
+		float max_radius = max(max(begin_radius, end_radius), min_radius);
+		float texture_span = texture_end - texture_start;
+		float lod = log2(max(texture_width * (max_radius - min_radius) / texture_span
+				* DFDR_MULTIPLIER, 1.0));
+		float u = (0.5 * (min_radius + max_radius) - texture_start) / texture_span;
 
 		// GEOMETRY, per fragment: a ring plane spans a wide range of both angles from a
 		// camera close to it, and the two elevations are what the whole model turns on.
 		vec3 to_camera = normalize(CAMERA_POSITION_WORLD - v_world_position);
 		vec3 to_sun = normalize(illumination_position - v_world_position);
-		float cos_view = dot(plane_normal, to_camera);
 		float cos_sun = dot(plane_normal, to_sun);
-		float mu = max(abs(cos_view), MIN_MU);
 		float mu0 = max(abs(cos_sun), MIN_MU);
 
 		// PHASE. Level as a straight line in magnitudes between the two lit profiles'
@@ -297,7 +403,7 @@ void fragment() {
 				* (1.0 + opposition_surge * exp(-phase / max(opposition_width, 1e-6)));
 		float shape_mix = clamp(phase_fraction, 0.0, 1.0);
 
-		bool lit_face = cos_view * cos_sun > 0.0;
+		bool lit_face = camera_plane_height * cos_sun > 0.0;
 		vec4 texel;
 		if (lit_face) {
 			vec4 back = textureLod(rings_textures, vec3(u, 0.5, 0.0), lod);

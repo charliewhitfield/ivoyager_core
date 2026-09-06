@@ -230,19 +230,25 @@ var ring_meter_albedo := 1.04
 ## much as it reflects, so the C ring and the Cassini Division come through
 ## bright there while the B ring goes dark.
 var ring_meter_unlit_albedo := 1.63
-## How much of the rings' own brightening toward edge-on the camera follows.
-## A ring's surface brightness RISES toward grazing while its screen area falls
-## - measured on the shipped Saturn assets, the brightest lit radiance goes 0.57
-## to 2.04 between a 26 deg opening angle and 0.2 deg - so a camera that tracks
-## it all the way down stops the whole frame for a sliver. 1.0 tracks it
-## exactly, holding the rings at their metered level however edge-on they get;
-## 0.0 meters them as though they stayed at the brightness they have when the
-## camera stands at the SUN's own elevation, which is where a ring system of any
-## inclination is as open as it can be, so they blow out as the rings close.
-## The knob's whole range is worth about 0.5 EV on Saturn's lit face - that is
-## how much brighter than the globe the rings ever meter - so an EV-denominated
-## version of it would be all or nothing.
-var ring_meter_grazing_tracking := 1.0
+## Ring openness - the sine of the camera's elevation above the ring plane -
+## below which the rings begin to hand the meter back, and above which they hold
+## it in full. A ring system closing toward edge-on is the same problem as a
+## planet going to crescent, and takes the same two-part answer: its screen AREA
+## is already in the ramp above, and this is the SHAPE term beside it, the exact
+## counterpart of [member nightside_onset_lit_fraction]. Area alone cannot do the
+## job - it carries only one power of the foreshortening against a ramp that
+## spans decades: measured with this ramp disabled, and the globe out of frame so
+## the rings alone hold the meter, the exposure sits within half a stop of its
+## metered value from a 12 deg opening down to 0.5 and then dumps 13.9 stops
+## between 0.2 deg and the plane, which is the flash. With the ramp the same 17.6
+## stops run from 8 deg to 1.5. Purely a taste setting: a ring at a low opening is
+## a bright line, and this is how readily the camera stops the whole frame down
+## for one.
+var ring_meter_onset_openness := 0.2
+## Ring openness below which the rings hold no metering at all; see
+## [member ring_meter_onset_openness], whose ramp ends here. The default spans
+## one decade, 11.5 deg of opening down to 1.15.
+var ring_meter_full_openness := 0.02
 ## The camera's fully dark-adapted exposure, in EV above the authored sky
 ## look (exposure 1.0): the RESTING exposure with nothing metered - the empty
 ## sky far from any body - and the bound that night-side metering rides to,
@@ -303,6 +309,8 @@ var _ring_meter_data_built := false
 var _limb_geometry: Dictionary[StringName, Vector2] = {} # body name -> (disc, shell) radius
 var _exposure_ceilings: Dictionary[StringName, Array] = {} # body name -> [(shell radius, ceiling)]
 var _limb_ceilings: Dictionary[StringName, float] = {} # body name -> limb_exposure_ceiling
+# Bodies with a candidate reaching outside their own disc; see _get_metering_target().
+var _wide_candidate_bodies: Dictionary[StringName, bool] = {}
 var _shell_meter_data_built := false
 
 
@@ -485,6 +493,7 @@ func _build_ring_meter_data() -> void:
 		for ring_body_name: StringName in ring_bodies:
 			_ring_meter_data[ring_body_name] = Vector2(inner_radius, outer_radius)
 			_ring_photometry[ring_body_name] = photometry
+			_wide_candidate_bodies[ring_body_name] = true
 
 
 func _build_shell_meter_data() -> void:
@@ -528,6 +537,7 @@ func _build_shell_meter_data() -> void:
 							IVTableData.get_db_float(&"shells", &"exposure_ceiling", shell_row)))
 			if ceilings:
 				_exposure_ceilings[body_name] = ceilings
+				_wide_candidate_bodies[body_name] = true
 			if limb_row == -1:
 				continue
 			_limb_geometry[body_name] = Vector2(mean_radius * surface_scale,
@@ -535,6 +545,7 @@ func _build_shell_meter_data() -> void:
 			if IVTableData.db_has_value(&"shells", &"limb_exposure_ceiling", limb_row):
 				_limb_ceilings[body_name] = IVTableData.get_db_float(&"shells",
 						&"limb_exposure_ceiling", limb_row)
+				_wide_candidate_bodies[body_name] = true
 
 
 func _find_world_environment() -> void:
@@ -624,7 +635,13 @@ func _get_metering_target() -> float:
 		# completing compensation meter_edge_fraction inside the frame.
 		var view_factor := _get_view_factor(body.global_position, angular_radius,
 				view_size, tan_half_fov, aspect)
-		if view_factor <= 0.0:
+		# This gate is the DISC's, and every candidate below multiplies by it or by a gate
+		# of its own, so it can only skip the body outright where nothing of it reaches
+		# outside that disc. A ring stands more than twice the globe's radius out and an
+		# atmosphere shell stands above it, and skipping here on the disc alone is what
+		# kept Saturn's rings from metering with the rings filling the frame and the globe
+		# panned off the side.
+		if view_factor <= 0.0 and !_wide_candidate_bodies.has(body_name):
 			continue
 		if body.flags & IVBody.BodyFlags.BODYFLAGS_STAR:
 			if body != _star:
@@ -688,8 +705,7 @@ func _get_metering_target() -> float:
 			min_exposure = minf(min_exposure, _get_ring_candidate_exposure(body,
 					_ring_meter_data[body_name], _ring_photometry[body_name], camera_vector,
 					camera_distance, star_vector, star_distance, illuminance, shadow_fraction,
-					fraction_per_theta_sq, view_size, tan_half_fov, aspect, log_rest,
-					rest_exposure))
+					fraction_per_theta_sq, view_size, log_rest, rest_exposure))
 		if _exposure_ceilings.has(body_name):
 			var ceilings: Array[Vector2] = _exposure_ceilings[body_name]
 			for shell in ceilings:
@@ -768,8 +784,19 @@ func _get_view_factor(global_position: Vector3, angular_radius: float, view_size
 ## ring plane, at [member ring_meter_albedo] (or
 ## [member ring_meter_unlit_albedo]) times CPU mirrors of the ring shader's two
 ## photometric terms - the single-scattering slab's geometry at the two
-## elevations, and the phase function with its opposition surge - released
-## toward edge-on by [member ring_meter_grazing_ev].
+## elevations, and the phase function with its opposition surge.[br][br]
+##
+## What holds it is the ring's OWN geometry, in two parts, exactly as a body's lit
+## candidate is held by its lit area and then again by its lit fraction. The annulus is
+## sampled in azimuth and radius and each sample counts by how far inside the frame it
+## sits ([member meter_edge_fraction]); their share scales the annulus' screen area, so
+## the rings meter whenever the rings are the view - filling the frame with the globe
+## panned off the side, which a gate on the globe's own disc position cannot see - and
+## release as the camera flies inside them. Then the openness ramp
+## ([member ring_meter_onset_openness]), which is the shape term the area cannot supply:
+## area carries one power of the foreshortening against a ramp spanning decades, so on
+## area alone the rings held full weight to within a fraction of a degree of the plane
+## and released across it in a step.[br][br]
 ##
 ## BOTH faces meter. The unlit face is not the faint object it looks like from
 ## the other side: an optically thin ring transmits nearly as much as it
@@ -784,7 +811,7 @@ func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2,
 		ring_photometry: PackedFloat64Array, camera_vector: Vector3, camera_distance: float,
 		star_vector: Vector3, star_distance: float, illuminance: float,
 		shadow_fraction: float, fraction_per_theta_sq: float, view_size: Vector2,
-		tan_half_fov: float, aspect: float, log_rest: float, rest_exposure: float) -> float:
+		log_rest: float, rest_exposure: float) -> float:
 	var axis := body.rotation_axis
 	var sin_camera_elevation := -camera_vector.dot(axis) / camera_distance
 	var sin_sun_elevation := star_vector.dot(axis) / star_distance
@@ -792,10 +819,11 @@ func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2,
 	var mu0 := absf(sin_sun_elevation)
 	var annulus_theta_sq := (ring_radii.y * ring_radii.y - ring_radii.x * ring_radii.x) \
 			* mu / (camera_distance * camera_distance)
-	var ring_fraction := fraction_per_theta_sq * annulus_theta_sq
-	var view_factor := _get_view_factor(body.global_position,
-			minf(ring_radii.y / camera_distance, 1.0), view_size, tan_half_fov, aspect)
-	var ring_weight := view_factor * _get_ramp_weight(ring_fraction,
+	var ring_fraction := fraction_per_theta_sq * annulus_theta_sq \
+			* _get_ring_visible_fraction(body, ring_radii, camera_vector, camera_distance,
+					view_size)
+	var ring_weight := _get_ramp_weight(mu, ring_meter_full_openness,
+			ring_meter_onset_openness) * _get_ramp_weight(ring_fraction,
 			meter_fraction_start, meter_fraction_full)
 	if ring_weight <= 0.0:
 		return rest_exposure
@@ -804,20 +832,13 @@ func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2,
 	# maximum is the saturated limit and no optical depth has to cross into this file; on
 	# the unlit one it has an interior peak, which the helper solves in closed form.
 	var geometry: float
-	var open_geometry: float # the same term with the camera at the sun's own elevation
 	var ring_albedo: float
 	if sin_camera_elevation * sin_sun_elevation > 0.0:
 		geometry = mu0 / maxf(mu + mu0, 1e-6) # monotone in tau, so this is its saturated limit
-		open_geometry = 0.5
 		ring_albedo = ring_meter_albedo
 	else:
 		geometry = _get_ring_transmission_peak(mu, mu0, ring_photometry[5])
-		open_geometry = _get_ring_transmission_peak(mu0, mu0, ring_photometry[5])
 		ring_albedo = ring_meter_unlit_albedo
-	# Follow only `ring_meter_grazing_tracking` of the rise toward edge-on; see the member.
-	if ring_meter_grazing_tracking < 1.0:
-		geometry = open_geometry * (geometry / maxf(open_geometry, 1e-6)) \
-				** ring_meter_grazing_tracking
 	# Phase mirror of the shader's level: a straight line in magnitudes between the two lit
 	# profiles' own phase angles, plus the narrow opposition surge. The cells come from
 	# rings.tsv, which is also what the shader reads, so the two cannot drift apart. The
@@ -835,6 +856,45 @@ func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2,
 	if ring_luminance <= 0.0:
 		return rest_exposure
 	return _get_candidate_exposure(ring_luminance, ring_weight, log_rest, rest_exposure)
+
+
+## The share of the ring annulus that is inside the frame, sampled on its own geometry:
+## azimuths at radii spaced by equal AREA, so every sample stands for the same amount of
+## ring, each counted by how far inside the frame it lands ([member meter_edge_fraction]).
+## Follows [method _get_limb_ceiling_candidate_exposure], and for the same reason - a ring
+## is not a disc, so its body's screen position says little about whether it is the view.
+func _get_ring_visible_fraction(body: IVBody, ring_radii: Vector2, camera_vector: Vector3,
+		camera_distance: float, view_size: Vector2) -> float:
+	const AZIMUTHS := 16
+	const ANNULI := 3
+	var axis := body.rotation_axis
+	# The camera's own in-plane direction, so the samples sit symmetrically about the near
+	# and far points of the annulus and do not walk in azimuth as the camera moves.
+	var sample_axis := -camera_vector / camera_distance
+	sample_axis -= axis * sample_axis.dot(axis)
+	if sample_axis.length_squared() < 1e-12: # camera on the axis: any azimuth will do
+		sample_axis = axis.cross(Vector3.UP if absf(axis.y) < 0.9 else Vector3.RIGHT)
+	sample_axis = sample_axis.normalized()
+	var crosswise_axis := axis.cross(sample_axis)
+	var visible := 0.0
+	for annulus in ANNULI:
+		var radius := sqrt(ring_radii.x * ring_radii.x + (annulus + 0.5) / ANNULI
+				* (ring_radii.y * ring_radii.y - ring_radii.x * ring_radii.x))
+		for index in AZIMUTHS:
+			var azimuth := TAU * (index + 0.5) / AZIMUTHS
+			var point := body.global_position + (sample_axis * cos(azimuth)
+					+ crosswise_axis * sin(azimuth)) * radius
+			if _camera.is_position_behind(point):
+				continue
+			var screen_position := _camera.unproject_position(point)
+			var position_x := screen_position.x / view_size.x
+			var position_y := screen_position.y / view_size.y
+			var penetration := minf(minf(position_x, 1.0 - position_x),
+					minf(position_y, 1.0 - position_y))
+			if penetration <= 0.0:
+				continue
+			visible += smoothstep(0.0, maxf(meter_edge_fraction, 1e-4), penetration)
+	return visible / (AZIMUTHS * ANNULI)
 
 
 ## Maximum over optical depth of the slab's transmitted term - the optical depth that looks
