@@ -859,7 +859,7 @@ the file holds is a property of the particles rather than of one observing geome
 shader multiplies the term back at the angles it is actually rendering:
 
     lit    mu0/(mu+mu0) * (1 - T(1/mu + 1/mu0))
-    unlit  mu0/(mu0-mu) * (T(1/mu0) - T(1/mu)) + unlit_floor * mu0
+    unlit  mu0/(mu0-mu) * (T(1/mu0) - T(1/mu))
 
 with mu and mu0 the sines of the camera's and the sun's elevation above the plane and
 `T(rate) = (1 + rate tau / clumping)^-clumping` the layer's transmission -- optical depth
@@ -873,13 +873,30 @@ opening angle**, and that decides how much radial contrast survives. Fitted inst
 wants a geometry Saturn never reaches (33.5 degrees against a maximum of 26.7), so every
 render saturates harder than the reference did and washes the bands out -- measured, the B
 ring against the C ring fell to 3.52 at Saturn's widest and 2.05 at 12 degrees, where the
-source profile has 3.84. **`clumping` is fitted on the UNLIT profile**, which is the one
-that measures transmission; the lit fit's R2 moves 0.8733 to 0.8787 across the entire
-family and so constrains nothing. Saturn's comes out at 22.8, i.e. nearly homogeneous.
-`unlit_floor` is the residual single scattering still cannot reach (the densest B ring's
-unlit face is far brighter than transmission alone allows, and flat over tau 1.8 to 3.6);
-it rides mu0, as diffusely transmitted light must, so an equinox takes it to zero along
-with everything else.
+source profile has 3.84.
+
+**`clumping` is PINNED, because nothing in these profiles measures it.** It always looks
+fitted and never is: the lit profile cannot see it (that fit's R2 moves 0.8733 to 0.8787
+across the entire family), and the unlit profile only appears to, because the leverage came
+from its flat deep end -- which is the source image's own background, not ring light.
+Scanned on the live radii with that background removed, the unlit R2 moves **0.0164** across
+the whole family, against a factor of forty in what the parameter actually does. Every fit
+therefore returns a number that looks like an answer: 1.7 off the lit profile, 22.8 with the
+background left in as a free floor, 2.5 on the live radii. Saturn's cell sits at the
+homogeneous limit, which is the family's darkest transmission and the closest to what real
+unlit images show.
+
+**There is no floor under the unlit face, and the `unlit_floor` cell that used to supply one
+was that same image background** (retired 2026-09-06). Joensson's unlit profile stops falling
+at 0.046 by tau 1.4 and is flat to 4 % from there to tau 13.8 -- a decade of optical depth
+over which single scattering falls a millionfold and even conservative two-stream diffuse
+transmission, the most generous physical model there is, falls threefold. Fitted as a
+constant and carried in the shader, it put a floor under the unlit face that did not fall
+with tau at all, so an OPAQUE ring glowed. The build subtracts it instead, and where the
+subtraction leaves nothing takes the strength from the lit layer, whose ratio to the unlit
+one is a measured constant (flat at 0.56 over a 50x range in tau). What that leaves out is
+stated plainly: real multiple scattering inside a dense layer is not zero, and a truly opaque
+B ring now renders black where a real one is merely very dark.
 
 Phase carries the LEVEL and the texture carries only the shape, because all three profiles
 are published independently peak-normalized: `forward_level` is the lit face's brightness at
@@ -896,8 +913,11 @@ whichever side the observer is on, and one phase function serves both. What diff
 geometry term above. Giving the unlit face no phase term left it 1.8 to 2.8 times too
 bright at the phases it can actually be seen at -- a low phase angle on the unlit side is
 geometrically impossible, since reaching one means standing near the sun's direction and
-the sun is on the other side of the plane. `unlit_level` is then only the ratio between the
-two profiles' independent peak normalizations.
+the sun is on the other side of the plane. `unlit_level` is then DERIVED rather than chosen:
+it is the reciprocal of the measured unlit/lit strength ratio, which is what puts both faces
+on one scattering strength -- the two profiles are peak-normalized independently AND were
+observed at different phase angles, and that one number undoes both at once. The build
+prints the cell.
 
 **The lit face's level and its surge are anchored on SATURN'S OWN MAGNITUDE**, which is
 disc-integrated photometry and therefore immune to the stretch on any image. Mallama &
@@ -1715,14 +1735,22 @@ lever a capped pass cannot offer is one the shader does not need.
     way the lit face was.** Mallama & Hilton define their effective ring inclination as ZERO
     when the Sun and the observer are on opposite sides of the ring plane, so the published
     relation says nothing whatever about the unlit face. What stands in for it is the
-    physics: one phase function serves both faces, so `unlit_level` is only the ratio
-    between the two profiles' peak normalizations and everything else follows from the
-    geometry term. What that leaves untested is the DEPTH of the inversion at a wide
-    opening: the model has the unlit B ring at 0.51 of the C ring at 26 degrees, where the
-    source profile has 0.11 at its own 3-degree camera elevation and PIA08840 (a 49-degree
-    unlit view) reads about 0.11 as well. Either real transmission through the B ring is
-    far lower than its measured optical depth implies -- plausible, the occultation
-    saturating at 500 radii -- or the press frame's dark end is floored. Not resolved.
+    physics: one phase function serves both faces, so `unlit_level` is the reciprocal of the
+    measured unlit/lit strength ratio and everything else follows from the geometry term.
+  - **THE B RING'S OPTICAL DEPTH IS A LOWER BOUND, AND THE UNLIT FACE IS THE ONLY PLACE
+    THAT SHOWS.** On the lit face anything past about 1.5 is saturated and the exact value
+    is invisible; on the unlit face it is everything. Registered against PIA08840 -- a
+    radial sweep of the unlit face at a 49 degree opening whose darkest pixel is DN 10, so
+    nothing in it is clipped -- the model's B ring comes out 5 to 17 times brighter relative
+    to the C ring than the frame shows, and the optical depth that would reconcile it is
+    2.7 to 4.1 where the transparency profile says 0.84 to 2.15. Those implied values are
+    squarely inside the published range for the B ring (1 to 5, core above 5), and the
+    Voyager PPS occultation the profile comes from saturates near 2.5. The frame is not
+    good enough to *prove* it -- its own optically thin zones, where tau is trustworthy,
+    scatter 2x about any smooth trend -- but the B ring sits as a deep bump against that
+    scatter, between a C ring and an A ring that both roughly follow it. Fixing it means a
+    better occultation than the source carries, i.e. a re-source of the transparency
+    profile. Not done.
   - **A ring shadow renders truly black, and the real one is not.** What lights it is NOT
     Saturnshine off the lit hemisphere, as claimed here on 2026-09-06 and corrected the same
     day: a ring element inside the shadow sees the planet's NIGHT side by construction, the

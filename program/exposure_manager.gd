@@ -476,7 +476,6 @@ func _build_ring_meter_data() -> void:
 			IVTableData.get_db_float(&"rings", &"forward_level", row),
 			IVTableData.get_db_float(&"rings", &"opposition_surge", row),
 			IVTableData.get_db_float(&"rings", &"opposition_width", row),
-			IVTableData.get_db_float(&"rings", &"unlit_floor", row),
 			IVTableData.get_db_float(&"rings", &"clumping", row),
 		])
 		var ring_bodies: Array[StringName] = IVTableData.get_db_array(&"rings", &"bodies", row)
@@ -809,9 +808,8 @@ func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2,
 		open_geometry = 0.5
 		ring_albedo = ring_meter_albedo
 	else:
-		geometry = _get_ring_transmission_peak(mu, mu0, ring_photometry[5], ring_photometry[6])
-		open_geometry = _get_ring_transmission_peak(mu0, mu0, ring_photometry[5],
-				ring_photometry[6])
+		geometry = _get_ring_transmission_peak(mu, mu0, ring_photometry[5])
+		open_geometry = _get_ring_transmission_peak(mu0, mu0, ring_photometry[5])
 		ring_albedo = ring_meter_unlit_albedo
 	# Follow only `ring_meter_grazing_tracking` of the rise toward edge-on; see the member.
 	if ring_meter_grazing_tracking < 1.0:
@@ -844,8 +842,7 @@ func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2,
 ## [code]tau = ln(b/a)/(b-a)[/code], but the CLUMPY one the shader uses has no such form, and
 ## a scan cannot drift from whatever the shader does the way a second closed form would. 24
 ## logarithmic samples span every optical depth a ring reaches and cost nothing once a frame.
-func _get_ring_transmission_peak(mu: float, mu0: float, floor_term: float,
-		clumping: float) -> float:
+func _get_ring_transmission_peak(mu: float, mu0: float, clumping: float) -> float:
 	var a := 1.0 / maxf(mu0, 1e-4)
 	var b := 1.0 / maxf(mu, 1e-4)
 	var span := b - a
@@ -860,7 +857,7 @@ func _get_ring_transmission_peak(mu: float, mu0: float, floor_term: float,
 			if clumping <= 1e4:
 				value /= 1.0 + a * tau / maxf(clumping, 1e-4)
 		peak = maxf(peak, value)
-	return peak + floor_term * mu0
+	return peak
 
 
 ## The ring layer's transmission at [param rate] through the beam, mirroring

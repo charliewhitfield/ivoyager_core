@@ -49,20 +49,24 @@ render_mode cull_disabled, skip_vertex_transform, ambient_light_disabled, blend_
 // plane, and `T(rate)` the layer's transmission at that rate through the beam:
 //
 //   lit    mu0/(mu+mu0) * (1 - T(1/mu + 1/mu0))
-//   unlit  mu0/(mu0-mu) * (T(1/mu0) - T(1/mu))  + unlit_floor * mu0
+//   unlit  mu0/(mu0-mu) * (T(1/mu0) - T(1/mu))
 //
 // A real ring is not a uniform sheet: self-gravity wakes make optical depth vary across the
 // beam, and a clumpy layer saturates more SLOWLY than a homogeneous one, because the thin
 // lanes keep contributing after the dense parts have gone opaque. Taking tau as
 // gamma-distributed about its mean with shape `clumping` gives
 // `T = (1 + rate tau / clumping)^-clumping`, whose limit at large `clumping` is exactly
-// exp(-rate tau). Saturn's is FITTED ON THE UNLIT PROFILE, which is the one that measures
-// transmission, and comes out at 22.8 -- so the layer is nearly homogeneous, and the cell is
-// here because that is a measurement rather than an assumption. Fitting it on the LIT
-// profile instead is what it must not do: the lit fit's R2 moves 0.8733 to 0.8787 across the
-// entire family, so it constrains nothing, and the 1.7 it happens to prefer let the dense B
-// ring pass 15 % of the sun's light and rendered its unlit face nearly as bright as the C
-// ring's, where every real unlit image has it far darker.
+// exp(-rate tau), which is where Saturn's cell sits: NOTHING IN THE SOURCE PROFILES
+// CONSTRAINS IT, so it is pinned rather than fitted. The lit profile cannot see it at all
+// (that fit's R2 moves 0.8733 to 0.8787 across the entire family), and the unlit profile
+// only appears to, because the leverage came from its flat deep end -- which is the image
+// pedestal described below. Scanned on the live radii with the pedestal removed, R2 moves
+// 0.0164 across the whole family against a factor of FORTY in what the parameter does. So
+// every fit returns a number that looks like an answer and is not one: 1.7 off the lit
+// profile (which shipped briefly and let the dense B ring pass 15 % of the sun's light),
+// 22.8 with the pedestal left in as a free floor, 2.5 on the live radii. Pinned at the
+// homogeneous limit the model has no free parameter here and takes the family's DARKEST
+// transmission, which is also the closest to what real unlit images show.
 //
 // What DOES set the bands' contrast is the reference geometry the build divides out, which
 // is PINNED at the ring system's own maximum opening angle rather than fitted. Fitted, it
@@ -80,15 +84,18 @@ render_mode cull_disabled, skip_vertex_transform, ambient_light_disabled, blend_
 // Both faces saturate rather than diverge (a grazing ray's light comes from the layer's
 // last little bit of depth), so nothing here needs a clamp.
 //
-// `unlit_floor` is the residual the model still cannot reach: measured, the densest B ring's
-// unlit face is far brighter than transmission alone allows and flat over tau 1.8 to 3.6, so
-// the term stands in for multiple scattering, light between self-gravity wakes, or the
-// source's own image floor - the data cannot separate them. The build divides by the SAME
-// constant, so the dense B ring renders at its published value there rather than as a ratio
-// of two near-zeros. It rides
-// mu0, as diffusely transmitted light must and as the single-scattering terms themselves do
-// at small mu0: a floor that survives an equinox, which takes every other term to zero,
-// makes the two faces of one ring disagree under geometry that is symmetric between them.
+// THE UNLIT FACE HAS NO FLOOR UNDER IT, AND THE ONE IT USED TO HAVE WAS THE SOURCE IMAGE'S
+// BACKGROUND. Joensson's unlit profile stops falling at 0.046 by tau 1.4 and is flat to 4 %
+// from there to tau 13.8 - a decade of optical depth over which single scattering falls a
+// millionfold and even diffuse transmission falls threefold - so what it measures past that
+// point is his own image background, not light through the rings. Fitted as a constant and
+// carried here, it put a floor under the unlit face that did not fall with tau at all, so an
+// opaque ring glowed: at a 26.7 degree opening it was 63 % of what the B ring rendered.
+// build_saturn_rings.py now subtracts it instead, and where the subtraction leaves nothing
+// takes the strength from the lit layer, whose ratio to this one is a measured constant.
+// So the unlit face's whole tau response is the term below and nothing else. Note what that
+// leaves out: real multiple scattering inside a dense layer is NOT zero, and a truly opaque
+// B ring renders black here where a real one is merely very dark.
 //
 // PHASE carries the level, and the texture carries only the shape: the two lit profiles
 // are published independently peak-normalized, so their relative brightness is not in
@@ -161,9 +168,8 @@ uniform float back_phase = 0.0; // radians; phase angle of texture layer 0
 uniform float forward_phase = 2.4260765; // radians; phase angle of texture layer 1
 uniform float forward_level = 0.25; // lit brightness at forward_phase, relative to back_phase
 uniform float forward_reddening = 1.05; // red multiplier at forward_phase
-uniform float unlit_level = 2.121; // texture layer 2's level, relative to layer 0
-uniform float unlit_floor = 0.1168; // see the header; must match the build's value
-uniform float clumping = 22.77; // the layer's optical-depth spread; must match the build
+uniform float unlit_level = 0.1510; // texture layer 2's level, relative to layer 0
+uniform float clumping = 1.0e6; // optical-depth spread across the beam; see the header
 uniform float opposition_surge = 0.25; // fractional brightening added at zero phase
 uniform float opposition_width = 0.0349066; // radians; e-folding width of that surge
 uniform float scattering_scale = 0.486; // overall level; the profiles are peak-normalized
@@ -307,7 +313,7 @@ void fragment() {
 
 		float tau = -log(max(1.0 - texel.a, MIN_TRANSMISSION));
 		float geometry = lit_face ? ring_reflection(tau, mu, mu0)
-				: ring_transmission(tau, mu, mu0) + unlit_floor * mu0;
+				: ring_transmission(tau, mu, mu0);
 		vec3 scattering = texel.rgb * scattering_scale;
 
 		// Rebuilt ambient (engine ambient is disabled; see render_mode), computed as the

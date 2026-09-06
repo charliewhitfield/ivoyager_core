@@ -41,7 +41,7 @@ const RENDER_MARGIN := 0.01
 
 ## Table columns that are also shader uniforms of the same name, forwarded verbatim.
 const PHOTOMETRY_PARAMETERS: Array[StringName] = [&"back_phase", &"forward_phase",
-		&"forward_level", &"forward_reddening", &"unlit_level", &"unlit_floor",
+		&"forward_level", &"forward_reddening", &"unlit_level",
 		&"opposition_surge", &"opposition_width", &"scattering_scale"]
 
 
@@ -71,7 +71,6 @@ var forward_reddening: float
 var unlit_level: float
 ## Transmitted light the single-scattering slab does not explain. Must match the value
 ## the texture was built with.
-var unlit_floor: float
 ## Fractional brightening added at zero phase angle.
 var opposition_surge: float
 ## Angular e-folding width of that surge, in radians.
