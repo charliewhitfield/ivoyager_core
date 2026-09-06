@@ -35,9 +35,13 @@ extends MeshInstance3D
 ## Not persisted. [IVBodyFinisher] adds when [IVBody] is added to the tree.[br][br]
 
 ## How far outside the ring system the plane extends, as a fraction of the ring span.
-## Pure geometry, and only outward: the shader's own footprint coverage decides where it
+## Pure geometry, and only outward: the shader's own aperture coverage decides where it
 ## draws, so nothing inside the ring needs a margin. The texture's radial extent is
-## derived from the data it holds (see [member texture_inner_radius]), not from this.
+## derived from the data it holds (see [member texture_inner_radius]), not from this.[br][br]
+##
+## This is not the room the camera's point spread function needs, which depends on the
+## view and is taken by rings.gdshader's own outward expansion; all this has to do is
+## keep the texture's outer edge inside the plane's inscribed circle.
 const RENDER_MARGIN := 0.01
 
 ## Table columns that are also shader uniforms of the same name, forwarded verbatim.
@@ -93,7 +97,6 @@ var _rings_material := ShaderMaterial.new()
 var _texture_array: TextureLayered # backscatter/forwardscatter/unlitside layers
 var _texture_start: float
 var _texture_end: float
-var _outer_margin: float
 var _body: IVBody
 var _illuminating_star: IVBody
 
@@ -130,22 +133,22 @@ func _ready() -> void:
 	# normalized distances from center of 2x2 plane
 	_texture_start = texture_inner_radius / plane_radius
 	_texture_end = texture_outer_radius / plane_radius
-	_outer_margin = 1.0 # the plane's own inscribed circle; the shader discards outside it
 
 	scale = Vector3(plane_radius, 1.0, plane_radius)
 	visibility_range_end = outer_radius * IVCoreSettings.radius_multiplier_visibility_range_end
-	if IVCoreSettings.apply_farwarp:
-		# Frustum culling tests the true-scale AABB against the far plane, but the farwarp
-		# vertex remap keeps the ring on-screen even when that test fails; make it always pass.
-		var extent := IVCoreSettings.max_camera_distance
-		custom_aabb = AABB(-Vector3.ONE * extent, 2.0 * Vector3.ONE * extent)
+	# Frustum culling tests the true-scale AABB, and three things in the vertex shader move
+	# vertices where that AABB cannot follow: the farwarp remap keeps the ring on screen when
+	# the far-plane test fails, and the edge-on tilt and the aperture's outward expansion both
+	# grow the plane by view-dependent factors. Make the test always pass; the distance cull
+	# above is what actually retires the ring.
+	var extent := IVCoreSettings.max_camera_distance
+	custom_aabb = AABB(-Vector3.ONE * extent, 2.0 * Vector3.ONE * extent)
 
 	_rings_material.shader = IVGlobal.resources[&"rings_shader"]
 	_rings_material.set_shader_parameter(&"rings_textures", _texture_array)
 	_rings_material.set_shader_parameter(&"texture_width", float(_texture_array.get_width()))
 	_rings_material.set_shader_parameter(&"texture_start", _texture_start)
 	_rings_material.set_shader_parameter(&"texture_end", _texture_end)
-	_rings_material.set_shader_parameter(&"outer_margin", _outer_margin)
 	for parameter: StringName in PHOTOMETRY_PARAMETERS:
 		_rings_material.set_shader_parameter(parameter, get(parameter))
 	set_surface_override_material(0, _rings_material)

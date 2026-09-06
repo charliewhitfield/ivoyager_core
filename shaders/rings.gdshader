@@ -169,15 +169,47 @@ render_mode cull_disabled, skip_vertex_transform, ambient_light_disabled, blend_
 // image by ONE number: a screen pixel's footprint on the true plane shrinks by that same
 // number, so evaluating the coverage at the TILTED elevation and dividing by the
 // magnification conserves flux at every local thickness that still rasterizes, while the
-// per-pixel value keeps falling with the TRUE opening angle. Measured, the lit count is
-// then constant at 1162 from a 2-pixel minor axis down to 0.3, the flux is proportional to
-// sin(elevation) over that whole range to better than 1 %, and the brightest pixel falls
-// 0.751, 0.501, 0.300, 0.150 - which is what the last visible line fading to black looks
-// like. What it costs is the sub-pixel middle of the ring, whose own band is only 0.23 of
-// the minor axis for Saturn's radius ratio and so still dashes: 0.86 of the true flux
-// against 0.92 at MIN_SCREEN_THICKNESS 6.0, which buys that back and smears the ring over
-// 2.4 times as many rows. Only the footprint and the divide see the tilt; every
-// photometric term takes the real geometry.
+// per-pixel value keeps falling with the TRUE opening angle. Only the footprint and the
+// divide see the tilt; every photometric term takes the real geometry.
+//
+// THE APERTURE, which is what the box above was standing in for. That box says what share
+// of a PIXEL is ring, which is the answer for a camera with no optics; this one has optics,
+// and one Gaussian of iv_psf_sigma px images every star, every body's sunlit rim and now
+// the ring. So the aperture is the pixel's box CONVOLVED with that Gaussian, taken as a
+// single Gaussian of the summed variance and integrated between the same chord ends -
+// which turns four min/max lines into four erfc calls and nothing else. Two things it
+// buys, both measured against ray casts convolved with the same Gaussian:
+//
+//   FLUX. The box under-integrates a band that is a pixel or two tall, because it samples
+//   at pixel centres a function it treats as flat across the pixel. Against the sin law
+//   the box runs 0.99, 0.90, 0.843, 0.842 ... as the opening closes from 4 to 0.02 deg,
+//   where the aperture holds 0.999 to 1.003 FLAT over the same range.
+//
+//   THE EDGE. A ring metered and then left at the dark-adapted rest is ~17 stops over, and
+//   at that exposure everything drawn clips - so what a viewer sees is a count of ROWS, and
+//   a count steps. The box floors that count at 3 rows across the ring's thin middle; the
+//   aperture floors it at 8, which is the same 1-row step against a base almost three times
+//   wider. And the last row is no longer a cliff: ray-cast truth at a 1 deg opening ends
+//   255, 148, 0 display codes and the aperture ends 255, 88, 0 where the box ends 255, 0.
+//
+// THE OUTWARD EXPANSION is the price. A convolution can only put light where the
+// rasterizer made a fragment, and the plane ends barely outside the ring (rings.gd's
+// RENDER_MARGIN, 1 % of the ring span), which at a low opening projects to a small
+// fraction of one pixel - so an aperture that reaches 3.5 px would spread inward and stay
+// cut outward. vertex() therefore scales the plane to plane_extent, sized so the reach
+// fits at the plane's own far rim, where the footprint is largest. That is bounded by the
+// tilt, and that is the tilt's second job: the reach is measured in footprints, magnifying
+// shrinks the footprint, and both operations are exactly flux-neutral. Untilted, a camera
+// at its floor against a hairline ring would want a plane twenty times the ring's radius.
+//
+// WHAT IT COSTS AND WHAT IT DOES NOT. Nothing, face on: at a 26.7 deg opening from six
+// ring radii the plane is drawn 1.056 radii and the flux moves 0.00002. Sub-pixel it is
+// the whole fix. The one place the model is knowingly incomplete is the ansa TIP, where
+// the footprint segment runs tangent to the ring's own edge: coverage there is carried by
+// the pixel's extent ACROSS the segment, which a one-dimensional aperture has no term for.
+// Measured, that costs up to 0.40 of a pixel's coverage in a thin arc - the same error the
+// box has, and the aperture more than halves the whole-frame rms everywhere else
+// (0.017 against 0.038 at 26.7 deg, 0.013 against 0.155 at 1 deg).
 //
 // SELF-LIT ON BOTH RENDERERS. The engine flips a double-sided primitive's normal, so an
 // engine-lit ALBEDO renders N.L = 0 on whichever face is turned away and the unlit layer
@@ -200,20 +232,40 @@ const float MIN_MU = 1e-4;
 // transmission here keeps the derived tau in the range the data actually covers.
 const float MIN_TRANSMISSION = 0.001;
 // Pixels of projected minor axis the plane is tilted up to when it would render thinner;
-// see THE OUTPUT. The ring's own band is a fraction of that minor axis - 0.85 of it at an
-// ansa and 0.23 across the middle for Saturn's radius ratio - and what has to clear a
+// see THE APERTURE. The ring's own band is a fraction of that minor axis - 0.85 of it at
+// an ansa and 0.23 across the middle for Saturn's radius ratio - and what has to clear a
 // pixel is the band, so this is set for the ansa, which is the part of a nearly edge-on
 // ring anyone is looking at. The ceiling only guards the degenerate view from inside the
 // plane at the ring's own centre.
-const float MIN_SCREEN_THICKNESS = 2.0;
+const float MIN_SCREEN_THICKNESS = 3.5;
 const float MAX_MAGNIFICATION = 64.0;
+// How far out the aperture is drawn, in its own sigmas, and how far the plane may be
+// expanded to hold that, in plane radii. Six sigma is where a Gaussian stops being
+// representable at the WORST exposure this camera reaches - a ring metered and then left
+// at the dark-adapted rest, about 17 stops, where one 8-bit code is 1e-8 of the peak. It
+// agrees with the star field's own cut: psf_visible_size() at that intensity is 5.8 px
+// across against the 6.9 this draws. Beyond it the truncation costs nothing measurable.
+const float APERTURE_REACH = 6.0;
+const float MAX_PLANE_EXTENT = 8.0;
+// Variance of a one-pixel box, in px^2. The aperture is that box convolved with the
+// camera's Gaussian, taken as a single Gaussian of the summed variance: within 0.002 of
+// the true convolution at the shipped psf sigma and 0.044 at the smallest one offered,
+// which is a difference between two reconstruction filters rather than an error.
+const float PIXEL_BOX_VARIANCE = 0.0833333;
+const float SQRT_3 = 1.7320508;
+const float SQRT_2 = 1.4142136;
 
 // set by rings.gd once
 uniform sampler2DArray rings_textures : filter_linear_mipmap, repeat_disable;
 uniform float texture_width; // texels across one layer
 uniform float texture_start; // texture's inner edge, as a fraction of the plane's radius
 uniform float texture_end; // texture's outer edge, same units (> texture_start)
-uniform float outer_margin; // the plane's own inscribed circle, in plane radii
+
+// The camera's PSF width in px, IVPSFSettings.psf_sigma - the same global the body surface
+// shaders image a sunlit rim with (see _photometry.gdshaderinc). Unset it reads 0.0, which
+// leaves the aperture the pixel box alone; that is the pre-2026-09-06 behaviour and is why
+// nothing here needs a fallback.
+global uniform float iv_psf_sigma;
 
 // photometry, all from rings.tsv; see the header
 uniform float back_phase = 0.0; // radians; phase angle of texture layer 0
@@ -239,6 +291,43 @@ varying flat vec2 camera_plane_position; // the camera's own, same frame and uni
 varying flat float camera_plane_height; // its signed height above the plane, same units
 varying flat float pixel_angle; // radians of frame height subtended by one pixel
 varying flat float magnification; // the edge-on tilt's image scale; 1.0 unless sub-pixel
+varying flat float plane_extent; // how far the plane is drawn, in plane radii; >= 1.0
+
+
+// erfc, in Numerical Recipes' Chebyshev form. Its error is FRACTIONAL and below 1.2e-7
+// everywhere, which is what the aperture needs: it is read out to six sigma, where an
+// absolute-error approximation (Abramowitz & Stegun 26.2.17, the obvious choice) is 3.6e-3
+// out and a difference of two tails is then noise. The exp(-z*z) factor is what carries
+// that; do not simplify it away.
+float ring_erfc(float x) {
+	float z = abs(x);
+	float t = 2.0 / (2.0 + z);
+	float poly = -1.26551223 + t * (1.00002368 + t * (0.37409196 + t * (0.09678418
+			+ t * (-0.18628806 + t * (0.27886807 + t * (-1.13520398 + t * (1.48851587
+			+ t * (-0.82215223 + t * 0.17087277))))))));
+	float value = t * exp(-z * z + poly);
+	return x >= 0.0 ? value : 2.0 - value;
+}
+
+
+// The camera's aperture width in PIXELS: its own point spread function widened by the
+// pixel's box. See THE APERTURE.
+float ring_aperture_sigma() {
+	float sigma = max(iv_psf_sigma, 0.0);
+	return sqrt(sigma * sigma + PIXEL_BOX_VARIANCE);
+}
+
+
+// The share of the aperture lying between [param low] and [param high], both measured
+// from the fragment along the footprint axis. Clamping to +-[param limit] is the
+// truncation at APERTURE_REACH sigma: the weight then reaches exactly zero where the
+// plane's own rim is, continuously, so there is no edge to fade. Written as a difference
+// of erfc rather than of Phi so that neither tail is formed as 1 - (1 - tiny).
+float ring_aperture_weight(float low, float high, float sigma, float limit) {
+	float scale = 1.0 / (sigma * SQRT_2);
+	return 0.5 * (ring_erfc(clamp(low, -limit, limit) * scale)
+			- ring_erfc(clamp(high, -limit, limit) * scale));
+}
 
 
 // The layer's transmission at [param rate] through the beam, for optical depth
@@ -281,18 +370,14 @@ float ring_transmission(float tau, float mu, float mu0) {
 
 void vertex() {
 	plane_normal = normalize(MODEL_NORMAL_MATRIX * vec3(0.0, 1.0, 0.0));
-	v_world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	// The shared plane mesh is 2 x 2 in its own x and z and is scaled by the plane radius,
-	// so VERTEX.xz IS the fragment's position in the ring plane, in plane radii.
-	v_plane_position = VERTEX.xz;
 
-	// The camera in that same frame. MODEL_MATRIX's x and z columns are the plane's own
-	// axes scaled by the plane radius, so dividing the projection onto them by that scale
-	// twice lands a world offset straight in plane radii. A zero-thickness plane really
-	// does vanish edge-on, and modelling a ring's true thickness would not change that
-	// (10 m against a 140,000 km radius is 7e-8, sub-pixel until the camera is within
-	// ~10 km of the plane); what the coverage term in fragment() has to handle is the
-	// APPROACH, where the rasterizer's own coverage goes binary.
+	// The camera in the ring plane's own frame. MODEL_MATRIX's x and z columns are the
+	// plane's own axes scaled by the plane radius, so dividing the projection onto them by
+	// that scale twice lands a world offset straight in plane radii. A zero-thickness
+	// plane really does vanish edge-on, and modelling a ring's true thickness would not
+	// change that (10 m against a 140,000 km radius is 7e-8, sub-pixel until the camera is
+	// within ~10 km of the plane); what the coverage term in fragment() has to handle is
+	// the APPROACH, where the rasterizer's own coverage goes binary.
 	vec3 center_to_camera = CAMERA_POSITION_WORLD - MODEL_MATRIX[3].xyz;
 	float plane_radius = max(length(MODEL_MATRIX[0].xyz), 1e-9); // the model's own x scale
 	camera_plane_position = vec2(dot(center_to_camera, MODEL_MATRIX[0].xyz),
@@ -300,19 +385,51 @@ void vertex() {
 	camera_plane_height = dot(center_to_camera, plane_normal) / plane_radius;
 	pixel_angle = 2.0 / max(VIEWPORT_SIZE.y * abs(PROJECTION_MATRIX[1][1]), 1e-9);
 
-	// THE EDGE-ON TILT. The projected minor axis is `2 R sin B / d` in radians, which the
-	// far-field form gives at every distance because it only bites when it is small - and
-	// small is when the far field holds. Lifting each point by its own distance along the
-	// camera's ground direction, times `(M - 1) tan B`, scales the image by M and leaves
-	// the surface a PLANE: it is a rotation about the ground line, not a distortion, which
-	// is what lets one number describe the whole change.
+	// THE EDGE-ON TILT, and THE OUTWARD EXPANSION, which are one calculation because the
+	// tilt is what makes the expansion affordable. The projected minor axis is
+	// `2 R sin B / d` in radians, which the far-field form gives at every distance because
+	// it only bites when it is small - and small is when the far field holds.
 	float ground_length = max(length(camera_plane_position), 1e-6);
 	float camera_range_squared = ground_length * ground_length
 			+ camera_plane_height * camera_plane_height;
 	float minor_axis = 2.0 * abs(camera_plane_height)
 			/ max(pixel_angle * camera_range_squared, 1e-30);
-	magnification = clamp(MIN_SCREEN_THICKNESS / max(minor_axis, 1e-30), 1.0,
-			MAX_MAGNIFICATION);
+
+	// The aperture's reach is APERTURE_REACH sigmas of the fragment's own footprint, and
+	// the footprint is largest where the plane is farthest - its own far rim. Sizing on
+	// that point is what guarantees no fragment's aperture is ever cut, because a nearer
+	// one reaches less far. Note the reach here is the numerator only: it still has to be
+	// divided by the elevation the tilt renders at, which is what the two lines below do.
+	float far_ground = ground_length + 1.0;
+	float far_slant = sqrt(far_ground * far_ground
+			+ camera_plane_height * camera_plane_height);
+	float far_mu = max(abs(camera_plane_height) / far_slant, MIN_MU);
+	float reach = APERTURE_REACH * ring_aperture_sigma() * pixel_angle * far_slant;
+
+	// So the tilt has two jobs. MIN_SCREEN_THICKNESS keeps the ring's own image on pixel
+	// centres; MAX_PLANE_EXTENT keeps the plane affordable, and tilting is how - the reach
+	// is measured in footprints, magnifying shrinks the footprint, and both are exactly
+	// flux-neutral. Untilted, a camera at its floor against a hairline ring would want a
+	// plane twenty times the ring's radius.
+	magnification = clamp(max(MIN_SCREEN_THICKNESS / max(minor_axis, 1e-30),
+			reach / (far_mu * max(MAX_PLANE_EXTENT - texture_end, 1e-6))),
+			1.0, MAX_MAGNIFICATION);
+	plane_extent = min(texture_end + reach / min(far_mu * magnification, 1.0),
+			MAX_PLANE_EXTENT);
+
+	// The shared plane mesh is 2 x 2 in its own x and z and is scaled by the plane radius,
+	// so VERTEX.xz IS the fragment's position in the ring plane, in plane radii - and
+	// scaling it here is the expansion itself, leaving texture_start and texture_end
+	// meaning what they always did.
+	VERTEX.xz *= plane_extent;
+	v_plane_position = VERTEX.xz;
+	v_world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+
+	// Lifting each point by its own distance along the camera's ground direction, times
+	// `(M - 1) tan B`, scales the image by M and leaves the surface a PLANE: it is a
+	// rotation about the ground line, not a distortion, which is what lets one number
+	// describe the whole change. It runs after v_world_position, which keeps the true
+	// geometry every photometric term needs.
 	VERTEX.y -= (magnification - 1.0) * camera_plane_height * plane_radius
 			* dot(VERTEX.xz, camera_plane_position) / (ground_length * ground_length);
 
@@ -326,21 +443,22 @@ void fragment() {
 
 	float r = length(v_plane_position);
 
-	if (r > outer_margin) {
-		discard; // outside the plane's own inscribed circle
+	if (r > plane_extent) {
+		discard; // outside the drawn plane's own inscribed circle
 
 	} else {
 
-		// COVERAGE, exactly: the share of this pixel's footprint on the ring plane that
+		// COVERAGE, exactly: the share of this pixel's APERTURE on the ring plane that
 		// lands on the ring. The footprint runs along the view direction's own in-plane
-		// component and is `pixel_angle * distance / mu` long, so it is sub-texel face on
-		// and reaches out past the far edge of the system at a low opening angle. Its
-		// radius obeys `r(t)^2 = r^2 + 2 t (p.u) + t^2`, and a line whose closest approach
-		// to the centre is `across` crosses a circle of radius R over a half-chord
-		// `sqrt(R^2 - across^2)`, so both ends of the annulus close in four lines. This is
-		// the only term standing between a sub-pixel ring and the rasterizer's binary
-		// coverage, so it is also what discards: a fragment inside the hole whose footprint
-		// reaches the ring has to draw, and one whose footprint does not must not.
+		// component and is `pixel_angle * distance / mu` long per pixel, so it is
+		// sub-texel face on and reaches out past the far edge of the system at a low
+		// opening angle. The ring's radius along it obeys `r(t)^2 = r^2 + 2 t (p.u) + t^2`,
+		// and a line whose closest approach to the centre is `across` crosses a circle of
+		// radius R over a half-chord `sqrt(R^2 - across^2)`, so both ends of the annulus
+		// close in four lines and the aperture is integrated between them. This is the only
+		// term standing between a sub-pixel ring and the rasterizer's binary coverage, so
+		// it is also what discards: a fragment whose aperture reaches the ring has to draw,
+		// and one whose aperture does not must not.
 		vec2 camera_to_fragment = v_plane_position - camera_plane_position;
 		float ground_distance = length(camera_to_fragment);
 		float slant_distance = max(sqrt(ground_distance * ground_distance
@@ -354,26 +472,30 @@ void fragment() {
 		// so the footprint takes the RENDERED elevation and the coverage is divided by the
 		// same number below; every photometric term keeps the true `mu`.
 		float rendered_mu = min(mu * magnification, 1.0);
-		float half_footprint = max(0.5 * pixel_angle * slant_distance / rendered_mu, 1e-12);
+		float footprint = max(pixel_angle * slant_distance / rendered_mu, 1e-12);
+		float aperture_sigma = ring_aperture_sigma() * footprint;
+		float limit = APERTURE_REACH * aperture_sigma;
 		float along = dot(v_plane_position, footprint_axis);
 		float across_squared = max(r * r - along * along, 0.0);
 		float outer_half_chord = sqrt(max(texture_end * texture_end - across_squared, 0.0));
 		float inner_half_chord = sqrt(max(texture_start * texture_start - across_squared, 0.0));
-		float outer_length = max(min(half_footprint, -along + outer_half_chord)
-				- max(-half_footprint, -along - outer_half_chord), 0.0);
-		float inner_length = max(min(half_footprint, -along + inner_half_chord)
-				- max(-half_footprint, -along - inner_half_chord), 0.0);
-		float coverage = clamp((outer_length - inner_length) / (2.0 * half_footprint),
-				0.0, 1.0) / magnification;
+		float coverage = clamp(
+				ring_aperture_weight(-along - outer_half_chord, -along + outer_half_chord,
+						aperture_sigma, limit)
+				- ring_aperture_weight(-along - inner_half_chord, -along + inner_half_chord,
+						aperture_sigma, limit), 0.0, 1.0) / magnification;
 		if (coverage <= 0.0) {
-			discard; // this pixel's footprint holds no ring
+			discard; // this pixel's aperture holds no ring
 		}
 
 		// The same segment picks the filter and where it is read: the radial span the
 		// covered part actually crosses, which at an ansa is most of the outer ring where
-		// a derivative reports nothing at all.
-		float begin = max(-half_footprint, -along - outer_half_chord);
-		float end = min(half_footprint, -along + outer_half_chord);
+		// a derivative reports nothing at all. The aperture's own width is what the filter
+		// has to match, so the box here is the one of equal variance - `sqrt(3) sigma`,
+		// which is exactly half the pixel footprint again when there is no PSF.
+		float filter_half = SQRT_3 * aperture_sigma;
+		float begin = clamp(-along - outer_half_chord, -filter_half, filter_half);
+		float end = clamp(-along + outer_half_chord, -filter_half, filter_half);
 		float begin_radius = sqrt(max(r * r + 2.0 * along * begin + begin * begin, 0.0));
 		float end_radius = sqrt(max(r * r + 2.0 * along * end + end * end, 0.0));
 		float min_radius = (begin <= -along && -along <= end) ? sqrt(across_squared)

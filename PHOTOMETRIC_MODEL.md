@@ -986,8 +986,39 @@ falls as the sine of the opening angle -- that share is computed exactly (the se
 radius is quadratic in its parameter, and its crossings of the two circles are closed form)
 and scales the fragment's radiance and its occlusion together. It is the same quantity
 `limb_mean_incidence()` calls coverage, one dimension lower: a fraction of the camera's own
-aperture, derived rather than tuned. The aperture here is a box of one pixel rather than the
-PSF, which is what makes the flux come out right and is the one place the two differ.
+aperture, derived rather than tuned.
+
+That aperture is the pixel's own box CONVOLVED with the camera's point spread function --
+`iv_psf_sigma`, the same Gaussian that images every star and every sunlit rim -- so the ring
+goes through one camera model with everything else. It is taken as a single Gaussian of the
+summed variance, which is within 0.002 of the true convolution at the shipped sigma, and
+truncated at six of its own sigmas, where a Gaussian stops being representable at the worst
+exposure this camera reaches (a metered ring left at the dark-adapted rest, ~17 stops, where
+one 8-bit code is 1e-8 of the peak; the star field's `psf_visible_size()` cuts at 5.8 px
+there against the 6.9 this draws). Two things follow, both measured against ray casts
+convolved with the same Gaussian. A box **under-integrates** a band a pixel or two tall,
+because it samples at pixel centres a function it treats as flat across the pixel: against
+the sine law it ran 0.99, 0.90, 0.843, 0.842 from a 4 degree opening down to 0.02, where the
+aperture holds 0.999 to 1.003 flat -- confirmed in-app as a 14 to 24 % flux recovery below
+the tilt threshold and 0.4 % at 26.7 degrees. And at ~17 stops over **everything drawn
+clips**, so what a viewer sees is a count of rows and a count steps: the box floors that
+count at 3 rows across the ring's thin middle and the aperture floors it at 8, the same
+one-row step against a base nearly three times wider. Its last row is no longer a cliff
+either -- ray-cast truth at a 1 degree opening ends 255, 148, 0 display codes and the
+aperture ends 255, 88, 0 where the box ends 255, 0.
+
+A convolution can only put light where the rasterizer made a fragment, so the plane is also
+EXPANDED outward, to `plane_extent`, sized so the aperture's reach fits at the plane's own
+far rim, where the footprint is largest. That expansion is bounded by the tilt below, and
+that is the tilt's second job: the reach is measured in footprints, magnifying shrinks the
+footprint, and both operations are exactly flux-neutral. Untilted, a camera at its floor
+against a hairline ring would want a plane twenty times the ring's radius.
+
+The one place the model is knowingly incomplete is the ansa TIP, where the footprint segment
+runs tangent to the ring's own edge and coverage is carried by the pixel's extent ACROSS the
+segment, which a one-dimensional aperture has no term for: up to 0.40 of a pixel's coverage
+in a thin arc, which the box has equally, against a whole-frame rms the aperture more than
+halves everywhere else.
 
 The other half no coverage term can argue with. Without MSAA a fragment exists only where
 the primitive covers a pixel CENTRE, so once the ring's image is thinner than a pixel the
@@ -1002,8 +1033,9 @@ proportional to the sine of the opening angle to 0.3 % over a 24-fold range in a
 lit-pixel count is constant across it, and the brightest ring pixel falls 0.68, 0.46, 0.29,
 0.17, 0.11, 0.057, 0.031 to nothing. `MIN_SCREEN_THICKNESS` is the one tuned number, and
 what it buys is the sub-pixel middle of the ring, whose own band is a fifth of the minor
-axis and dashes below the threshold: 2.0 renders 0.86 of the true flux there against 0.92 at
-6.0, which recovers it and smears the ring over 2.4 times as many rows.
+axis and dashes below the threshold. It is also the ceiling on the outward expansion above,
+which is why the two live in one expression: the magnification taken is whichever of the two
+demands is larger.
 
 A ring face is brighter per unit area than any Lambert sphere near opposition, so a camera
 metering the globe alone would clip the rings white. **Both faces** therefore meter as their
