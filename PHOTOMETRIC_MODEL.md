@@ -1014,11 +1014,23 @@ that is the tilt's second job: the reach is measured in footprints, magnifying s
 footprint, and both operations are exactly flux-neutral. Untilted, a camera at its floor
 against a hairline ring would want a plane twenty times the ring's radius.
 
-The one place the model is knowingly incomplete is the ansa TIP, where the footprint segment
-runs tangent to the ring's own edge and coverage is carried by the pixel's extent ACROSS the
-segment, which a one-dimensional aperture has no term for: up to 0.40 of a pixel's coverage
-in a thin arc, which the box has equally, against a whole-frame rms the aperture more than
-halves everywhere else.
+That aperture runs on BOTH screen axes. It is isotropic on the screen, so pulled back into
+the plane it is `sigma x footprint` along the footprint axis and `sigma x pixel_angle x
+distance` across it -- the second being `mu` times the first, hence negligible at grazing and
+equal face on. Dropping it costs nothing while the ring is large, because its chord is then
+almost linear in `across`; it costs everything once the ring is a few pixels wide, where a
+blur along one screen axis draws a DASH across the ring's own long axis (measured at 700
+plane radii, the drawn shape's aspect was 2.28 against a true 0.69). The across integral is
+five-node Gauss-Hermite because what it has to resolve is a square root -- the chord through
+a circle has infinite slope at the tangency, so the correction never becomes smooth however
+small the sigma is. That tangency is also the ansa TIP, the one place the segment picture is
+weak, and the same nodes carry it: whole-frame rms 0.0175, 0.0063, 0.0043 at one, three and
+five nodes against the box's 0.0379.
+
+What is left is the far field. Past roughly 300 plane radii the ring is smaller than the
+camera's own PSF, and rasterizing a plane is the wrong instrument for it at all -- the drawn
+shape's aspect and its flux both drift from the truth however many nodes are spent. What that
+regime wants is a point-source quad like the body's own, which has no ring term.
 
 The other half no coverage term can argue with. Without MSAA a fragment exists only where
 the primitive covers a pixel CENTRE, so once the ring's image is thinner than a pixel the
@@ -1035,7 +1047,12 @@ lit-pixel count is constant across it, and the brightest ring pixel falls 0.68, 
 what it buys is the sub-pixel middle of the ring, whose own band is a fifth of the minor
 axis and dashes below the threshold. It is also the ceiling on the outward expansion above,
 which is why the two live in one expression: the magnification taken is whichever of the two
-demands is larger.
+demands is larger -- and then CAPPED at face on, because a ring is thin on screen for two
+different reasons and the minor axis alone cannot tell them apart. Foreshortening is what the
+tilt is for; distance is not, and magnifying past `major / minor` gives the ring a shape no
+ring has (measured at 4000 plane radii, a 0.50 px ring held 3.5 px tall). The cap is
+`1 / sin(elevation)`, so it diverges at grazing and bites only on a ring that is small in
+both directions.
 
 A ring face is brighter per unit area than any Lambert sphere near opposition, so a camera
 metering the globe alone would clip the rings white. **Both faces** therefore meter as their

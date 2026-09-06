@@ -177,8 +177,8 @@ render_mode cull_disabled, skip_vertex_transform, ambient_light_disabled, blend_
 // and one Gaussian of iv_psf_sigma px images every star, every body's sunlit rim and now
 // the ring. So the aperture is the pixel's box CONVOLVED with that Gaussian, taken as a
 // single Gaussian of the summed variance and integrated between the same chord ends -
-// which turns four min/max lines into four erfc calls and nothing else. Two things it
-// buys, both measured against ray casts convolved with the same Gaussian:
+// which turns four min/max lines into four erfc calls. Two things it buys, both measured
+// against ray casts convolved with the same Gaussian:
 //
 //   FLUX. The box under-integrates a band that is a pixel or two tall, because it samples
 //   at pixel centres a function it treats as flat across the pixel. Against the sin law
@@ -202,14 +202,27 @@ render_mode cull_disabled, skip_vertex_transform, ambient_light_disabled, blend_
 // shrinks the footprint, and both operations are exactly flux-neutral. Untilted, a camera
 // at its floor against a hairline ring would want a plane twenty times the ring's radius.
 //
-// WHAT IT COSTS AND WHAT IT DOES NOT. Nothing, face on: at a 26.7 deg opening from six
-// ring radii the plane is drawn 1.056 radii and the flux moves 0.00002. Sub-pixel it is
-// the whole fix. The one place the model is knowingly incomplete is the ansa TIP, where
-// the footprint segment runs tangent to the ring's own edge: coverage there is carried by
-// the pixel's extent ACROSS the segment, which a one-dimensional aperture has no term for.
-// Measured, that costs up to 0.40 of a pixel's coverage in a thin arc - the same error the
-// box has, and the aperture more than halves the whole-frame rms everywhere else
-// (0.017 against 0.038 at 26.7 deg, 0.013 against 0.155 at 1 deg).
+// AND IT RUNS ON BOTH SCREEN AXES, which the first build did not. The aperture is
+// isotropic on the SCREEN, so pulled back into the plane it is `sigma * footprint` along
+// the footprint axis and `sigma * pixel_angle * distance` across it - the second being
+// `mu` times the first, hence negligible at grazing and EQUAL face on. Dropping it costs
+// nothing while the ring is large, because its chord is then almost linear in `across`;
+// it costs everything once the whole ring is a few pixels wide, where a blur along one
+// screen axis draws a DASH across the ring's own long axis. Measured as the drawn shape's
+// aspect against convolved ray casts at 700 plane radii: 2.28 along one axis against a
+// true 0.69, and 1.18 with the five-node quadrature below. It also more than doubles the
+// accuracy at the ansa TIP, which is the one place the segment picture is weak - there the
+// footprint runs tangent to the ring's own edge and the coverage is carried entirely by
+// the pixel's extent across it (whole-frame rms 0.0175, 0.0063, 0.0043 at one, three and
+// five nodes, against the box's 0.0379).
+//
+// WHAT IT COSTS AND WHAT IT DOES NOT. Nothing, face on and close: at a 26.7 deg opening
+// from six ring radii the plane is drawn 1.056 radii and the flux moves 0.00002. Sub-pixel
+// it is the whole fix. What is left is the far field, where the ring is smaller than the
+// camera's own PSF and rasterizing a plane is the wrong instrument for it at all: past
+// roughly 300 plane radii the drawn shape's aspect and its flux both drift from the truth
+// however many quadrature nodes are spent, and what that regime wants is a point-source
+// quad like body_psf.gdshader's, which has no ring term.
 //
 // SELF-LIT ON BOTH RENDERERS. The engine flips a double-sided primitive's normal, so an
 // engine-lit ALBEDO renders N.L = 0 on whichever face is turned away and the unlit layer
@@ -254,6 +267,16 @@ const float MAX_PLANE_EXTENT = 8.0;
 const float PIXEL_BOX_VARIANCE = 0.0833333;
 const float SQRT_3 = 1.7320508;
 const float SQRT_2 = 1.4142136;
+// The aperture's OTHER screen axis, integrated by Gauss-Hermite in units of its own sigma.
+// Five nodes rather than three because what it has to resolve is a square root: the chord
+// through a circle has infinite slope at the tangency, so the correction never becomes
+// smooth however small the sigma is. Measured against convolved ray casts, the drawn
+// shape's aspect at 700 plane radii runs 2.28, 1.50, 1.18, 1.04 at one, three, five and
+// seven nodes against a true 0.69, and the whole-frame rms close in runs 0.0175, 0.0063,
+// 0.0043 - so five is where both stop paying.
+const int APERTURE_NODES = 5;
+const float APERTURE_OFFSETS[5] = {-2.8569700, -1.3556262, 0.0, 1.3556262, 2.8569700};
+const float APERTURE_WEIGHTS[5] = {0.0112574, 0.2220759, 0.5333333, 0.2220759, 0.0112574};
 
 // set by rings.gd once
 uniform sampler2DArray rings_textures : filter_linear_mipmap, repeat_disable;
@@ -411,8 +434,19 @@ void vertex() {
 	// is measured in footprints, magnifying shrinks the footprint, and both are exactly
 	// flux-neutral. Untilted, a camera at its floor against a hairline ring would want a
 	// plane twenty times the ring's radius.
-	magnification = clamp(max(MIN_SCREEN_THICKNESS / max(minor_axis, 1e-30),
+	//
+	// AND IT IS CAPPED AT FACE ON, because a ring is thin on screen for two different
+	// reasons and the tilt only answers one of them. Foreshortening is what it is for;
+	// DISTANCE is not, and the minor axis alone cannot tell them apart. The projected
+	// ellipse's own aspect is `major / minor` = `range / height`, so magnifying past that
+	// makes the ring TALLER than it is wide - measured at 4000 plane radii, a 0.50 px ring
+	// held 3.5 px tall, a dash across the ring's own long axis. The cap is
+	// `1 / sin(elevation)`, so it diverges at grazing and is inert wherever the tilt is
+	// really answering foreshortening; it bites only on a ring that is small in BOTH
+	// directions.
+	magnification = clamp(min(max(MIN_SCREEN_THICKNESS / max(minor_axis, 1e-30),
 			reach / (far_mu * max(MAX_PLANE_EXTENT - texture_end, 1e-6))),
+			sqrt(camera_range_squared) / max(abs(camera_plane_height), 1e-30)),
 			1.0, MAX_MAGNIFICATION);
 	plane_extent = min(texture_end + reach / min(far_mu * magnification, 1.0),
 			MAX_PLANE_EXTENT);
@@ -476,17 +510,36 @@ void fragment() {
 		float aperture_sigma = ring_aperture_sigma() * footprint;
 		float limit = APERTURE_REACH * aperture_sigma;
 		float along = dot(v_plane_position, footprint_axis);
-		float across_squared = max(r * r - along * along, 0.0);
-		float outer_half_chord = sqrt(max(texture_end * texture_end - across_squared, 0.0));
-		float inner_half_chord = sqrt(max(texture_start * texture_start - across_squared, 0.0));
-		float coverage = clamp(
-				ring_aperture_weight(-along - outer_half_chord, -along + outer_half_chord,
-						aperture_sigma, limit)
-				- ring_aperture_weight(-along - inner_half_chord, -along + inner_half_chord,
-						aperture_sigma, limit), 0.0, 1.0) / magnification;
+		float across = sqrt(max(r * r - along * along, 0.0));
+		// THE OTHER SCREEN AXIS. One pixel measured PERPENDICULAR to the view direction is
+		// unforeshortened, so the aperture's width there is just the pixel's own size -
+		// `footprint * rendered_mu`, written without the tilt's own factor. It is
+		// negligible at grazing, where it is `mu` times the along width and the ring's
+		// chord is nearly linear in `across`; it is EQUAL face on, and once the whole ring
+		// is a few pixels across it is the difference between a round blob and a dash.
+		float across_sigma = ring_aperture_sigma() * pixel_angle * slant_distance;
+		float coverage = 0.0;
+		for (int node = 0; node < APERTURE_NODES; node++) {
+			float shifted = abs(across + APERTURE_OFFSETS[node] * across_sigma);
+			float outer_half_chord = sqrt(max(texture_end * texture_end - shifted * shifted,
+					0.0));
+			float weight = ring_aperture_weight(-along - outer_half_chord,
+					-along + outer_half_chord, aperture_sigma, limit);
+			// The hole is only in the way where the ray's own line crosses it, which is a
+			// large part of a face-on ring and skips two erfc calls there.
+			if (shifted < texture_start) {
+				float inner_half_chord = sqrt(texture_start * texture_start
+						- shifted * shifted);
+				weight -= ring_aperture_weight(-along - inner_half_chord,
+						-along + inner_half_chord, aperture_sigma, limit);
+			}
+			coverage += APERTURE_WEIGHTS[node] * weight;
+		}
+		coverage = clamp(coverage, 0.0, 1.0) / magnification;
 		if (coverage <= 0.0) {
 			discard; // this pixel's aperture holds no ring
 		}
+		float outer_half_chord = sqrt(max(texture_end * texture_end - across * across, 0.0));
 
 		// The same segment picks the filter and where it is read: the radial span the
 		// covered part actually crosses, which at an ansa is most of the outer ring where
@@ -498,7 +551,7 @@ void fragment() {
 		float end = clamp(-along + outer_half_chord, -filter_half, filter_half);
 		float begin_radius = sqrt(max(r * r + 2.0 * along * begin + begin * begin, 0.0));
 		float end_radius = sqrt(max(r * r + 2.0 * along * end + end * end, 0.0));
-		float min_radius = (begin <= -along && -along <= end) ? sqrt(across_squared)
+		float min_radius = (begin <= -along && -along <= end) ? across
 				: min(begin_radius, end_radius);
 		min_radius = max(min_radius, texture_start); // the hole is not part of the average
 		float max_radius = max(max(begin_radius, end_radius), min_radius);
