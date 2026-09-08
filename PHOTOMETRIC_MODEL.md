@@ -866,7 +866,7 @@ number is a `rings.tsv` cell -- so a different real or invented ring system is a
 texture and a new table row.
 
 Their texture is one `CompressedTexture2DArray` of three radial profiles, built by
-`addons/tools/build_saturn_rings.py` from Bjoern Joensson's Voyager profiles. Its alpha is
+`addons/tools/build_saturn_rings.py` from Björn Jónsson's Voyager profiles. Its alpha is
 `1 - exp(-tau_normal)` from the stellar occultation, and its rgb is **scattering
 strength** -- the published brightness with the slab's geometry term DIVIDED OUT, so what
 the file holds is a property of the particles rather than of one observing geometry. The
@@ -883,8 +883,8 @@ to their opening angle: as the camera drops toward the plane the optically thin 
 brighten toward the saturated value while the B ring, already saturated, barely moves.
 
 **The reference geometry the build divides out is PINNED at the geometry the images were
-taken at**, and that decides how much radial contrast every render carries. Joensson's
-profiles are Voyager, 1980-81, and Joensson publishes none of that geometry -- so it is
+taken at**, and that decides how much radial contrast every render carries. Jónsson's
+profiles are Voyager, 1980-81, and Jónsson publishes none of that geometry -- so it is
 measured from the spacecraft's own trajectories in the running simulation
 (`voyager_ring_elevation.py` in the assets build tree, which parks the camera on the craft
 and reads `get_rings_geometry`). Voyager 2's backscatter frames sit at camera 10.63 degrees
@@ -926,7 +926,7 @@ confound that makes a free lit fit return an impossible geometry two paragraphs 
 cell stays at the homogeneous limit -- the family's darkest transmission, and the closest to
 what real unlit images show -- and separating the two is in the TODO.
 
-**There is no floor under the unlit face.** Joensson's unlit profile stops falling at about
+**There is no floor under the unlit face.** Jónsson's unlit profile stops falling at about
 0.047 by tau 2.33 and is flat to 6 % from there to the profile's deepest 8.5 -- a factor of
 nearly four in optical depth over which single scattering falls by 1e6 and even conservative
 two-stream diffuse transmission, the most generous physical model there is, falls threefold.
@@ -978,7 +978,7 @@ the whole loss) and dividing by the projected areas gives the rings' area-weight
 `scattering_scale`, `opposition_surge` and `opposition_width` are fitted to that relation
 over its stated validity range and reproduce it to within 3.6 % from zero phase to 6
 degrees. The published curve is much steeper than the source's own prose: a 40.3 % drop
-from 0 to 6 degrees against Joensson's stated "20-25 %".
+from 0 to 6 degrees against Jónsson's stated "20-25 %".
 
 That fit is at Saturn's WIDEST opening, and the model runs above the published relation as
 the rings close: integrating the ring's whole flux against the globe's gives 1.007 of the
@@ -1939,7 +1939,7 @@ lever a capped pass cannot offer is one the shader does not need.
   - **`forward_level` 0.25 is a continuity anchor, not a measurement.** Nothing constrains
     it: the published magnitude relation that anchors the
     level and the surge stops at 6.5 deg of phase, so everything past that is this cell's
-    extrapolation. Joensson's own caveat is that his high-phase end "should probably be
+    extrapolation. Jónsson's own caveat is that his high-phase end "should probably be
     even darker", so a smaller value is defensible; the 71-frame reference set
     (`MANIFEST.tsv`, `Saturn.rings.reference#*`, 54 with a stated phase from 0 to 179 deg)
     is better evidence than his montage.
