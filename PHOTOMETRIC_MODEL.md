@@ -1944,7 +1944,16 @@ lever a capped pass cannot offer is one the shader does not need.
     scatter 2x about any smooth trend -- but the B ring sits as a deep bump against that
     scatter, between a C ring and an A ring that both roughly follow it. Fixing it means a
     better occultation than the source carries, i.e. a re-source of the transparency
-    profile. Not done.
+    profile. **Measured 2026-09-08 and confirmed** -- Cassini UVIS at a 66.7 degree ring
+    elevation, eleven occultations combined, puts the B ring 2.02x deeper at the median and
+    3.04x at p90, agreeing with the frame on three of its four zones while the C ring and
+    the Cassini Division move 0.89-0.94x. The asset is NOT yet rebuilt, and what holds it
+    is a second consequence: with the censoring gone the unlit profile no longer constrains
+    its own camera elevation (the residual moves 0.005 across 50-89 degrees), and the choice
+    moves `unlit_level` over a 1.7x range. That wants rendering per candidate and a
+    judgment, the way the reference-opening range was settled. The measurement, the
+    producer and the two downstream constants it moved are in the assets build tree --
+    `scripts/saturn_rings_optical_depth.py` and `records/Saturn.md`.
   - **A ring shadow renders truly black, and the real one is not.** What lights it is not
     Saturnshine off the lit hemisphere: a ring element inside the shadow sees the planet's
     NIGHT side by construction, the lit hemisphere being on the other side of the
