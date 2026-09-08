@@ -831,7 +831,7 @@ VRAM compression.
 These files are essentially data distributions. Each is a conversion of published catalog or
 model data into a form the renderer can sample, and we make no claim on their content.
 
-### `/starmaps/hipparcos_tycho2_stars.*.ivbinary`
+### `/starmaps/stars.*.ivbinary`
 
 Directions, distances, magnitudes and B−V colors for 2,551,210 stars, from the
 [ESA Hipparcos Catalogue](https://www.cosmos.esa.int/web/hipparcos) (ESA, 1997; ESA SP-1200) and

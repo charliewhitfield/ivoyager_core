@@ -53,7 +53,7 @@ const _BINARY_VERSION := 2
 
 ## Path prefix for the star binaries. The loader appends
 ## [code].<magnitude>.ivbinary[/code] for each bin in [member BINARY_FILE_MAGNITUDES].
-@export var stars_binary_path := "res://addons/ivoyager_assets/starmaps/hipparcos_tycho2_stars"
+@export var stars_binary_path := "res://addons/ivoyager_assets/starmaps/stars"
 
 ## Loads magnitude bins up to and including this V-magnitude cutoff. Lower it (or
 ## remove bin files from the asset directory) to trade completeness for size. A
