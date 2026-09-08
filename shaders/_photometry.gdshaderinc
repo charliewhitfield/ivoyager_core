@@ -240,8 +240,8 @@ float lunar_lambert_isotropic_response(vec3 macro_normal, vec3 view_dir, float e
 uniform int limb_kernel_cells = 16;
 // Half-width of the kernel in px. Three sigma would be 1.5 px; this is set by the size law
 // instead, as a star's sprite is: the rim at the camera's dark-adapted rest exposure stands
-// four to five decades above saturation, and its Gaussian is still above one 8-bit step at
-// 2.7 px. A cell is 3/8 px, fine enough that the Gaussian is nearly flat across it.
+// three to four decades above saturation, and its Gaussian is still above one 8-bit step at
+// 2.6 px. A cell is 3/8 px, fine enough that the Gaussian is nearly flat across it.
 const float LIMB_KERNEL_REACH_PX = 3.0;
 // Width in px of the silhouette fade that SPECULAR alone keeps (see above).
 const float LIMB_FADE_PX = 1.5;

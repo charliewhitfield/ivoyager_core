@@ -108,8 +108,8 @@ uniform float glare_max_px = 384.0;
 // far harder to hit than a linear ramp did; 20 px is known good on tested platforms, and
 // anything above that is untested and accepted as a platform risk. The glare above widens
 // the sprite past the core on the brightest stars and so spends that margin: at the
-// reference height and the dark-adapted rest, Sirius spans 24.9 px against its core's 5.3
-// and Vega 20.5, and the sprite grows only as height^0.286 from there (37 px at 4320p).
+// reference height and the dark-adapted rest, Sirius spans 20.5 px against its core's 5.1
+// and Vega 16.8, and the sprite grows only as height^0.286 from there (30 px at 4320p).
 // A clamp would truncate the wing's faint outer part and nothing else, which is why this is
 // a risk rather than a hazard -- but bring glare_scale or glare_max_px down if one bites.
 // An IN-SCENE star does not ride a point sprite at all for the same reason, and could not:

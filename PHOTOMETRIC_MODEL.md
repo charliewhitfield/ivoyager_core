@@ -841,8 +841,12 @@ body meters the scene down, and return at rest exposure.
 The background panorama (`starmap_background.gdshader`) is a linear-radiance image of
 the Milky Way. Its level is not authored: it is computed from the anchor
 (`sky_energy`, see the calibration chain), which corrected the legacy by-eye level —
-the panorama had been ~6× too bright relative to the stars it sits behind. At rest
-exposure the whole sky rides `exposure_max_ev` above the authored look.
+the panorama had been ~6× too bright relative to the stars it sits behind.
+`IVWorldEnvironment` authors the sky from that same expression
+(`IVExposureManager.compute_sky_energy()`, static so it is reachable with this node
+erased), so the correction holds with physical light OFF as well and the two modes
+differ by exposure alone — toggling the setting moves the sky and the stars together.
+At rest exposure the whole sky rides `exposure_max_ev` above the authored look.
 
 ## Rings
 
@@ -991,13 +995,13 @@ That aperture is the pixel's own box CONVOLVED with the camera's point spread fu
 goes through one camera model with everything else. It is taken as a single Gaussian of the
 summed variance, which is within 0.002 of the true convolution at the shipped sigma, and
 truncated at six of its own sigmas, where a Gaussian stops being representable at the worst
-exposure this camera reaches (a metered ring left at the dark-adapted rest, ~17 stops, where
-one 8-bit code is 1e-8 of the peak; the star field's `psf_visible_size()` cuts at 5.8 px
+exposure this camera reaches (a metered ring left at the dark-adapted rest, ~15 stops, where
+one 8-bit code is 1e-7 of the peak; the star field's `psf_visible_size()` cuts at 5.6 px
 there against the 6.9 this draws). Two things follow, both measured against ray casts
 convolved with the same Gaussian. It holds the sine law to 0.999-1.003 from a 4 degree
 opening down to 0.02, where a plain pixel box under-integrates a band a pixel or two tall by
 up to 16 % -- it samples at pixel centres a function it treats as flat across the pixel. And
-at ~17 stops over **everything drawn clips**, so what a viewer sees is a count of rows: the
+at ~15 stops over **everything drawn clips**, so what a viewer sees is a count of rows: the
 aperture floors that count at 8 across the ring's thin middle, nearly three times what a box
 leaves, and its last row falls off through intermediate values rather than ending in a cliff
 (ray-cast truth at a 1 degree opening ends 255, 148, 0 display codes and the aperture ends
@@ -1152,7 +1156,7 @@ reaches outside it, is what lets the rings meter with the rings filling the fram
 globe panned off the side: measured over a yaw sweep at six body radii, the globe's disc
 gate is exactly 0.000 from 50 to 60 degrees of yaw while the rings are still 19 % to 0.5 %
 in frame and hold the exposure at -14.92 EV. Without it that whole window sits at the
-dark-adapted rest, 17.9 stops brighter, with the rings blown white.
+dark-adapted rest, 15.9 stops brighter, with the rings blown white.
 
 Then the **openness ramp**, `ring_meter_onset_openness` down to
 `ring_meter_full_openness`, on the sine of the camera's elevation above the ring plane.
@@ -1437,15 +1441,15 @@ cloud tops, clipped city cores, the near-opposition ring face. Because our expos
 pre-tonemap (in `light_energy` and `iv_exposure`), the threshold is applied *after*
 adaptation: a source blooms exactly when the camera is exposed such that it clips, and an
 eclipse that dims `light_energy` takes the bloom down with it, automatically. The background
-panorama never reaches the threshold in either mode (peak ≈ 0.087 × 2^`exposure_max_ev` ≈ 0.7
+panorama never reaches the threshold in either mode (peak ≈ 0.087 × 2^`exposure_max_ev` ≈ 0.17
 at rest), so the Milky Way correctly does not bloom.
 
 **The star PSF is not redundant with this, and could not be.** The PSF is the star's image —
 the calibrated core-plus-skirt that carries photometric proportionality and the `sqrt(ln I)`
 size law. Glow adds the wide scattering wings the Gaussian does not have, and its per-texel
 energy caps at 12 while star peaks run to the 32768 f16 ceiling: bloom is proportional to
-flux only between threshold and cap — roughly V 3 to 5.5 at the 1080 reference height and
-reference fov, the band riding the same resolution and fov compensations as the field — and
+flux only between threshold and cap — roughly V 1.5 to 4 at the 1080 reference height,
+reference fov and rest exposure, the band riding the same compensations as the field — and
 every brighter star blooms at the cap, differentiated only by footprint, which grows as
 `sqrt(ln I)`. That is why glow shows on a small subset of stars, and why that subset's halos
 look alike. The cap is also half-deliberate protection: wings proportional to flux would
@@ -1476,7 +1480,7 @@ about it:
   a power law in the wings, exponent ~2 over the decades that matter for an eye or a lens
   (the CIE disability-glare law, `L_veil = 10 E / θ²`). But that law puts ~10 % of a source's
   light in the wings, and 10 % of the sun's flux at the dark-adapted rest exposure is about
-  4500× saturation over the *whole frame* — a photograph exposed for the Milky Way cannot
+  1100× saturation over the *whole frame* — a photograph exposed for the Milky Way cannot
   also hold the sun. So the amplitude carries a compression exponent, `glare_gamma`, exactly
   as `intensity_gamma` does for the field, and the outer radius grows as `I^(gamma/2)`: one
   doubling per 5.3 magnitudes at the shipped 0.286, against the core's one per 19.

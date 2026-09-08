@@ -98,6 +98,10 @@ extends Node
 ## Toggle the physical_light user setting off before capturing icons (dev tool;
 ## inert outside source runs).
 
+## Default [member background_peak_magnitude_per_arcsec2], separated out so
+## [method compute_sky_energy] can be called without this node.
+const DEFAULT_BACKGROUND_PEAK_MAGNITUDE_PER_ARCSEC2 := 20.0
+
 ## Current relative exposure; the value written to the [code]iv_exposure[/code]
 ## shader global. 1.0 whenever inactive. Read-only.
 static var exposure := 1.0
@@ -136,7 +140,7 @@ var exposure_adjustment_ev := 0.0
 ## photographic photometry of the brightest extended bulge patches (Sgr/Sct
 ## star clouds, ~19.5-20.5) pending measured refinement against LMC/SMC/M31
 ## levels in the shipped map.
-var background_peak_magnitude_per_arcsec2 := 20.0
+var background_peak_magnitude_per_arcsec2 := DEFAULT_BACKGROUND_PEAK_MAGNITUDE_PER_ARCSEC2
 ## Rendered value a fully-metered body's mean luminance lands at (mid-exposure
 ## target, in [0, 1] display terms).
 var metering_key := 0.5
@@ -258,7 +262,7 @@ var ring_meter_full_openness := 0.02
 ## sides stay black); the physical camera would keep adapting until starlit
 ## terrain is mid-exposed (~9-11 EV depending on albedo), blowing out the
 ## Milky Way on the way.
-var exposure_max_ev := 3.0
+var exposure_max_ev := 1.0
 ## Shapes the exposure path across the metering weight ramp: 1.0 spends EV
 ## uniformly across the (log-space) screen-fraction ramp, which reads as
 ## instant saturation on zoom-out - a fully-metered body has only ~1 EV of
@@ -395,19 +399,7 @@ func _recompute_photometry() -> bool:
 		_warned_off_nominal = true
 		push_warning("IVExposureManager: IVPSFSettings intensity_gamma/fov_compensation differ "
 				+ "from 1.0; the physical calibration assumes the photometric values")
-	# The star chain's fov/resolution compensation is exactly the inverse pixel
-	# solid angle of the PSF (a fixed-f-number camera), so the panorama's level
-	# reduces to the star photometry evaluated at the map's per-texel equivalent
-	# magnitude - the anchor minus 2.5*log10 of the reference pixel's arcsec^2.
-	# omega_ref uses the same reference fov and viewport height the star
-	# shaders compensate against, which is what makes the result view-invariant.
-	var reference_height := _get_reference_viewport_height()
-	var arcsec_per_pixel := psf_settings.fov_reference_deg * 3600.0 / reference_height
-	var omega_ref := arcsec_per_pixel * arcsec_per_pixel
-	var psf_area := TAU * psf_settings.psf_sigma * psf_settings.psf_sigma
-	sky_energy = (psf_settings.intensity_scale * psf_area * omega_ref
-			* 10.0 ** (0.4 * (psf_settings.intensity_faint_mag
-			- background_peak_magnitude_per_arcsec2)))
+	sky_energy = compute_sky_energy(background_peak_magnitude_per_arcsec2)
 	var anchor_luminance := IVPhotometry.get_luminance_from_surface_brightness(
 			background_peak_magnitude_per_arcsec2)
 	gain = sky_energy / anchor_luminance
@@ -570,14 +562,41 @@ func _find_starmap_material() -> void:
 		_starmap_material = sky_material
 
 
-func _get_psf_settings() -> IVPSFSettings:
+## The background panorama's [code]energy_multiplier[/code] at exposure 1.0, from
+## [IVPSFSettings] and [param peak_magnitude_per_arcsec2]. This is the star field's
+## own photometry evaluated on the panorama, so it is what puts the two on one
+## brightness scale - a sky authored by eye instead sits at whatever factor against
+## the stars it was picked at, and moves out of agreement whenever a PSF value does.
+## Static and self-resolving so a project running WITHOUT physical light can still
+## author its sky here ([IVWorldEnvironment]); the default argument is what such a
+## caller gets, this node's own anchor being unreachable when the node is erased.
+static func compute_sky_energy(
+		peak_magnitude_per_arcsec2 := DEFAULT_BACKGROUND_PEAK_MAGNITUDE_PER_ARCSEC2) -> float:
+	# The star chain's fov/resolution compensation is exactly the inverse pixel
+	# solid angle of the PSF (a fixed-f-number camera), so the panorama's level
+	# reduces to the star photometry evaluated at the map's per-texel equivalent
+	# magnitude - the anchor minus 2.5*log10 of the reference pixel's arcsec^2.
+	# omega_ref uses the same reference fov and viewport height the star
+	# shaders compensate against, which is what makes the result view-invariant.
+	var psf_settings := _get_psf_settings()
+	if !psf_settings:
+		return 0.0
+	var arcsec_per_pixel := (psf_settings.fov_reference_deg * 3600.0
+			/ _get_reference_viewport_height())
+	var omega_ref := arcsec_per_pixel * arcsec_per_pixel
+	var psf_area := TAU * psf_settings.psf_sigma * psf_settings.psf_sigma
+	return (psf_settings.intensity_scale * psf_area * omega_ref
+			* 10.0 ** (0.4 * (psf_settings.intensity_faint_mag - peak_magnitude_per_arcsec2)))
+
+
+static func _get_psf_settings() -> IVPSFSettings:
 	var psf_settings_var: Variant = IVGlobal.program.get(&"PSFSettings")
 	if psf_settings_var is IVPSFSettings:
 		return psf_settings_var
 	return null
 
 
-func _get_reference_viewport_height() -> float:
+static func _get_reference_viewport_height() -> float:
 	# ProjectSettings, not RenderingServer.global_shader_parameter_get(): the
 	# latter is editor-only and returns null in a running project.
 	var setting_var: Variant = ProjectSettings.get_setting(

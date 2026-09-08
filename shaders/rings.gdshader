@@ -147,8 +147,8 @@ const float MAX_MAGNIFICATION = 64.0;
 // How far out the aperture is drawn, in its own sigmas, and how far the plane may be
 // expanded to hold that, in plane radii. Six sigma is where a Gaussian stops being
 // representable at the WORST exposure this camera reaches - a ring metered and then left
-// at the dark-adapted rest, about 17 stops, where one 8-bit code is 1e-8 of the peak. It
-// agrees with the star field's own cut: psf_visible_size() at that intensity is 5.8 px
+// at the dark-adapted rest, about 15 stops, where one 8-bit code is 1e-7 of the peak. It
+// agrees with the star field's own cut: psf_visible_size() at that intensity is 5.6 px
 // across against the 6.9 this draws. Beyond it the truncation costs nothing measurable.
 const float APERTURE_REACH = 6.0;
 const float MAX_PLANE_EXTENT = 8.0;

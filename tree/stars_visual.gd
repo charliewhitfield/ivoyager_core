@@ -261,13 +261,13 @@ func _append_binary(magnitude_str: String, vertices: PackedVector3Array,
 	while i < count:
 		var word_0 := words[i * 2]
 		var word_1 := words[i * 2 + 1]
-		var scale := shell_scale
+		var distance_scale := shell_scale
 		if i < parallax_count:
-			scale = parallax_numerator / float(parallax_codes.decode_u16(i * 2))
+			distance_scale = parallax_numerator / float(parallax_codes.decode_u16(i * 2))
 		vertices[base + i] = Vector3(
 				float((word_0 & 0xFFFF) - 32768),
 				float(((word_0 >> 16) & 0xFFFF) - 32768),
-				float((word_1 & 0xFFFF) - 32768)) * scale
+				float((word_1 & 0xFFFF) - 32768)) * distance_scale
 		magnitudes_colors[base_custom + i * 2] = (magnitude_min
 				+ magnitude_step * float((word_1 >> 16) & 0xFF))
 		magnitudes_colors[base_custom + i * 2 + 1] = (b_v_min
