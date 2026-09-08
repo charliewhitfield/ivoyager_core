@@ -73,6 +73,7 @@ const HANDOFF_FALLBACK := 2.5 # px radius, if the source never saturates (see th
 const HANDOFF_REFRESH_RATIO := 1.07 # ~0.1 EV / 0.07 mag; past this the handoff re-solves
 
 const FIVE_OVER_LN10 := 2.1714724095162594 # 5 / ln(10), for m = M + 5*log10(d)
+const TWO_HALF_OVER_LN10 := 1.0857362047581294 # 2.5 / ln(10), for a combined colour index
 
 
 var _body: IVBody
@@ -86,10 +87,12 @@ var _geometric_albedo: float # 0.0 for a star, which emits rather than reflects
 var _lunar_lambert: float # phase-function blend; the surface shader's own L
 var _absolute_magnitude := NAN # star only
 var _color_bv := 0.63
+var _color_bv_blue_ratio := 1.0 # 10 ** (-0.4 * _color_bv); fixed once the body is known
 var _material: ShaderMaterial
 var _psf_settings: IVPSFSettings
 var _applied_exposure := NAN # change gate; NAN forces the first-frame solve
 var _applied_unit_magnitude := NAN # ditto (phase and heliocentric distance move it)
+var _applied_color_bv := NAN # ditto; moves only on a ringed body, as its rings take over
 
 
 
@@ -263,9 +266,13 @@ func _ready() -> void:
 	_polar_radius = _body.get_polar_radius()
 	_geometric_albedo = 0.0 if _is_sun else get_geometric_albedo(_body)
 	_color_bv = _body.characteristics.get(&"color_b_v", _color_bv)
+	_color_bv_blue_ratio = 10.0 ** (-0.4 * _color_bv)
 	if _is_sun:
 		_absolute_magnitude = _body.characteristics.get(&"absolute_magnitude", NAN)
 	_lunar_lambert = _get_phase_blend()
+	# A ringed body's own index is only part of the answer, so _refresh_color() may move
+	# this every frame; a star's and an unringed body's never moves off it.
+	_applied_color_bv = _color_bv
 	_material.set_shader_parameter(&"color_bv", _color_bv)
 	# Past its handoff a source is a field star, so it images through the same camera the
 	# field does -- one settings object, or the two drift apart on the first edit.
@@ -326,6 +333,23 @@ func _refresh_handoff(apparent_magnitude: float, camera_distance: float) -> void
 	_material.set_shader_parameter(&"handoff_low", handoff.x)
 	_material.set_shader_parameter(&"handoff_high", handoff.y)
 	_body.psf_handoff = handoff
+
+
+# The colour the quad draws the WHOLE source in. A ringed body's is not its own — a ring
+# system's tint is a property of its own particles — so handing the rings to the point
+# without this recolours a third to a half of the system's light and the handoff shows it.
+# Colour indices combine through their FLUXES, not by averaging the indices.
+func _refresh_color(body_illuminance: float, ring_illuminance: float) -> void:
+	var total := body_illuminance + ring_illuminance
+	var color_bv := _color_bv
+	if ring_illuminance > 0.0 and total > 0.0:
+		var blue_over_visual := (body_illuminance * _color_bv_blue_ratio
+				+ ring_illuminance * 10.0 ** (-0.4 * _body.rings_psf_color_b_v)) / total
+		color_bv = -TWO_HALF_OVER_LN10 * log(blue_over_visual)
+	if color_bv == _applied_color_bv:
+		return
+	_applied_color_bv = color_bv
+	_material.set_shader_parameter(&"color_bv", color_bv)
 
 
 # The body's rim, as the quad's shader needs it: where the sun is on screen, at what phase,
@@ -504,10 +528,17 @@ func _get_star_apparent_magnitude(camera_distance: float) -> float:
 	return IVPhotometry.get_apparent_magnitude(_absolute_magnitude, camera_distance)
 
 
-# The whole disc's reflected flux as the magnitude an unresolved source of that flux
+# The whole body's reflected flux as the magnitude an unresolved source of that flux
 # would have. Phase, eclipse and both distances enter here; the albedo and the phase
 # law are the body's own, so the point dims through phase exactly as the disc it
 # hands off to (see IVPhotometry.get_disc_phase_function for what that costs).
+#
+# A RINGED BODY IS NOT ITS GLOBE. Saturn's rings are about a magnitude of light at a wide
+# opening and swing far more than that with phase, so a point drawn from the globe alone is
+# the wrong object. IVRings publishes their flux in the same terms the globe's disc
+# contributes, already scaled by its end of the crossfade, and flux is what sums - so it
+# enters before the magnitude conversion and not after. A body with no rings publishes
+# nothing and pays one add.
 func _get_reflected_apparent_magnitude(camera: Camera3D, camera_distance: float) -> float:
 	var star_vector := _star.global_position - _body.global_position
 	var star_distance := star_vector.length()
@@ -526,8 +557,12 @@ func _get_reflected_apparent_magnitude(camera: Camera3D, camera_distance: float)
 	var phase_cos := -star_vector.dot(camera_vector) / (star_distance * camera_distance)
 	var phase_angle := acos(clampf(phase_cos, -1.0, 1.0))
 	var phase_factor := IVPhotometry.get_disc_phase_function(phase_angle, _lunar_lambert)
-	return IVPhotometry.get_reflected_apparent_magnitude(_geometric_albedo, _mean_radius,
-			camera_distance, star_illuminance, phase_factor)
+	var illuminance := IVPhotometry.get_reflected_illuminance(_geometric_albedo,
+			_mean_radius, camera_distance, star_illuminance, phase_factor)
+	var ring_illuminance := (star_illuminance * _body.rings_psf_flux_factor
+			/ (camera_distance * camera_distance))
+	_refresh_color(illuminance, ring_illuminance)
+	return IVPhotometry.get_apparent_magnitude_from_illuminance(illuminance + ring_illuminance)
 
 
 # The Lunar-Lambert L of the body's own surface shell, so the point's phase law is the

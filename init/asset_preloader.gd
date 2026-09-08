@@ -27,10 +27,6 @@ extends RefCounted
 ## on [signal IVStateManager.core_initialized]. When finished, emits [signal
 ## IVStateManager.assets_preloaded].
 
-## Number of LOD textures expected per rings entry. Must agree with the asset
-## bundle, [IVBody] ([code]body.gd[/code]) and [code]rings.shader[/code].
-const RINGS_LOD_LEVELS := 9
-
 # VRAM color formats a normal map must never have (would mean it was imported as
 # sRGB color, not as a Normal Map). Load-time push_warning only.
 const _NORMAL_COLOR_FORMATS := [
@@ -215,11 +211,15 @@ func get_body_mesh_scale(body_name: StringName) -> float:
 	return _body_resources[body_name][7]
 
 
-func get_rings_texture_arrays(rings_name: StringName) -> Array[Texture2DArray]:
+## The rings' three-layer scattering texture: backscatter, forward scatter and unlit side,
+## each a width x 1 profile of linear SCATTERING STRENGTH — not radiance; the observing
+## geometry is divided out and the shader puts it back — plus the occluded fraction in
+## alpha. See [code]shaders/rings.gdshader[/code] for what the channels mean.
+func get_rings_texture_array(rings_name: StringName) -> TextureLayered:
 	return _rings_resources[rings_name][0]
 
 
-## Full-resolution (LOD 0) mipmapped alpha profile for the analytic ring-shadow
+## Full-resolution mipmapped alpha profile for the analytic ring-shadow
 ## term (see [code]shaders/_sun_occlusion.gdshaderinc[/code]): the shader picks
 ## the mip that matches the physical penumbra footprint.
 func get_rings_shadow_profile_texture(rings_name: StringName) -> Texture2D:
@@ -441,6 +441,9 @@ func _load_body_resources() -> void:
 	var fallback_texture_2d_path := asset_paths[&"fallback_body_texture_2d"]
 	assert(ResourceLoader.exists(fallback_texture_2d_path))
 	var fallback_texture_2d: Texture2D = load(fallback_texture_2d_path)
+	var bodies_2d_index := _build_prefix_index(bodies_2d_search)
+	var models_index := _build_prefix_index(models_search)
+	var meshes_index := _build_prefix_index(meshes_search)
 
 	for table in IVCoreSettings.body_tables:
 		for row in IVTableData.get_n_rows(table):
@@ -452,18 +455,21 @@ func _load_body_resources() -> void:
 			assert(surface_class != -1, "%s: every body needs a surface_class" % body_name)
 			var class_entry: Array = surface_class_index[surface_class]
 
-			var texture_2d: Texture2D = IVFiles.find_and_load_resource(bodies_2d_search, file_prefix)
+			var texture_2d_path: String = bodies_2d_index.get(file_prefix.to_lower(), "")
+			var texture_2d: Texture2D = load(texture_2d_path) if texture_2d_path else null
 			if !texture_2d:
 				texture_2d = fallback_texture_2d
 			
 			var texture_slice_2d: Texture2D = null
 			if IVTableData.get_db_bool(table, &"star", row):
-				texture_slice_2d = IVFiles.find_and_load_resource(bodies_2d_search,
-						file_prefix + "_slice")
+				var slice_path: String = bodies_2d_index.get(
+						(file_prefix + "_slice").to_lower(), "")
+				if slice_path:
+					texture_slice_2d = load(slice_path)
 			
 			var packed_model: PackedScene = null
 			var model_scale := METER
-			var model_path := IVFiles.find_resource_file(models_search, file_prefix)
+			var model_path: String = models_index.get(file_prefix.to_lower(), "")
 			if model_path:
 				packed_model = load(model_path)
 				model_scale = parse_model_scale(model_path.get_file()) * METER
@@ -472,7 +478,8 @@ func _load_body_resources() -> void:
 			# authored at true size in km. Without one, the body's surface class may name a
 			# generic mesh, which stands in for any body of that class and so must be resized
 			# to this one. Consumed in IVBodyVisual's shells-model branch as the mesh_override.
-			var mesh := IVFiles.find_and_load_resource(meshes_search, file_prefix) as Mesh
+			var mesh_path: String = meshes_index.get(file_prefix.to_lower(), "")
+			var mesh := (load(mesh_path) if mesh_path else null) as Mesh
 			var mesh_scale := IVUnits.KM
 			if !mesh:
 				mesh = class_entry[1]
@@ -744,6 +751,38 @@ func _map_regex_has_groups() -> bool:
 	return regex_match.get_string("prefix") == "ivprefix" and regex_match.get_string("tag") == any_tag
 
 
+## Maps a lower-cased file prefix to its resource path, for one scan per search directory
+## instead of the per-body directory walk [method IVFiles.find_resource_file] does. Its
+## traversal order and its first-match rule are reproduced exactly, including that a
+## subdirectory is only ever searched under its own name.
+func _build_prefix_index(dir_paths: Array[String]) -> Dictionary:
+	var index: Dictionary = {}
+	for dir_path in dir_paths:
+		_scan_prefix_dir(dir_path, index, "")
+	return index
+
+
+func _scan_prefix_dir(dir_path: String, index: Dictionary, only_prefix: String) -> void:
+	# Only ".import" files exist in exported projects, so we match those and strip the
+	# suffix (same idiom as [method IVFiles.find_resource_file]).
+	var dir := DirAccess.open(dir_path)
+	if !dir:
+		return
+	dir.include_hidden = false
+	dir.include_navigational = false
+	dir.list_dir_begin()
+	var file_name := dir.get_next()
+	while file_name:
+		if dir.current_is_dir():
+			if !only_prefix:
+				_scan_prefix_dir(dir_path.path_join(file_name), index, file_name.to_lower())
+		elif file_name.get_extension() == "import":
+			var prefix := file_name.get_slice(".", 0).to_lower()
+			if prefix and (!only_prefix or prefix == only_prefix) and !index.has(prefix):
+				index[prefix] = dir_path.path_join(file_name).get_basename()
+		file_name = dir.get_next()
+
+
 func _build_maps_index() -> Dictionary:
 	# prefix(lower) -> shell(StringName) -> {TextureParam(int): path}. One pass replaces a
 	# per-(body x channel) directory scan. Equirect maps first, then cubemaps with
@@ -825,52 +864,33 @@ func _deep_freeze_body_resources() -> void:
 
 
 func _load_rings_resources() -> void:
-	
-	const BACKSCATTER_FILE_FORMAT := "%s.backscatter.%s"
-	const FORWARDSCATTER_FILE_FORMAT := "%s.forwardscatter.%s"
-	const UNLITSIDE_FILE_FORMAT := "%s.unlitside.%s"
-	
+
 	for row in IVTableData.get_n_rows(&"rings"):
 		var rings_name := IVTableData.get_db_entity_name(&"rings", row)
 		var file_prefix := IVTableData.get_db_string(&"rings", &"file_prefix", row)
 
-		var texture_arrays: Array[Texture2DArray] = []
-		var profile_image_rgba: Image
-		for lod in RINGS_LOD_LEVELS:
-			var file_elements := [file_prefix, lod]
-			var backscatter_file := BACKSCATTER_FILE_FORMAT % file_elements
-			var backscatter: Texture2D = IVFiles.find_and_load_resource(rings_search, backscatter_file)
-			assert(backscatter, "Failed to load '%s'" % backscatter_file)
-			var forwardscatter_file := FORWARDSCATTER_FILE_FORMAT % file_elements
-			var forwardscatter: Texture2D = IVFiles.find_and_load_resource(rings_search, forwardscatter_file)
-			assert(forwardscatter, "Failed to load '%s'" % forwardscatter_file)
-			var unlitside_file := UNLITSIDE_FILE_FORMAT % file_elements
-			var unlitside: Texture2D = IVFiles.find_and_load_resource(rings_search, unlitside_file)
-			assert(unlitside, "Failed to load '%s'" % unlitside_file)
-			
-			# We load as textures, convert to images, then reconvert back to
-			# texture arrays. This is not ideal, but I was unable to save
-			# Texture2DArray as a file resource as of Godot 4.2 (it's a
-			# Resource, so it should be saveable).
-			var backscatter_image := backscatter.get_image()
-			var forwardscatter_image := forwardscatter.get_image()
-			var unlitside_image := unlitside.get_image()
-			var lod_images: Array[Image] = [backscatter_image, forwardscatter_image, unlitside_image]
-			var texture_array := Texture2DArray.new() # backscatter/forwardscatter/unlitside for LOD
-			texture_array.create_from_images(lod_images)
-			texture_arrays.append(texture_array)
-			if lod == 0:
-				profile_image_rgba = backscatter_image # all have the same alpha channel
+		# One imported CompressedTexture2DArray holds all three geometries as layers.
+		# NB: CompressedTexture2DArray does NOT extend Texture2DArray -- both derive from
+		# TextureLayered, so `is Texture2DArray` would be false for every imported one.
+		var texture_array: TextureLayered = IVFiles.find_and_load_resource(rings_search,
+				file_prefix)
+		assert(texture_array, "Failed to load rings texture '%s.*'" % file_prefix)
+		assert(texture_array.get_layers() == 3,
+				"Rings texture '%s' has %s layers; expected 3 (backscatter, forward scatter,"
+				% [file_prefix, texture_array.get_layers()] + " unlit side)")
+		assert(texture_array.has_mipmaps(),
+				"Rings texture '%s' has no mipmaps; a radial profile viewed at any distance"
+				% file_prefix + " is nothing but its own mip chain")
 
-		# Full-resolution mipmapped alpha profile for the analytic ring-shadow
-		# term; the source image is retained for CPU sampling. See
-		# get_rings_shadow_profile_texture() / get_rings_shadow_profile_image().
-		var shadow_profile_image := _make_alpha_r8_image(profile_image_rgba)
+		# Full-resolution mipmapped alpha profile for the analytic ring-shadow term; the
+		# source image is retained for CPU sampling. All three layers carry the same alpha.
+		# See get_rings_shadow_profile_texture() / get_rings_shadow_profile_image().
+		var shadow_profile_image := _make_alpha_r8_image(texture_array.get_layer_data(0))
 		@warning_ignore("return_value_discarded")
 		shadow_profile_image.generate_mipmaps() # can't fail: R8 is uncompressed
 		var shadow_profile_texture := ImageTexture.create_from_image(shadow_profile_image)
 
-		_rings_resources[rings_name] = [texture_arrays, shadow_profile_texture,
+		_rings_resources[rings_name] = [texture_array, shadow_profile_texture,
 				shadow_profile_image]
 
 

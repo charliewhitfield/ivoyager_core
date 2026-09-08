@@ -92,12 +92,21 @@ static func get_star_disc_luminance(absolute_magnitude: float, radius: float) ->
 ## leaves no light to draw.
 static func get_reflected_apparent_magnitude(geometric_albedo: float, radius: float,
 		camera_distance: float, star_illuminance: float, phase_factor: float) -> float:
+	return get_apparent_magnitude_from_illuminance(get_reflected_illuminance(
+			geometric_albedo, radius, camera_distance, star_illuminance, phase_factor))
+
+
+## Returns the illuminance (internal units) a sunlit body puts at the camera —
+## [method get_reflected_apparent_magnitude] before the magnitude conversion, for a caller
+## that has to ADD another source's flux to it first. Flux sums where magnitude does not,
+## so anything a body carries beyond its own disc (its rings) enters here.
+static func get_reflected_illuminance(geometric_albedo: float, radius: float,
+		camera_distance: float, star_illuminance: float, phase_factor: float) -> float:
 	if geometric_albedo <= 0.0 or radius <= 0.0 or camera_distance <= 0.0:
-		return INF
+		return 0.0
 	var angular_radius := radius / camera_distance
-	var illuminance := (geometric_albedo * phase_factor * star_illuminance
+	return (geometric_albedo * phase_factor * star_illuminance
 			* angular_radius * angular_radius)
-	return get_apparent_magnitude_from_illuminance(illuminance)
 
 
 ## Returns the disc-integrated phase function of a Lunar-Lambert surface at

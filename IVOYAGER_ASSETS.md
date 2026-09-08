@@ -841,10 +841,38 @@ memory.
 ### `/rings/*`
 
 Saturn ring light-scattering data created by
-[Björn Jónsson](https://bjj.mmedia.is/data/s_rings/index.html), converted to shader-sampler
-textures — three sets of nine, for backscatter, forward scatter and the unlit side.
+[Björn Jónsson](https://bjj.mmedia.is/data/s_rings/index.html), converted to a shader-sampler
+texture: one half-float image carrying his three radial brightness profiles as layers —
+backscattered light, forward-scattered light at a phase angle of 139°, and the unlit side —
+paired with his transparency profile as the fraction of the background each radius occludes. His profiles are measured in Voyager images over the Voyager
+stellar occultation optical depth, sampled every 5 km from 74,510 to 140,390 km from Saturn's
+centre. The file holds them in linear light with each one's own observing geometry divided out,
+so that what it carries is the ring's scattering strength and the shader can re-apply the
+geometry at the angles it is rendering.
 
-- Please credit Björn Jónsson.
+The colour is ours, and both halves of it are measured. How it varies with radius comes from
+Cassini's Visual and Infrared Mapping Spectrometer: that instrument's two visible spectral
+slopes, published as radial profiles by Hedman et al. (2013), describe a reflectance spectrum
+every 20 km, and integrating each of those against the CIE colour-matching functions gives its
+radius a colour. The A and B rings come out distinctly red, the C ring and the Cassini Division
+much less so, and the C ring reddens steadily outward across its whole width. How red the
+system is overall comes instead from disc-integrated photometry, which no spectrometer scan can
+supply: Mallama, Krobusek and Pavlov (2017) model Saturn's magnitude against ring opening angle
+and solar phase in each of U, B, V, R and I, and at zero opening the rings are edge-on and the
+model is the globe alone, so the difference between the two is the ring system's own light, band
+by band. That gives a colour index of B−V 0.93 — tan, and less red than the planet it circles.
+The two determinations share no instrument and no method, and they agree on the system's mean
+colour to 6%.
+
+The unlit side is given the same colour as the lit side, at its own luminance. Its light is the
+same particles seen through the layer rather than off it, so its scattering strength has their
+spectrum; over every radius the unlit-side scan reaches, its measured colour is within 5% of the
+lit-side scan's.
+
+- **Third-party:** the three brightness profiles and the transparency profile, wholly — please
+  credit Björn Jónsson. The radial colour is derived from Cassini VIMS data
+  (NASA/JPL-Caltech/University of Arizona; please cite Hedman et al. 2013).
+- **I, Voyager:** the colour of the tint. No separate copyright is asserted over it.
 
 ### `/asteroid_binaries/*`
 

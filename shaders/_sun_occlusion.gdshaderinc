@@ -31,8 +31,11 @@
 // Two occluder kinds: a ring plane with a 1D radial opacity profile (ring
 // shadows, with slant path and physical penumbra), and oblate spheroids as sky
 // discs with exact disc-overlap (eclipses, transits; penumbra/antumbra fall
-// out of the disc math). GDScript mirrors of the math live in
-// IVSunOcclusionManager; keep them in exact sync.
+// out of the disc math). IVSunOcclusionManager carries GDScript mirrors of the
+// ring transmission and the spheroid disc overlap for the CPU's own occlusion
+// queries; keep those in sync. What is NOT mirrored is each function's
+// degenerate-case guard, which answers to its own consumer - see
+// sun_occlusion_spheroid_fraction below.
 //
 // A receiving shader declares 'render_mode ambient_light_disabled', includes
 // this file (which declares the shared uniform interface below), captures the
@@ -96,6 +99,10 @@ uniform float sun_angular_radius = 0.0;
 uniform float sun_light_energy = 1.0;
 uniform vec4 occluder_data_a[6]; // xyz = center (world), w = equatorial radius
 uniform vec4 occluder_data_b[6]; // xyz = pole axis (unit), w = polar radius
+// xyz = the sun direction under this occluder's own pole stretch (unit), w = that stretch.
+// Both are constant over a frame, and evaluating them per fragment costs a normalize and a
+// divide on every lit pixel of every shader that includes this file.
+uniform vec4 occluder_data_c[6];
 uniform int occluder_count = 0; // 0 disables the spheroid term
 uniform bool compat_albedo_shadow = false; // see header: AO is ambient-only in gl_compatibility
 uniform vec3 ambient_light = vec3(0.0); // scene ambient (color x energy), rebuilt as emission; see header
@@ -146,33 +153,58 @@ float sun_occlusion_disc_fraction(float sun_ang_radius, float occluder_ang_radiu
 }
 
 
-// Visible fraction of the sun's disc past one oblate-spheroid occluder
-// ([param occluder_a] = center.xyz + equatorial radius, [param occluder_b] =
-// pole axis.xyz (unit) + polar radius). Oblateness matters: Saturn's flattening
-// is visible in its shadow on the rings.
-float sun_occlusion_spheroid_fraction(vec3 world_position, vec3 sun_dir,
-		float sun_ang_radius, vec4 occluder_a, vec4 occluder_b) {
-	vec3 offset = occluder_a.xyz - world_position;
+// Visible fraction of the sun's disc past occluder [param index] of the uniform set, given
+// the sine and cosine of the sun's own angular radius (loop-invariant, so the caller holds
+// them). Oblateness matters: Saturn's flattening is visible in its shadow on the rings.
+// Where the point lies at or inside the occluder's figure this answers ZERO - the harmless
+// answer for a can't-happen case, and the manager excludes a body from its own occluder
+// list, so only a ring plane can reach it (see sun_occlusion_inside_occluder).
+float sun_occlusion_spheroid_fraction(vec3 world_position, float sin_sun, float cos_sun,
+		int index) {
+	vec4 occluder_a = occluder_data_a[index];
+	vec4 occluder_c = occluder_data_c[index];
 	float equatorial_radius = occluder_a.w;
-	vec3 pole = occluder_b.xyz;
-	float polar_radius = occluder_b.w;
-	// Stretch space along the pole so the spheroid becomes a sphere of the
-	// equatorial radius; the same affine map applies to the sun ray. (The sun
-	// disc distorts by ~flattening x angular radius - negligible.)
-	float stretch = equatorial_radius / polar_radius - 1.0;
-	vec3 offset_stretched = offset + stretch * dot(offset, pole) * pole;
-	vec3 sun_dir_stretched = normalize(sun_dir + stretch * dot(sun_dir, pole) * pole);
-	float dist = length(offset_stretched);
-	if (dist <= equatorial_radius) {
-		return 1.0; // at/inside the occluder; the manager excludes self-occlusion
+	vec3 pole = occluder_data_b[index].xyz;
+	// Space is stretched along the pole so the spheroid becomes a sphere of the equatorial
+	// radius; the manager applies the same affine map to the sun ray. (The sun disc
+	// distorts by ~flattening x angular radius - negligible.)
+	vec3 offset = occluder_a.xyz - world_position;
+	vec3 offset_stretched = offset + occluder_c.w * dot(offset, pole) * pole;
+	float dist_squared = dot(offset_stretched, offset_stretched);
+	if (dist_squared <= equatorial_radius * equatorial_radius) {
+		return 0.0;
 	}
-	vec3 to_occluder = offset_stretched / dist;
-	if (dot(to_occluder, sun_dir_stretched) <= 0.0) {
-		return 1.0; // occluder is not sunward of the fragment
+	float dist = sqrt(dist_squared);
+	float cos_separation = dot(offset_stretched / dist, occluder_c.xyz);
+	// The two discs miss whenever `separation >= sun + occluder`, which is this comparison
+	// of cosines - and they nearly always do, so it is taken before the inverse trig that
+	// only an actual overlap needs. It subsumes the not-sunward case, and is exact where
+	// treating that case separately was not.
+	float sin_occluder = equatorial_radius / dist;
+	float cos_occluder = sqrt(max(1.0 - sin_occluder * sin_occluder, 0.0));
+	if (cos_separation <= cos_sun * cos_occluder - sin_sun * sin_occluder) {
+		return 1.0;
 	}
-	float occluder_angular_radius = asin(clamp(equatorial_radius / dist, 0.0, 1.0));
-	float separation = acos(clamp(dot(to_occluder, sun_dir_stretched), -1.0, 1.0));
-	return sun_occlusion_disc_fraction(sun_ang_radius, occluder_angular_radius, separation);
+	return sun_occlusion_disc_fraction(sun_angular_radius, asin(sin_occluder),
+			acos(clamp(cos_separation, -1.0, 1.0)));
+}
+
+
+// True where [param world_position] lies inside one of the occluding spheroids, by the
+// same pole stretch the shadow term uses - so the figure tested is exactly the one that
+// casts the shadow. A ring plane runs through its planet and is the only receiver with
+// interior fragments; rings.gdshader discards them with this.
+bool sun_occlusion_inside_occluder(vec3 world_position) {
+	for (int i = 0; i < occluder_count; i++) {
+		vec3 offset = occluder_data_a[i].xyz - world_position;
+		float equatorial_radius = occluder_data_a[i].w;
+		vec3 pole = occluder_data_b[i].xyz;
+		vec3 stretched = offset + occluder_data_c[i].w * dot(offset, pole) * pole;
+		if (dot(stretched, stretched) < equatorial_radius * equatorial_radius) {
+			return true;
+		}
+	}
+	return false;
 }
 
 
@@ -226,9 +258,10 @@ float sun_occlusion_visible_fraction(vec3 world_position) {
 				ring_normal, ring_texture_inner, ring_texture_outer, sun_angular_radius,
 				ring_alpha_r8, ring_alpha_width);
 	}
+	float sin_sun = sin(sun_angular_radius);
+	float cos_sun = cos(sun_angular_radius);
 	for (int i = 0; i < occluder_count; i++) {
-		visible *= sun_occlusion_spheroid_fraction(world_position, sun_direction,
-				sun_angular_radius, occluder_data_a[i], occluder_data_b[i]);
+		visible *= sun_occlusion_spheroid_fraction(world_position, sin_sun, cos_sun, i);
 	}
 	return visible;
 }
