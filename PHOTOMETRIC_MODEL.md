@@ -619,11 +619,17 @@ Shells (`shells.tsv`) are concentric sub-models around a body's surface.
 
 ### Cloud shells
 
-A cloud deck (e.g. Earth's) is an overlay shell whose color is white with coverage in
-the alpha channel. It is lit by the same light as the surface, so under an exposure
-metered for the *cloudless* surface albedo, cloud tops overexpose by a factor of a few —
-bright, occasionally clipped white, which matches real orbital photography. No separate
-cloud compensation exists, deliberately: compensating for clouds would crush the surface.
+A cloud deck (e.g. Earth's) is an overlay shell carrying a reflectance in rgb and an
+opacity in alpha. The two are not independent: a source cloud map supplies one number per
+texel, and the conservative two-stream relates them as `A = 1 − (1 − R)²`, `C = R / A`, so
+`A·C = R` identically — the deck's own light is the source's, and what the split fixes is
+the surface beneath it (Earth's deck reflects 0.5–0.97, mean 0.702 over cloud, where white
+plus alpha had pinned it at 1.0 and let 30 % of the ocean through solid overcast). The
+derivation is in `records/Earth.md` in the assets build tree. It is lit by the same light
+as the surface, so under an exposure metered for the *cloudless* surface albedo, cloud tops
+overexpose by a factor of a few — bright, occasionally clipped white, which matches real
+orbital photography. No separate cloud compensation exists, deliberately: compensating for
+clouds would crush the surface.
 
 ### Atmospheres
 
@@ -1725,9 +1731,14 @@ lever a capped pass cannot offer is one the shader does not need.
     radiance carries no µ0 projection (which is why this model's own glow survives to
     µ0 −0.13 while the deck inside it does not), ENDED by a shadow graded through the deck's
     own thickness rather than cut at a line. A layer law without that grading is worse, not
-    better. Both need the deck's optical depth separated from its coverage, which
-    `Earth.clouds.albedo.512.png` cannot supply: RGB is 255 in one distinct value with alpha
-    carrying everything, so reflectance is pinned at 1.0 and a range tag would buy nothing.
+    better. Both need the deck's optical depth separated from its coverage, which no asset
+    here supplies. `Earth.clouds.albedo.512.png` was rebuilt on 2026-08-28 and does now carry
+    a reflectance (0.5–0.97) and an opacity rather than white plus alpha — but both are
+    functions of the source's ONE number per texel, so nothing in it distinguishes a texel
+    half covered by opaque cloud from one fully covered by thin cloud. That needs a re-source
+    to a product publishing cloud optical thickness and cloud fraction separately (MODIS
+    does), not a re-derivation. A range tag would still buy nothing: the deck spans half the
+    scale and a tag is for a map that does not.
   - **Fixed: the shells were lit plane-parallel, so nothing was lit past the terminator.**
     Every shell took `albedo x max(mu0, 0) x atm_sun_transmittance`: flux entering the column
     goes as mu0, so illumination was pinned to zero at the geometric terminator WITH A CORNER,
@@ -1787,9 +1798,10 @@ lever a capped pass cannot offer is one the shader does not need.
     glow, and it is deck-only: the ground IS a horizontal surface and its mu0 projection is
     right. It needs the shadow graded through the deck's own thickness rather than cut at a
     line (a cutoff law only moves the wall -- rejected above), and both halves need the deck's
-    optical depth separated from its coverage, which `Earth.clouds.albedo.512.png` cannot
-    supply. Also unresolved and unrelated: at mu0 < 0.06 Earth's ocean cannot compete on
-    albedo at all -- 0.05 against a glow that is 65-80 % of the pixel.
+    optical depth separated from its coverage, which the rebuilt deck still does not carry
+    (above) -- a re-source, not a re-derivation. Also unresolved and unrelated: at
+    mu0 < 0.06 Earth's ocean cannot compete on albedo at all -- 0.05 against a glow that is
+    65-80 % of the pixel.
   - **The twilight curve runs 2.3x over Earth's observed illuminance, and that is the expected
     sign.** 927 lx at sunset against ~400 measured. Single scattering with no ozone: the
     Chappuis band is what takes real twilight down, over a horizontal path through the ozone
