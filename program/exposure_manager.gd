@@ -101,10 +101,17 @@ extends Node
 ## Default [member background_peak_magnitude_per_arcsec2], separated out so
 ## [method compute_sky_energy] can be called without this node.
 const DEFAULT_BACKGROUND_PEAK_MAGNITUDE_PER_ARCSEC2 := 20.0
+## The fixed exposure with physical light off, and 2^[member exposure_max_ev] at
+## its default - so a project running without the compensating camera renders
+## every self-luminous source at the same level this one rests at, and toggling
+## the system changes what the camera RESPONDS to rather than how bright the sky
+## is. Duplicated as the [code]iv_exposure[/code] default in ivoyager_core.cfg,
+## which is what a project gets with this node erased; the two must agree.
+const INACTIVE_EXPOSURE := 2.0
 
 ## Current relative exposure; the value written to the [code]iv_exposure[/code]
-## shader global. 1.0 whenever inactive. Read-only.
-static var exposure := 1.0
+## shader global. [constant INACTIVE_EXPOSURE] whenever inactive. Read-only.
+static var exposure := INACTIVE_EXPOSURE
 ## The metered and adapted auto exposure, in EV relative to the authored sky
 ## look (log2 of the exposure it alone would apply): rests at
 ## [member exposure_max_ev] fully dark-adapted and falls as metering pulls
@@ -335,7 +342,7 @@ func _exit_tree() -> void:
 	if physical_active:
 		_restore_scene_values()
 		physical_active = false
-	exposure = 1.0
+	exposure = INACTIVE_EXPOSURE
 	auto_exposure_ev = 0.0
 	_neutralize_shader_globals()
 
@@ -383,7 +390,7 @@ func _apply_transition() -> void:
 	else:
 		_restore_scene_values()
 		physical_active = false
-		exposure = 1.0
+		exposure = INACTIVE_EXPOSURE
 		auto_exposure_ev = 0.0
 		_neutralize_shader_globals()
 
@@ -1238,13 +1245,13 @@ func _clear_procedural() -> void:
 	_camera = null
 	_star = null
 	_snap_next = true
-	exposure = 1.0
+	exposure = INACTIVE_EXPOSURE
 	auto_exposure_ev = 0.0
 	_neutralize_shader_globals()
 
 
 func _neutralize_shader_globals() -> void:
-	RenderingServer.global_shader_parameter_set(&"iv_exposure", 1.0)
+	RenderingServer.global_shader_parameter_set(&"iv_exposure", INACTIVE_EXPOSURE)
 	RenderingServer.global_shader_parameter_set(&"iv_emission_energy_scale", 1.0)
 	RenderingServer.global_shader_parameter_set(&"iv_emission_luminance_scale", 0.0)
 	RenderingServer.global_shader_parameter_set(&"iv_limb_scale", 1.0)

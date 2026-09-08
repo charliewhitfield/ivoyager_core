@@ -25,9 +25,13 @@ scene every frame and adapts a relative exposure, the way an eye or a camera on
 Four shader globals carry the state to materials:
 
 - `iv_exposure` — the relative exposure. 1.0 is the *authored empty-sky look*; smaller
-  values darken self-luminous content (stars, the sky panorama) as the camera stops
-  down for a bright subject. Lit surfaces do not read it; they receive exposure baked
-  into `light_energy` by `IVDynamicLight` (never both — that would double-expose).
+  values darken self-luminous content (stars, the sky panorama, a body's PSF quad, a
+  star's disc) as the camera stops down for a bright subject. Lit surfaces do not read
+  it; they receive exposure baked into `light_energy` by `IVDynamicLight` (never both —
+  that would double-expose). It is the one global that is not neutral with the system
+  off: it holds `IVExposureManager.INACTIVE_EXPOSURE` (2.0, matching the
+  `exposure_max_ev` default) so a project without the compensating camera renders every
+  self-luminous source at the level this one rests at.
 - `iv_emission_luminance_scale` — rendered units per cd/m² (exposure × gain), which
   renders an emission map (city lights) at the physical luminance its `shells.tsv`
   `emission_luminance` column asserts. 0.0 while the system is off.
@@ -38,9 +42,9 @@ Four shader globals carry the state to materials:
 - `iv_limb_scale` — rebases the atmosphere-limb glow while the system is active
   (see *Atmosphere limbs* below).
 
-Every one is neutral whenever physical light is off — 1.0 where it multiplies an authored
-value, 0.0 where it gates a channel the authored look does not use — so every shader
-renders the authored look unchanged.
+The other three are neutral whenever physical light is off — 1.0 where one multiplies an
+authored value, 0.0 where one gates a channel the authored look does not use — so every
+shader renders the authored look, at the fixed exposure `iv_exposure` names.
 
 **Why not Godot's own physical light units and auto exposure?**
 1. Both come with `CameraAttributesPhysical`, whose exposure and auto-exposure act

@@ -192,7 +192,8 @@ static func solve_handoff(magnitude_at_unit_distance: float, mean_radius: float,
 			var flux := 10.0 ** (-0.4 * (apparent_magnitude - psf_settings.intensity_faint_mag))
 			var intensity := psf_settings.intensity_scale * flux ** psf_settings.intensity_gamma
 			# Mirrors the shader chain, which multiplies iv_exposure unconditionally
-			# (the static is 1.0 whenever physical light is inactive).
+			# (the static carries INACTIVE_EXPOSURE while physical light is off, which
+			# is what the global holds then, so the two agree in either mode).
 			intensity *= IVExposureManager.exposure
 			if intensity <= 1.0:
 				pixels = HANDOFF_FALLBACK # no saturated core to match; the disc is always bigger

@@ -124,7 +124,7 @@ uniform float reference_tan_half_fov = 0.4663; // tan(fov/2) where compensation 
 uniform float fov_compensation = 1.0; // 0 = off (fixed brightness); 1 = full 1/tan^2(fov/2) law
 
 // Relative exposure of IVExposureManager's compensating camera: 1.0 = the authored
-// empty-sky look (and the constant value whenever that system is off); metering a bright
+// empty-sky look, and its INACTIVE_EXPOSURE whenever that system is off; metering a bright
 // body pulls it toward 0. It multiplies flux rather than pixels -- through the size law,
 // like the zoom/resolution compensations -- so a dimmed star saturates a correspondingly
 // narrower core.

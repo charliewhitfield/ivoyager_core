@@ -105,7 +105,7 @@ uniform float brightness = 1.0;      // HDR-capable surface-brightness multiplie
 uniform float angular_radius = 0.0;  // star radius / camera distance (sun-mode sets per frame)
 uniform float handoff_low = -2.0;    // px on-screen radius at/below which the quad replaces this disc
 uniform float handoff_high = -1.0;   // px at/above which this disc fully replaces the quad core (defaults saturate ON)
-global uniform float iv_exposure;    // compensating-camera exposure; 1.0 when off (see stars.gdshader)
+global uniform float iv_exposure;    // compensating-camera exposure; fixed when off (see stars.gdshader)
 
 // Photosphere parameters (units and physics in the anchors above; scales are cells per
 // radian of surface arc). Defaults are the Sun; shells.tsv columns of the same names can
