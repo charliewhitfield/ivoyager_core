@@ -68,8 +68,10 @@ render_mode cull_disabled, skip_vertex_transform, ambient_light_disabled, blend_
 // scattering strength by the second - and `scattering_scale`, `opposition_surge` and
 // `opposition_width` are fitted together with the level, so moving one alone breaks the
 // anchor. `back_phase` and `forward_phase` are the source profiles' own phase angles.
-// `forward_level` and `forward_reddening` are the two judgment cells. Every default below
-// is Saturn's shipped value.
+// `forward_level` is measured too, on Dones et al.'s observed phase curve, but it is
+// EFFECTIVE: it carries the multiple scattering this model has no term for as well as the
+// particles' own phase function. `forward_reddening` is the one judgment cell left. Every
+// default below is Saturn's shipped value, and they go stale - check them against the table.
 //
 // PHASE carries the level and the texture carries only the shape, the three profiles being
 // published independently peak-normalized. It is evaluated per fragment, so a close camera
@@ -185,13 +187,13 @@ global uniform float iv_psf_sigma;
 // photometry, all from rings.tsv; see the header
 uniform float back_phase = 0.0; // radians; phase angle of texture layer 0
 uniform float forward_phase = 2.4260765; // radians; phase angle of texture layer 1
-uniform float forward_level = 0.25; // lit brightness at forward_phase, relative to back_phase
+uniform float forward_level = 0.04; // lit brightness at forward_phase, relative to back_phase
 uniform float forward_reddening = 1.05; // red multiplier at forward_phase
-uniform float unlit_level = 0.1085; // texture layer 2's level, relative to layer 0
+uniform float unlit_level = 0.1392; // texture layer 2's level, relative to layer 0
 uniform float clumping = 1.0e6; // optical-depth spread across the beam; see the header
-uniform float opposition_surge = 0.515; // fractional brightening added at zero phase
-uniform float opposition_width = 0.0154113; // radians; e-folding width of that surge
-uniform float scattering_scale = 0.545; // overall level; the profiles are peak-normalized
+uniform float opposition_surge = 0.418; // fractional brightening added at zero phase
+uniform float opposition_width = 0.0115366; // radians; e-folding width of that surge
+uniform float scattering_scale = 0.486; // overall level; the profiles are peak-normalized
 
 // set by rings.gd every frame
 uniform vec3 illumination_position;

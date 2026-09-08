@@ -227,21 +227,29 @@ var default_albedo := 0.3
 ## real photographs show them. Derived from the shipped Saturn assets by
 ## dividing the brightest radiance the shader produces over the whole radial
 ## profile by the geometry term the manager uses - for this face the SATURATED
-## LIMIT, the term being monotone in optical depth, which makes the number
-## exactly independent of opening angle (1.040 at 26, 18, 12 and 8 deg alike).
-## Re-derive it with scratch/rings/meter_albedos.py whenever the asset's radial
-## distribution changes; it is not a property of the rings but of the file.
-var ring_meter_albedo := 1.04
-## The same for the UNLIT face, whose term has an interior peak instead, so this
-## one does drift a little with opening (2.08 at 26 deg, 1.60-1.65 from 18 deg
-## down to 8); the median is taken. It is LARGER than the lit face's, which looks wrong and is
-## not: both faces take the same phase term, and an unlit view is only reachable
-## at a large phase angle, so the phase level is what makes that face dim. The
-## unlit face needs its own candidate at all because it is not the faint object
-## it looks like from the lit side - an optically thin ring transmits nearly as
-## much as it reflects, so the C ring and the Cassini Division come through
-## bright there while the B ring goes dark.
-var ring_meter_unlit_albedo := 1.63
+## LIMIT, the term being monotone in optical depth, which makes the number nearly
+## independent of opening angle (1.173 to 1.210 across the whole range the
+## openness ramp below gives the candidate weight, so one number costs 0.02 EV at
+## worst). Re-derive it with scratch/rings/meter_albedos.py whenever the asset,
+## [code]scattering_scale[/code] or [code]unlit_level[/code] moves: it is not a
+## property of the rings but of the built file, and a stale pair is a flat
+## exposure error with nothing to announce it.
+var ring_meter_albedo := 1.19
+## The same for the UNLIT face, whose term has an interior peak instead. The peak
+## sits at optical depth mu, so as the rings close it walks out of the outer B ring
+## and into the C ring and the implied anchor swings with it: 1.515 at 26.7 deg,
+## 0.898 at 16, and about 1.05 from 12 down. One number therefore costs 0.38 EV at
+## worst on this face, which the openness ramp does NOT cover - both extremes sit
+## at full weight - so the value is the minimax over that range rather than a
+## median, and the alternative to accepting it is a per-mu table. It is comparable
+## with the lit face's, which is not the accident it looks: both faces take the
+## same phase term, and an unlit view is only reachable at a large phase angle, so
+## the phase level is what makes that face dim. The unlit face needs its own
+## candidate at all because it is not the faint object it looks like from the lit
+## side - an optically thin ring transmits nearly as much as it reflects, so the C
+## ring and the Cassini Division come through bright there while the B ring goes
+## dark.
+var ring_meter_unlit_albedo := 1.17
 ## Ring openness - the sine of the camera's elevation above the ring plane -
 ## below which the rings begin to hand the meter back, and above which they hold
 ## it in full. A ring system closing toward edge-on is the same problem as a

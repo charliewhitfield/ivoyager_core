@@ -922,9 +922,21 @@ leverage grows sharply as the reference narrows -- span 0.0124 at 26.7 degrees, 
 **0.1483 at the measured geometry** -- with the fit preferring the most clumped end at every
 one of them. That is not a measurement of clumping, because a low clumping shape flattens
 saturation in exactly the way the radial variation of particle albedo does, which is the same
-confound that makes a free lit fit return an impossible geometry two paragraphs above. So the
-cell stays at the homogeneous limit -- the family's darkest transmission, and the closest to
-what real unlit images show -- and separating the two is in the TODO.
+confound that makes a free lit fit return an impossible geometry two paragraphs above.
+
+**What settles it is the transparency layer's own definition, and it is not a fit at all.**
+The alpha channel stores what the archive calls a NORMAL OPTICAL DEPTH -- `-sin(B) ln(T)`
+from a stellar occultation at one ring elevation, Cassini UVIS beta Centauri at 66.7 degrees.
+For a layer whose depth varies across the beam that is by definition the APPARENT depth at
+that elevation, so it already carries whatever clumping the ring has. Read through the
+homogeneous law it reproduces the measured transmission exactly at the geometry it was
+measured at and approximates it elsewhere; read through a clumped law it would count the same
+inhomogeneity twice. The cell therefore stays at the homogeneous limit -- which is also the
+family's darkest transmission, and the closest to what real unlit images show -- and moving
+off it is not a one-cell change: it needs the mean depth re-derived from occultations
+spanning elevation, and the ceiling scales as `sin(B)`, so a low-elevation set can only reach
+the A ring, where the wakes are strongest and where one shape parameter shared with a
+wake-free C ring is least defensible.
 
 **There is no floor under the unlit face.** Jónsson's unlit profile stops falling at about
 0.047 by tau 2.33 and is flat to 6 % from there to the profile's deepest 8.5 -- a factor of
@@ -951,6 +963,51 @@ evaluated per fragment, so a close camera gets the local opposition spot under i
 face a fragment shows is also decided per fragment, from the signs of the two elevations,
 so a camera near the plane sees the lit face on one side of itself and the unlit face on
 the other.
+
+**`forward_level` is 0.04, and it is a MEASURED phase ratio rather than the continuity
+anchor it was until 2026-09-08.** The instrument is Dones, Cuzzi & Showalter's (1993)
+Voyager phase curve for the inner A ring at 122500 km, plotted as scaled reflectivity
+`I/F 4(mu+mu0)/mu0` -- which at one radius is exactly this quantity, the geometry and the
+optical depth cancelling in the ratio. It gives **0.045 to 0.053** at 139 degrees against a
+surge-free extrapolation to zero phase, and dividing by the 1.229 the asset's own two lit
+layers differ by at that radius (they are peak-normalized independently, which is what this
+cell exists to undo) puts the cell at 0.037 to 0.043. Two independent checks agree. The
+published magnitude relation, which sees the cell only weakly through
+`forward_level^(alpha/139)` over its 6.5 degree window, prefers lower monotonically: refitting
+the surge at each candidate, the worst residual against the published curve falls from 3.2 %
+at 0.25 to 1.9 % at 0.04. And the ring's brightness against Saturn's own globe in the
+reference frames, which is the only image measurement available, put the old 0.25 between 15
+and 32 times too bright at 138 and 152 degrees -- a bound rather than a value, its denominator
+being a limb crescent, where the globe shader has no forward-scattering term of its own.
+`scattering_scale`, `opposition_surge` and `opposition_width` are fitted WITH it and were
+re-derived in the same pass (0.457 to 0.486, 0.515 to 0.418, 0.883 to 0.661 deg); the asset
+itself is unchanged, all four being table cells.
+
+What that number really carries is worth stating, because it is not the particles' own phase
+function. Published values for those are far steeper -- the Dones power law at the index
+Porco et al. (2008) fit to Cassini gives 0.021 at 139 degrees, and the index Salo & French
+(2010) prefer for the B ring gives 0.010 -- and the gap is multiple scattering, which
+dominates the lit face at high phase (27 times single scattering at 155 degrees in Dones'
+own decomposition) and which this model has no term for. So 0.04 is an EFFECTIVE ratio:
+particle phase function times the multiple scattering that is missing, calibrated on the
+observed ring rather than on its particles. It is therefore geometry-dependent in principle,
+the multiple-scattering share growing with albedo and optical depth, and one constant cannot
+be exactly right everywhere.
+
+**`forward_reddening` still has no cited source, and no available image can give it one.**
+Its 1.05 is worth +2.8 % of rendered red-over-blue across the whole phase range (measured
+1.585 at 15 degrees against 1.629 at 138), about four codes of 255 in blue. The eight RGB
+"natural colour" frames in the reference set cannot resolve that: their ring red-over-blue
+spans **0.68 to 3.31** with no relation to phase, two frames 8 degrees apart differing by
+2.2 times, so they carry no common white balance and cannot arbitrate a few percent. The
+asset's own colour comes from five-band disc-integrated photometry with no image anywhere in
+the chain, which is the better instrument by far. The same measurement settles the
+opposition surge's missing colour, which is real and tiny: the surge is stronger in blue
+(C3 0.525 in B against 0.378 in V), so the rings run B-V 0.844 at exactly zero phase against
+0.931 from 2 degrees out, and at a fixed luminance that whole spike is +4.3, -0.8 and -7.5
+codes of 255 -- inside a window under two degrees wide, where the achromatic surge itself
+moves the level by about 90. An achromatic `opposition_surge` is not a defect worth a
+chromatic term.
 
 **Both faces take that same phase term**, which is physics rather than convenience: the
 phase angle is the sun-ring-observer angle, so a photon's scattering angle is `180 - phase`
@@ -989,6 +1046,12 @@ published value at a 26.7 degree opening and 1.11, 1.25 and 1.42 at 20, 12 and 6
 The sign is what single scattering has to do -- as the opening closes, the slab saturates
 toward `mu0/(mu+mu0)` and the flux falls only as `sin(beta)`, where the real ring loses more
 than that to mutual shadowing between its own particles, which this model has no term for.
+That is an accepted deficiency and not an open question. Anchoring at the widest opening is
+what makes it one-signed -- 0.48 EV by 6 degrees and 0.73 by 3, never negative -- and the
+relation cannot calibrate the missing term anyway over the range where it would matter: its
+phase coefficients hand the whole system's phase dimming to the rings, which at a small
+opening, where the rings are a small part of the system, is numerically unstable (at 3
+degrees of opening and 4 of phase it returns a ring mean I/F of 0.02).
 
 At the far end of that range the rings go essentially black, and that too is the model rather
 than a defect. Every term rides `mu0`, so a sun IN the ring plane takes the whole system to
@@ -1184,6 +1247,32 @@ interior peak at `tau = ln(b/a)/(b-a)` on the unlit one. That keeps optical dept
 manager and makes the two branches MEET at the plane instead of switching (measured, 0.998
 lit against 0.988 unlit at a 0.05 deg opening) -- a thin ring really does look the same from
 either side.
+
+**One anchor per face holds on the lit face and not quite on the unlit one, and both are
+properties of the built FILE rather than of the rings.** Each stands in for a max over radius
+the mirror cannot afford, so it is exact only at the opening it was derived at. On the lit
+face there is nothing to drift: the implied anchor runs 1.103 to 1.138 across the whole range
+the openness ramp below gives the candidate weight, worth 0.02 EV. On the unlit face the
+term's peak sits at `tau = mu`, so as the rings close it walks out of the outer B ring and
+into the C ring, and the anchor swings with it -- 1.424 at 26.7 deg, 0.844 at 16, about 1.0
+from 12 down -- which one number costs 0.38 EV at worst, at full ramp weight rather than
+where the ramp has released. That is a third of a stop on the fainter face against a per-mu
+table as the alternative, and it is accepted; the cell takes the minimax rather than a
+median. What is NOT acceptable is letting either go stale: they move with the asset and with
+`scattering_scale` and `unlit_level`, and after the 2026-09-08 transparency re-source the
+unlit anchor was a full stop out with nothing to announce it. Re-derive both with
+`scratch/rings/meter_albedos.py` (in the assets build tree) whenever any of the three moves.
+
+**The phase mirror uses the body's CENTRE where the shader uses each fragment's own**, so
+close in the two disagree about the opposition surge. The error is bounded by the surge's own
+amplitude and runs BOTH ways, contrary to what this document said until 2026-09-08: over
+standoffs of 3 to 200 ring radii it reaches +0.27 EV where the centre sits inside the 0.883
+deg window and no ring fragment does, and -0.51 EV where a ring fragment sits in the camera's
+own shadow while the centre is degrees away. Neither shows. The metering key leaves a stop of
+headroom above the metered subject, so even the worst under-metered case puts the surge spot
+at 0.71 of full scale rather than clipping, and both directions converge beyond about 100
+ring radii, where the ring subtends too little for a fragment's phase to differ from the
+centre's.
 
 **Neither face clips at any distance tested** -- 3.5 to 30 body radii, both faces, an 18 deg
 opening: 0.00 % of every frame above 0.99, with p99.9 between 0.25 and 0.65. So a ring that
@@ -1957,61 +2046,13 @@ lever a capped pass cannot offer is one the shader does not need.
     the fed count under uniform loop bounds, and the atmosphere quadrature is the term that
     multiplies. The engine's directional-light count is the only hard limit (sibling).
 
-- **Rings: what is left.** Each of these is a judgment call rather than a bug:
-  - **`forward_level` 0.25 is a continuity anchor, not a measurement.** Nothing constrains
-    it: the published magnitude relation that anchors the
-    level and the surge stops at 6.5 deg of phase, so everything past that is this cell's
-    extrapolation. Jónsson's own caveat is that his high-phase end "should probably be
-    even darker", so a smaller value is defensible; the 71-frame reference set
-    (`MANIFEST.tsv`, `Saturn.rings.reference#*`, 54 with a stated phase from 0 to 179 deg)
-    is better evidence than his montage.
-  - **`clumping` is pinned against a CONFOUND now, not against an absence of leverage, and
-    separating the two is open.** The reason this document gave until 2026-09-08 -- that the
-    lit profile cannot see the parameter -- was measured at the 26.7 degree reference that
-    shipped until 2026-09-06, and it does not survive a narrower one: the lit R2 spans 0.0124
-    at 26.7 degrees, 0.0970 at 12 and 0.1483 at the measured geometry, preferring the most
-    clumped end at every one. That is not evidence FOR clumping, because a low clumping shape
-    flattens saturation exactly as the radial variation of particle albedo does -- the same
-    confound that makes a free lit fit return an impossible geometry. What would separate
-    them is a term for that albedo variation, which the model does not have; until then the
-    homogeneous limit is a choice and not a measurement, and the unlit profile (span 0.0079)
-    genuinely cannot arbitrate it.
-  - **A ring shadow renders truly black, and the real one is not.** What lights it is not
-    Saturnshine off the lit hemisphere: a ring element inside the shadow sees the planet's
-    NIGHT side by construction, the lit hemisphere being on the other side of the
-    terminator, so the only planetary light reaching it is the thin crescent near the
-    terminator's limb. The larger term is the
-    rings' own -- the shadowed region is surrounded by brilliantly lit ring, and multiple
-    scattering carries light into it. Neither is modelled and neither is estimated here.
-    (The same term the other way, ringshine on the globe's night side, is what makes
-    Saturn's dark hemisphere visible beside unlit rings in one exposure, as in PIA12590 --
-    though that frame cannot constrain the ring LEVEL, ringshine being proportional to it.)
-    Both need a light term rather than a ring-shader change.
-  - **The metering mirror uses the body-centre phase where the shader uses each fragment's
-    own.** At a close standoff the opposition surge is a local spot on the rings, so the
-    candidate meters as though the whole system were surging and pulls exposure down about
-    16 % more than it needs to. The error is in the safe direction and vanishes with
-    distance.
-  - **One anchor per face cannot hold across the whole opening range.** Derived from the
-    brightest radiance the shader actually produces, the lit face's implied anchor is stable
-    at 1.126-1.130 from a 26 deg opening down to 12 deg and then climbs to 2.06 by 0.2 deg,
-    as the optically thin dusty regions saturate; the unlit face's runs the other way, 1.049
-    down to 0.626. So a constant anchor under-defends the lit face toward grazing and
-    over-defends the unlit one. What decides how much of that is wanted is the openness
-    ramp above, which releases the candidate as the rings close rather than re-levelling it.
-  - **`forward_reddening` IS THE ONLY PHASE-COLOUR TERM AND HAS NO CITED SOURCE**, and the
-    surge now has a measured colour it cannot carry. Its 1.05 is worth 0.05 mag of colour
-    index across the whole phase range, and the unlit face takes a flat tint with no phase
-    dependence at all. (The asset's own colour is measured -- see the section above --
-    by `scripts/saturn_rings_color.py` and `scripts/saturn_rings_radial_color.py` in the
-    assets build tree.) Measured from the same five-band model, the opposition surge is
-    STRONGER IN BLUE -- C3 is 0.525 in B against 0.378 in V -- so the rings run B-V 0.844 at
-    exactly zero phase, 0.924 by 1 degree and flat at 0.931 from 2 out to the 6 degrees Earth
-    can see. `opposition_surge` is achromatic, so that spike is not drawn at all; the asset
-    colour above is deliberately the PLATEAU, since one fixed tint has to serve every phase.
-    Opening angle moves it a further 0.06 mag (0.931 at 26.7 degrees, 0.992 at 5) with the
-    sign multiple scattering gives, which this single-scattering model also has no term for.
-  - **Single scattering with no mutual shadowing runs the ring system bright as the rings
-    CLOSE**, to 1.42 of the published relation by a 6 degree opening (the section above has
-    the numbers). Both the plane and the point carry it identically, so nothing steps; what
-    it would take to fix is a term the model does not have.
+- **Rings: a ring shadow renders truly black, and the real one is not.** What lights it is
+  not Saturnshine off the lit hemisphere: a ring element inside the shadow sees the planet's
+  NIGHT side by construction, the lit hemisphere being on the other side of the terminator,
+  so the only planetary light reaching it is the thin crescent near the terminator's limb.
+  The larger term is the rings' own -- the shadowed region is surrounded by brilliantly lit
+  ring, and multiple scattering carries light into it. Neither is modelled and neither is
+  estimated here. (The same term the other way, ringshine on the globe's night side, is what
+  makes Saturn's dark hemisphere visible beside unlit rings in one exposure, as in PIA12590
+  -- though that frame cannot constrain the ring LEVEL, ringshine being proportional to it.)
+  Both need a light term rather than a ring-shader change.
