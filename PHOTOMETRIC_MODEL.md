@@ -1944,16 +1944,22 @@ lever a capped pass cannot offer is one the shader does not need.
     scatter 2x about any smooth trend -- but the B ring sits as a deep bump against that
     scatter, between a C ring and an A ring that both roughly follow it. Fixing it means a
     better occultation than the source carries, i.e. a re-source of the transparency
-    profile. **Measured 2026-09-08 and confirmed** -- Cassini UVIS at a 66.7 degree ring
-    elevation, eleven occultations combined, puts the B ring 2.02x deeper at the median and
-    3.04x at p90, agreeing with the frame on three of its four zones while the C ring and
-    the Cassini Division move 0.89-0.94x. The asset is NOT yet rebuilt, and what holds it
-    is a second consequence: with the censoring gone the unlit profile no longer constrains
-    its own camera elevation (the residual moves 0.005 across 50-89 degrees), and the choice
-    moves `unlit_level` over a 1.7x range. That wants rendering per candidate and a
-    judgment, the way the reference-opening range was settled. The measurement, the
-    producer and the two downstream constants it moved are in the assets build tree --
-    `scripts/saturn_rings_optical_depth.py` and `records/Saturn.md`.
+    profile. **DONE 2026-09-08.** Cassini UVIS at a 66.7 degree ring elevation, eleven
+    occultations combined, puts the B ring 2.02x deeper at the median and 3.04x at p90,
+    agreeing with the frame on three of its four zones while the C ring and the Cassini
+    Division -- the controls -- move 0.89-0.94x. Removing the censoring also removed the
+    unlit profile's constraint on its own camera elevation, and that was settled from
+    Voyager 1's trajectory rather than by taste: the sun is north throughout the encounter,
+    so the craft sees the unlit face only in a 22.7-hour dip below the ring plane reaching
+    -39.58 degrees, which excludes the whole 50-89 degree plateau the fit had wandered into.
+    The same measurement gave the FORWARD layer a sun leg it never had (camera 12.35, sun
+    3.94, where its stated phase of 139 occurs) in place of one number standing for both,
+    and its residual more than doubled at a geometry nothing fitted. `unlit_level` 0.1085
+    -> 0.1129 and `scattering_scale` 0.545 -> 0.532; deployed. Still on one number for both
+    legs: the BACKSCATTER layer, which is Voyager 2 and wants the same measurement on its
+    own encounter. Producer, measurements and renders are in the assets build tree --
+    `scripts/saturn_rings_optical_depth.py`, `scratch/rings/voyager1_elevation.py` and
+    `records/Saturn.md`.
   - **A ring shadow renders truly black, and the real one is not.** What lights it is not
     Saturnshine off the lit hemisphere: a ring element inside the shadow sees the planet's
     NIGHT side by construction, the lit hemisphere being on the other side of the
