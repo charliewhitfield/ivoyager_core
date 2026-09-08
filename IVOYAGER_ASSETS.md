@@ -831,12 +831,21 @@ VRAM compression.
 These files are essentially data distributions. Each is a conversion of published catalog or
 model data into a form the renderer can sample, and we make no claim on their content.
 
-### `/starmaps/hipparcos_stars.*.ivbinary`
+### `/starmaps/hipparcos_tycho2_stars.*.ivbinary`
 
-Star positions, magnitudes and B−V colors from the
-[ESA Hipparcos Catalogue](https://www.cosmos.esa.int/web/hipparcos) (ESA, 1997; ESA SP-1200),
-packed by magnitude limit. Nine files, one per limit, so a build can trade star count against
-memory.
+Directions, distances, magnitudes and B−V colors for 2,551,210 stars, from the
+[ESA Hipparcos Catalogue](https://www.cosmos.esa.int/web/hipparcos) (ESA, 1997; ESA SP-1200) and
+the [Tycho-2 Catalogue](https://www.cosmos.esa.int/web/hipparcos/tycho-2) (Høg et al. 2000,
+A&A 355, L27), both products of the ESA Hipparcos mission. Hipparcos supplies the measured V,
+B−V and parallax for its own 118,000 stars; Tycho-2 and its supplement supply the remaining 2.43
+million, which carry no parallax and sit on a 1 kpc shell, with Johnson V and B−V derived from
+Tycho B<sub>T</sub>/V<sub>T</sub> by the catalogue's own stated relation. The set is 99 %
+complete to V 11.0.
+
+Twenty-four files, each a half-magnitude bucket named for its faint end, so a project can trade
+star count against download size by shipping only the buckets its own field of view can use.
+Each star occupies ten bytes: a 16-bit direction per axis (5.5 arcsec), a 16-bit parallax, and
+one byte each of magnitude and color index.
 
 ### `/rings/*`
 
