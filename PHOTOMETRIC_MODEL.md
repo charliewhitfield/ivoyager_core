@@ -884,45 +884,63 @@ brighten toward the saturated value while the B ring, already saturated, barely 
 
 **The reference geometry the build divides out is PINNED at the geometry the images were
 taken at**, and that decides how much radial contrast every render carries. Joensson's
-profiles are Voyager, 1980-81 -- within 1.5 years of Saturn's 1980 equinox, when the sun
-stood a FEW degrees above the ring plane (Voyager 1 in November 1980 at 4.0 degrees,
-Voyager 2 in August 1981 at 7.8, and the unlit profile independently fits its own shallower
-leg at 2.7). Saturn's cells are 6.0 and 3.1 degrees.
+profiles are Voyager, 1980-81, and Joensson publishes none of that geometry -- so it is
+measured from the spacecraft's own trajectories in the running simulation
+(`voyager_ring_elevation.py` in the assets build tree, which parks the camera on the craft
+and reads `get_rings_geometry`). Voyager 2's backscatter frames sit at camera 10.63 degrees
+with the sun at 8.12, at the 6.8 degree lowest phase its lit side ever reaches; Voyager 1's
+forwardscatter at 12.35 and 3.94, where its stated phase of 139 occurs; and Voyager 1's
+unlit view at 39.4, the floor of the 22.7-hour dip below the ring plane that is the only
+time it saw that face at all. The sun elevations are the check and were not fitted to
+anything: a few degrees, as eight and sixteen months after Saturn's March 1980 ring-plane
+crossing they must be, and the unlit profile's own sun leg is still FREE and lands at 3.94
+against a measured 3.69-4.13.
 
 A fit cannot supply that, and the two Voyager 1 profiles prove it between them:
 `forwardscattered` and `unlitside` are the same spacecraft at the same encounter, a lit fit
 determines only `k = 1/mu + 1/mu0`, and k can never be less than 1/mu0 -- yet forwardscatter
-fits k = 5.62 where the unlit profile's own sun elevation demands at least 14.4, and
-backscatter fits 3.61 against at least 7.3. Both are impossible. What the fit absorbs is the
+fits k = 7.20 where a sun at 3.94 degrees demands at least 14.55, and backscatter fits 3.24
+against at least 7.08. Both are impossible. What the fit absorbs is the
 RADIAL VARIATION OF PARTICLE ALBEDO, which the model has no term for.
 
 Getting it wrong flattens the bands, since too wide a reference divides out too little
-saturation. At the encounter geometry the B ring against the C ring renders 9.67 at Saturn's
-widest opening and 5.51 at 12 degrees, against published Cassini radial scans of 6 to 12 at
+saturation. At the measured geometry the B ring against the C ring renders 8.10 at Saturn's
+widest opening and 4.49 at 12 degrees, against published Cassini radial scans of 6 to 12 at
 low phase. The independent check is the particle strength a reference implies: the C ring and
 the Cassini Division are the known dark, contaminated regions, at roughly 0.2-0.5 of the A and
-B rings' albedo, and this one puts them at 0.39 and 0.73 where a reference at Saturn's maximum
+B rings' albedo, and this one puts them at 0.43 and 0.75 where a reference at Saturn's maximum
 opening would put the Division brighter than the A ring.
 
-**`clumping` is PINNED, because nothing in these profiles measures it.** It always looks
-fitted and never is: the lit profile cannot see it (that fit's R2 moves 0.8733 to 0.8787
-across the entire family), and the unlit profile only appears to, because the leverage came
-from its flat deep end -- which is the source image's own background, not ring light.
-Scanned on the live radii with that background removed, the unlit R2 moves **0.0164** across
-the whole family, against a factor of forty in what the parameter actually does -- so a fit
-here returns a number that looks like an answer and is not one. Saturn's cell sits at the
-homogeneous limit, which is the family's darkest transmission and the closest to what real
-unlit images show.
+**`clumping` is PINNED, and what pins it is now a confound rather than an absence of
+leverage.** The UNLIT profile still measures nothing: its apparent leverage came from the
+flat deep end, which is the source image's own background and not ring light, and scanned on
+the live radii with that background removed its R2 moves **0.0079** across the whole family,
+against a factor of forty in what the parameter actually does. The LIT profile is a different
+story from what this document said until 2026-09-08. Its insensitivity (R2 moving 0.8733 to
+0.8787) was measured at the 26.7 degree reference that shipped until 2026-09-06, and the
+leverage grows sharply as the reference narrows -- span 0.0124 at 26.7 degrees, 0.0970 at 12,
+**0.1483 at the measured geometry** -- with the fit preferring the most clumped end at every
+one of them. That is not a measurement of clumping, because a low clumping shape flattens
+saturation in exactly the way the radial variation of particle albedo does, which is the same
+confound that makes a free lit fit return an impossible geometry two paragraphs above. So the
+cell stays at the homogeneous limit -- the family's darkest transmission, and the closest to
+what real unlit images show -- and separating the two is in the TODO.
 
-**There is no floor under the unlit face.** Joensson's unlit profile stops falling at 0.046
-by tau 1.4 and is flat to 4 % from there to tau 13.8 -- a decade of optical depth over which
-single scattering falls a millionfold and even conservative two-stream diffuse transmission,
-the most generous physical model there is, falls threefold. That flat tail is the source
+**There is no floor under the unlit face.** Joensson's unlit profile stops falling at about
+0.047 by tau 2.33 and is flat to 6 % from there to the profile's deepest 8.5 -- a factor of
+nearly four in optical depth over which single scattering falls by 1e6 and even conservative
+two-stream diffuse transmission, the most generous physical model there is, falls threefold.
+(The threshold is measured rather than assumed, and it moves with the optical depth SCALE:
+the same radii read 1.4 under the saturating Voyager profile.) That flat tail is the source
 image's own background rather than ring light, and carried as a constant it would put a floor
 under the unlit face that does not fall with tau at all, so an opaque ring would glow. The
 build subtracts it, and where the subtraction leaves nothing takes the strength from the lit
-layer, whose ratio to the unlit one is a measured constant (flat at 0.56 over a 50x range in
-tau). What that leaves out is stated plainly: real multiple scattering inside a dense layer is
+layer, in a ratio the build measures on the densest material that still has signal (7.56x
+layer 0). That ratio is NOT the constant this document once called it: it read flat only
+while both references were fitted, because two fits absorb the same radial albedo variation
+and it cancels in the quotient. Measured against pinned references it varies with radius,
+p16-p84 5.0 to 10.2, which is a phase-function difference -- an unlit view is a high-phase
+view, and the dusty C ring and Cassini Division forward-scatter more than the B ring. What that leaves out is stated plainly: real multiple scattering inside a dense layer is
 not zero, and a truly opaque B ring renders black where a real one is merely very dark.
 
 Phase carries the LEVEL and the texture carries only the shape, because all three profiles
@@ -1925,6 +1943,17 @@ lever a capped pass cannot offer is one the shader does not need.
     even darker", so a smaller value is defensible; the 71-frame reference set
     (`MANIFEST.tsv`, `Saturn.rings.reference#*`, 54 with a stated phase from 0 to 179 deg)
     is better evidence than his montage.
+  - **`clumping` is pinned against a CONFOUND now, not against an absence of leverage, and
+    separating the two is open.** The reason this document gave until 2026-09-08 -- that the
+    lit profile cannot see the parameter -- was measured at the 26.7 degree reference that
+    shipped until 2026-09-06, and it does not survive a narrower one: the lit R2 spans 0.0124
+    at 26.7 degrees, 0.0970 at 12 and 0.1483 at the measured geometry, preferring the most
+    clumped end at every one. That is not evidence FOR clumping, because a low clumping shape
+    flattens saturation exactly as the radial variation of particle albedo does -- the same
+    confound that makes a free lit fit return an impossible geometry. What would separate
+    them is a term for that albedo variation, which the model does not have; until then the
+    homogeneous limit is a choice and not a measurement, and the unlit profile (span 0.0079)
+    genuinely cannot arbitrate it.
   - **The unlit face's level is derived rather than measured, and cannot be measured the
     way the lit face was.** Mallama & Hilton define their effective ring inclination as ZERO
     when the Sun and the observer are on opposite sides of the ring plane, so the published
