@@ -355,9 +355,12 @@ func _register_rings(system_name: StringName, rings: IVRings) -> void:
 	if _rings_nodes.get(system_name) == rings:
 		return
 	var asset_preloader: IVAssetPreloader = IVGlobal.program[&"AssetPreloader"]
+	var profile_texture := asset_preloader.get_rings_shadow_profile_texture(rings.name)
+	if !profile_texture:
+		return # no profile, no ring shadow; leaving these unregistered is what every
+		# consumer's existing "are there rings" test then reads (IVAssetPreloader warned)
 	_rings_nodes[system_name] = rings
-	_ring_profile_textures[system_name] = asset_preloader.get_rings_shadow_profile_texture(
-			rings.name)
+	_ring_profile_textures[system_name] = profile_texture
 	_ring_profile_images[system_name] = asset_preloader.get_rings_shadow_profile_image(
 			rings.name)
 

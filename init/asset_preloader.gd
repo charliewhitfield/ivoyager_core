@@ -885,7 +885,17 @@ func _load_rings_resources() -> void:
 		# Full-resolution mipmapped alpha profile for the analytic ring-shadow term; the
 		# source image is retained for CPU sampling. All three layers carry the same alpha.
 		# See get_rings_shadow_profile_texture() / get_rings_shadow_profile_image().
-		var shadow_profile_image := _make_alpha_r8_image(texture_array.get_layer_data(0))
+		# A compressed layered texture reads a layer back through the rendering device,
+		# which a headless run has none of; the whole analytic ring shadow then has no
+		# input, and without the guard each of its consumers raises per body per frame.
+		var layer_image := texture_array.get_layer_data(0)
+		if !layer_image:
+			push_warning("IVAssetPreloader: rings texture '%s' returned no layer image"
+					% file_prefix + " (no rendering device?); the analytic ring shadow is"
+					+ " unavailable this run")
+			_rings_resources[rings_name] = [texture_array, null, null]
+			continue
+		var shadow_profile_image := _make_alpha_r8_image(layer_image)
 		@warning_ignore("return_value_discarded")
 		shadow_profile_image.generate_mipmaps() # can't fail: R8 is uncompressed
 		var shadow_profile_texture := ImageTexture.create_from_image(shadow_profile_image)
