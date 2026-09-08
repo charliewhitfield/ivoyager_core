@@ -967,7 +967,10 @@ dustier C ring and Cassini Division forward-scatter more than the B ring, and it
 at optical depth 0.02-0.1 down to 6.2 by 0.7-1.2. The build therefore measures it twice --
 once over the whole live profile for the
 level, and once on the densest tenth for the fallback that carries the deep B ring, which is
-the material that fallback adjoins.
+the material that fallback adjoins. It is derived because it CANNOT be measured the way the
+lit level below is: Mallama & Hilton define their effective ring inclination as zero when the
+Sun and the observer are on opposite sides of the plane, so the disc-integrated relation that
+anchors the lit face says nothing whatever about this one.
 
 **The lit face's level and its surge are anchored on SATURN'S OWN MAGNITUDE**, which is
 disc-integrated photometry and therefore immune to the stretch on any image. Mallama &
@@ -986,6 +989,14 @@ published value at a 26.7 degree opening and 1.11, 1.25 and 1.42 at 20, 12 and 6
 The sign is what single scattering has to do -- as the opening closes, the slab saturates
 toward `mu0/(mu+mu0)` and the flux falls only as `sin(beta)`, where the real ring loses more
 than that to mutual shadowing between its own particles, which this model has no term for.
+
+At the far end of that range the rings go essentially black, and that too is the model rather
+than a defect. Every term rides `mu0`, so a sun IN the ring plane takes the whole system to
+about 1e-3 of its normal level and leaves only a shadow line on the globe. Real rings at
+equinox were dramatically dark and not invisible, because a real layer has thickness and
+vertical structure -- neither of which this models, by decision. A lit-side floor would be
+the lever and the data does not ask for one: the lit fits reach R2 0.87 with no floor where
+the unlit one needs 0.0985 to fit at all.
 
 The fragment is **self-lit on both renderers** and its output is premultiplied: rgb is the
 ring's own light over black sky and alpha is the SLANT occlusion `1 - (1-a)^(1/mu)`, so a
@@ -1173,6 +1184,17 @@ interior peak at `tau = ln(b/a)/(b-a)` on the unlit one. That keeps optical dept
 manager and makes the two branches MEET at the plane instead of switching (measured, 0.998
 lit against 0.988 unlit at a 0.05 deg opening) -- a thin ring really does look the same from
 either side.
+
+**Neither face clips at any distance tested** -- 3.5 to 30 body radii, both faces, an 18 deg
+opening: 0.00 % of every frame above 0.99, with p99.9 between 0.25 and 0.65. So a ring that
+reads too bright is a level judgment and not an exposure failure. What follows from that is
+that the ring candidate rarely WINS, now that the level is anchored on photometry: at the
+photometric level the rings meter dimmer than Saturn's globe over most of the opening range,
+so the globe's own candidate holds and the ring branch does nothing -- correctly, since
+nothing clips. Measured, the lit face pulls at most 0.17 EV and the unlit face none at all,
+against 0.53 and 0.28 at the pre-anchor level. The branch is live rather than dead code: it
+produces a candidate at every geometry, the globe's is simply lower, and it would take
+control for a brighter or a more open ring system.
 
 **What holds that candidate is the ring's own geometry, in two parts** -- the same shape as
 a body's lit candidate, which is held by its lit AREA and then again by its lit FRACTION.
@@ -1954,43 +1976,6 @@ lever a capped pass cannot offer is one the shader does not need.
     them is a term for that albedo variation, which the model does not have; until then the
     homogeneous limit is a choice and not a measurement, and the unlit profile (span 0.0079)
     genuinely cannot arbitrate it.
-  - **The unlit face's level is derived rather than measured, and cannot be measured the
-    way the lit face was.** Mallama & Hilton define their effective ring inclination as ZERO
-    when the Sun and the observer are on opposite sides of the ring plane, so the published
-    relation says nothing whatever about the unlit face. What stands in for it is the
-    physics: one phase function serves both faces, so `unlit_level` is the reciprocal of the
-    measured unlit/lit strength ratio and everything else follows from the geometry term.
-  - **THE B RING'S OPTICAL DEPTH IS A LOWER BOUND, AND THE UNLIT FACE IS THE ONLY PLACE
-    THAT SHOWS.** On the lit face anything past about 1.5 is saturated and the exact value
-    is invisible; on the unlit face it is everything. Registered against PIA08840 -- a
-    radial sweep of the unlit face at a 49 degree opening whose darkest pixel is DN 10, so
-    nothing in it is clipped -- the model's B ring comes out 5 to 17 times brighter relative
-    to the C ring than the frame shows, and the optical depth that would reconcile it is
-    2.7 to 4.1 where the transparency profile says 0.84 to 2.15. Those implied values are
-    squarely inside the published range for the B ring (1 to 5, core above 5), and the
-    Voyager PPS occultation the profile comes from saturates near 2.5. The frame is not
-    good enough to *prove* it -- its own optically thin zones, where tau is trustworthy,
-    scatter 2x about any smooth trend -- but the B ring sits as a deep bump against that
-    scatter, between a C ring and an A ring that both roughly follow it. Fixing it means a
-    better occultation than the source carries, i.e. a re-source of the transparency
-    profile. **DONE 2026-09-08.** Cassini UVIS at a 66.7 degree ring elevation, eleven
-    occultations combined, puts the B ring 2.02x deeper at the median and 3.04x at p90,
-    agreeing with the frame on three of its four zones while the C ring and the Cassini
-    Division -- the controls -- move 0.89-0.94x. Removing the censoring also removed the
-    unlit profile's constraint on its own camera elevation, and that was settled from
-    Voyager 1's trajectory rather than by taste: the sun is north throughout the encounter,
-    so the craft sees the unlit face only in a 22.7-hour dip below the ring plane reaching
-    -39.58 degrees, which excludes the whole 50-89 degree plateau the fit had wandered into.
-    The same trajectories then gave the two LIT layers a sun leg neither had ever had, in
-    place of one number standing for both: the forward layer at camera 12.35 / sun 3.94,
-    where its stated phase of 139 occurs, and the backscatter layer at camera 10.63 / sun
-    8.12 from Voyager 2's own encounter, at the 6.8 degree lowest phase its lit side ever
-    reaches. All three residuals improved at geometries none of which was fitted to its own
-    profile -- 0.434 -> 0.643, 0.192 -> 0.447, 0.580 -> 0.609. `unlit_level` 0.1085 ->
-    0.1392 and `scattering_scale` 0.545 -> 0.457; deployed. Producer, measurements and
-    renders are in the assets build tree --
-    `scripts/saturn_rings_optical_depth.py`, `scratch/rings/voyager_ring_elevation.py` and
-    `records/Saturn.md`.
   - **A ring shadow renders truly black, and the real one is not.** What lights it is not
     Saturnshine off the lit hemisphere: a ring element inside the shadow sees the planet's
     NIGHT side by construction, the lit hemisphere being on the other side of the
@@ -2002,13 +1987,6 @@ lever a capped pass cannot offer is one the shader does not need.
     Saturn's dark hemisphere visible beside unlit rings in one exposure, as in PIA12590 --
     though that frame cannot constrain the ring LEVEL, ringshine being proportional to it.)
     Both need a light term rather than a ring-shader change.
-  - **At solar equinox the rings go essentially black, and that is the model rather than a
-    defect.** Every term rides mu0, so a sun in the ring plane takes the whole system to
-    ~1e-3 of its normal level (rendered: the rings vanish, leaving a shadow line on the
-    globe). Real rings at equinox were dramatically dark but not invisible, because a real
-    layer has thickness and vertical structure -- neither of which this models, by
-    decision. A lit-side floor would be the lever; the data does not ask for one (the lit
-    fits reach R2 0.87 with no floor, where the unlit one needs 0.0985 to fit at all).
   - **The metering mirror uses the body-centre phase where the shader uses each fragment's
     own.** At a close standoff the opposition surge is a local spot on the rings, so the
     candidate meters as though the whole system were surging and pulls exposure down about
@@ -2021,16 +1999,6 @@ lever a capped pass cannot offer is one the shader does not need.
     down to 0.626. So a constant anchor under-defends the lit face toward grazing and
     over-defends the unlit one. What decides how much of that is wanted is the openness
     ramp above, which releases the candidate as the rings close rather than re-levelling it.
-  - **Neither face clips at any distance tested** (3.5 to 30 body radii, both faces, 18 deg
-    opening: 0.00 % of every frame above 0.99, p99.9 between 0.25 and 0.65). So a ring that
-    reads too bright is a level judgment, not an exposure failure.
-  - **The ring candidate rarely wins, now that the level is anchored.** At the photometric
-    level the rings meter DIMMER than Saturn's globe over most of the opening range, so the
-    globe's own candidate holds and the ring branch does nothing -- correctly, since nothing
-    clips. Measured after the level change, the lit face pulls at most 0.17 EV and the unlit
-    face none at all, where at the pre-anchor level they pulled 0.53 and 0.28. The branch is
-    live rather than dead code (it produces a candidate at every geometry; the globe's is
-    simply lower), and it would take control for a brighter or more open ring system.
   - **`forward_reddening` IS THE ONLY PHASE-COLOUR TERM AND HAS NO CITED SOURCE**, and the
     surge now has a measured colour it cannot carry. Its 1.05 is worth 0.05 mag of colour
     index across the whole phase range, and the unlit face takes a flat tint with no phase
@@ -2047,5 +2015,3 @@ lever a capped pass cannot offer is one the shader does not need.
     CLOSE**, to 1.42 of the published relation by a 6 degree opening (the section above has
     the numbers). Both the plane and the point carry it identically, so nothing steps; what
     it would take to fix is a term the model does not have.
-  - Per-star: rings would need a lit face and a phase level per star; see the multistar
-    entry above.
