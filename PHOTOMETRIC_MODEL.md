@@ -1952,13 +1952,15 @@ lever a capped pass cannot offer is one the shader does not need.
     Voyager 1's trajectory rather than by taste: the sun is north throughout the encounter,
     so the craft sees the unlit face only in a 22.7-hour dip below the ring plane reaching
     -39.58 degrees, which excludes the whole 50-89 degree plateau the fit had wandered into.
-    The same measurement gave the FORWARD layer a sun leg it never had (camera 12.35, sun
-    3.94, where its stated phase of 139 occurs) in place of one number standing for both,
-    and its residual more than doubled at a geometry nothing fitted. `unlit_level` 0.1085
-    -> 0.1129 and `scattering_scale` 0.545 -> 0.532; deployed. Still on one number for both
-    legs: the BACKSCATTER layer, which is Voyager 2 and wants the same measurement on its
-    own encounter. Producer, measurements and renders are in the assets build tree --
-    `scripts/saturn_rings_optical_depth.py`, `scratch/rings/voyager1_elevation.py` and
+    The same trajectories then gave the two LIT layers a sun leg neither had ever had, in
+    place of one number standing for both: the forward layer at camera 12.35 / sun 3.94,
+    where its stated phase of 139 occurs, and the backscatter layer at camera 10.63 / sun
+    8.12 from Voyager 2's own encounter, at the 6.8 degree lowest phase its lit side ever
+    reaches. All three residuals improved at geometries none of which was fitted to its own
+    profile -- 0.434 -> 0.643, 0.192 -> 0.447, 0.580 -> 0.609. `unlit_level` 0.1085 ->
+    0.1392 and `scattering_scale` 0.545 -> 0.457; deployed. Producer, measurements and
+    renders are in the assets build tree --
+    `scripts/saturn_rings_optical_depth.py`, `scratch/rings/voyager_ring_elevation.py` and
     `records/Saturn.md`.
   - **A ring shadow renders truly black, and the real one is not.** What lights it is not
     Saturnshine off the lit hemisphere: a ring element inside the shadow sees the planet's
