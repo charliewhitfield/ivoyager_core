@@ -619,17 +619,100 @@ Shells (`shells.tsv`) are concentric sub-models around a body's surface.
 
 ### Cloud shells
 
-A cloud deck (e.g. Earth's) is an overlay shell carrying a reflectance in rgb and an
-opacity in alpha. The two are not independent: a source cloud map supplies one number per
-texel, and the conservative two-stream relates them as `A = 1 − (1 − R)²`, `C = R / A`, so
-`A·C = R` identically — the deck's own light is the source's, and what the split fixes is
-the surface beneath it (Earth's deck reflects 0.5–0.97, mean 0.702 over cloud, where white
-plus alpha had pinned it at 1.0 and let 30 % of the ocean through solid overcast). The
-derivation is in `records/Earth.md` in the assets build tree. It is lit by the same light
-as the surface, so under an exposure metered for the *cloudless* surface albedo, cloud tops
-overexpose by a factor of a few — bright, occasionally clipped white, which matches real
-orbital photography. No separate cloud compensation exists, deliberately: compensating for
-clouds would crush the surface.
+A cloud deck (e.g. Earth's) is an overlay shell whose map carries the deck's reflectance in
+rgb and its coverage in alpha. What that pair MEANS is set by `clouds_two_stream_map`, and
+the difference is the difference between a deck built from one number per texel and one
+built from two.
+
+**Without it (Neptune's), the two channels are already composited and go straight through.**
+A source cloud map supplies one number per texel, so the conservative two-stream relates
+them, `A = 1 − (1 − R)²` and `C = R / A`, giving `A·C = R` identically — the deck's own
+light is the source's, and what the split fixes is the surface beneath it. A texel half
+covered by opaque cloud and one wholly covered by thin cloud arrive as the same middling
+value, which is why nothing about such a deck can depend on the sun's angle.
+
+**With it (Earth's), the two are independent measurements and the shell composites them at
+each fragment's own geometry.** Alpha is the geometric cloud FRACTION `f`; rgb is the
+cloud's own conservative two-stream albedo, which is a monotone encoding of the scaled
+optical depth `τ* = (1 − g)τ` at a reference `µ = 1/2`, so the shell recovers
+`τ* = R / (1 − R)` — that reference is fixed at 1/2 for exactly this inverse and the build
+script must agree. Then each leg of the light's path takes its own cosine,
+
+    R(µ) = τ* / (τ* + 2µ)          T(µ) = 1 − R(µ)
+
+and matching `ALPHA·ALBEDO + (1 − ALPHA)·surface` against
+`f (R(µ0) + surface·T(µ0)·T(µ)) + (1 − f)·surface` gives the deck's albedo `R(µ0)` and its
+opacity `f (1 − T(µ0) T(µ))`. The two channels do not arrive at the same resolution and the
+build does not pretend they do: a cloud mask reports coverage everywhere, while an optical
+thickness is retrieved only on a confidently overcast pixel and so reaches 82 % of the cloudy
+area even with four satellites — so the shell's rgb is a regional field with the retrieved
+detail faded in over it, and a viewer sees measured thickness where there is one and its
+neighbourhood's level where there is not. Two things follow that a composited pair cannot say. The
+deck's own **layer law**: its albedo rises toward the limb the way a cloud's does instead of
+sitting at one value, which measured on Earth is 0.86× the disc at phase 20 and 1.08× at
+phase 90, with clipping more than halved (4.3 % → 2.0 %) — a cloud deck is much less
+limb-darkened than a Lambert surface. And the **graded shadow**: the covered fraction's sun
+leg goes as `T(µ0)` and shuts off as the sun grazes, while the clear fraction passes full
+sunlight at any incidence. That is the shadow graded through the deck's own thickness rather
+than cut at a line, and it is the half that needed the fraction and the thickness apart.
+
+**`clouds_relief` carries the deck past the body's own terminator, and it is the one
+judgment here.** A plane-parallel layer takes `F µ0` and so goes dark at `µ0 = 0` however
+thick it is — right for the ground, which *is* a horizontal surface, and wrong for a cloud
+field, whose sides are what a low sun lights. The cell is that side area per unit ground,
+and `sqrt(µ0² + relief²)` reaches it smoothly: at Earth's 0.15 it is worth 1.3 % of a
+near-full disc and nothing measurable on a crescent. What bounds it is geometry, not taste:
+a deck stands above the disc, so it stays sunlit out to `µ0 = −sqrt(1 − (surface/shell)²)`
+— 3.2° past the ground's terminator for Earth's 10.19 km — and it enters that shadow across
+its own height rather than at a line, the same lit-height grading the limb exposure ceiling
+uses. Past that cut the term is exactly zero and reliefs of 0, 0.08 and 0.15 render
+bit-identically. Measured on the terminator band's surviving feature contrast, its minimum
+across `µ0 ∈ [−0.06, +0.13]` goes 0.059 at relief 0 to 0.078 at 0.08 and 0.099 at 0.15,
+against 0.054 before any of this work. The term is delivered as EMISSION, because the
+engine's N·L has already thrown this light away, and it takes the disc law's isotropic
+response, because light on a vertical face is not light at the layer's own incidence. One
+approximation is stated rather than modelled: the sun-path transmittance is `atm_sun_
+transmittance`, which clamps its column at `µ0 = 0`, so across the last 3.2° the beam is
+reddened as it is at the tangent and no further; the lit-height ramp dominates that band.
+
+**The deck's shadow lands where it falls, not underneath the cloud (2026-09-08).** The sun ray
+from a surface point crosses the deck at a horizontally displaced place, so the shadow belongs
+there — `atm_cloud_shadow()` in `_atmosphere.gdshaderinc`, fed the deck's own map by
+`IVShellsModel._propagate_cloud_shadow` and folded into the surface's sun leg, while the deck's
+alpha keeps only its view leg so nothing is counted twice. It is a REDISTRIBUTION and the
+render says so: over a lit disc the mean moves 0.998–1.001× while 10–19 % of the frame changes,
+and from ISS altitude 44 %. Solved against the deck's sphere rather than as `h tan(z)`, which
+diverges at a grazing sun. **Whether it can be SEEN was a question about the deck's
+resolution, not about the term**, and the answer moved with the deck: at Earth's 10.19 km
+shell the displacement is 5.9 km at a 30° solar zenith, 17.6 at 60 and 56 at 80, which
+against the retired 19.5 km texel put most of the lit disc's shadow inside the texel casting
+it — and against the shipped 4.89 km one puts it 1.2, 3.6 and 11 texels away. Measured at
+face 2048 from 1900 km up, the term moves 38–51 % of the lit disc, p99 1 DN at phase 35 and
+8 DN at phase 75, and costs nothing outside run-to-run drift. Nothing about it changed; the
+map did. Bodies without a two-stream deck are untouched — Mars and Neptune render
+bit-identically.
+
+**The deck's resolution is the map's, and it carries no procedural stand-in (2026-09-08).**
+Both cloud shaders had a domain warp and five octaves of fbm to hide a map four times coarser
+than the surface it sat on; they were deleted, with `clouds_warp_*`, `clouds_detail_*` and
+`clouds_edge_gamma`, when Earth's deck went to face 2048 — the surface's own 4.89 km texel,
+and essentially the cloud fraction's own limit. Measured with the deck filling the frame, the
+procedural path cost **139 µs, 4.2 % of the frame**, where going from face 512 to 2048 cost
+**2 µs against 3 µs of run-to-run drift**: a modern GPU pays per fragment for the ALU whether
+it is wanted or not, and pays nothing for a bigger texture that is mipmapped and cache-
+coherent under magnification. So a deck that looks coarse magnified wants a finer map, and
+this is where to reach for one. Two consequences, both wanted: a deck and its shadow now read
+ONE map and line up by construction, where a procedural field the shadow lookup did not share
+could never be shadowed correctly; and the deck's coverage stops spreading, so real gaps open
+and the ground shows through them. The `.gdshader` files are the interface here — a body
+overriding a retired uniform through a `shells.tsv` column of the same name is silently
+ignored, as any unknown column is.
+
+A deck is lit by the same light as the surface, so under an exposure metered for the
+*cloudless* surface albedo, cloud tops overexpose by a factor of a few — bright, occasionally
+clipped white, which matches real orbital photography. No separate cloud compensation exists,
+deliberately: compensating for clouds would crush the surface. The build and its measurements
+are in `records/Earth.md` in the assets build tree.
 
 ### Atmospheres
 
@@ -1826,11 +1909,12 @@ lever a capped pass cannot offer is one the shader does not need.
   renderer the limb's whole radiance crosses the engine's conversion bracket and blends on
   an sRGB-encoded target, so its veil and band render well under Forward+ — the first
   accepted deficiency above.
-- **Earth's terminator band on FORWARD+ — measured 2026-08-28, PART of it fixed, and what is
-  left is a decision rather than a bug.** Measure it with `scratch/compat/termband.py` in the
-  assets build tree, which poses the body at a solved phase 90 (so the terminator runs through
-  the disc centre, where it is widest on screen, rather than wherever a guessed longitude put
-  it) and reports against μ0 with a contrast metric — the illumination taken out as a median
+- **Earth's terminator band on FORWARD+ — measured 2026-08-28 and CLOSED 2026-09-08. Kept
+  here for the measurements and for the two candidates that were rejected on the way.**
+  Measure it with `scratch/compat/termband.py` in the assets build tree, which poses the body
+  at a solved phase 90 (so the terminator runs through the disc centre, where it is widest on
+  screen, rather than wherever a guessed longitude put it) and reports against μ0 with a
+  contrast metric — the illumination taken out as a median
   profile on one-pixel bins, since "no features here" is a statement about contrast that no
   luma profile can see. What it says: Earth's relative feature contrast falls **0.21 → 0.054**
   across μ0 ∈ [−0.06, +0.06], a 4× collapse, while Mars over the same span **rises** 0.066 →
@@ -1845,29 +1929,21 @@ lever a capped pass cannot offer is one the shader does not need.
     It bought Earth +5–17 % contrast across the day-side half of the band and Mars +10–90 %,
     for +2.0 % / +6.9 % of disc level. It is a real correction and it is not enough.
   - **The deck's edge is what reads as a wall, and a cutoff law only moves it** (tried and
-    rejected 2026-08-28). Commenting out Earth's cloud row settles the Mars asymmetry: the
-    features that survive inside the band are RELIEF, not albedo — Mars has abundant relief
-    to shade at grazing incidence and Earth's map has almost none, which is why Earth's
-    contrast falls 0.214 → 0.054 across the band while Mars' *rises* 0.066 → 0.113. What
-    reads as a defect is the abrupt end of the white clouds. Isolated by hiding the shell,
-    the deck's own contribution falls 0.0691 → 0.0049 → 0 over µ0 +0.065 → −0.005, an
-    e-folding length collapsing from 91 pixels to 2. A `clouds_grazing_extent` carrying the
-    deck to its own geometric shadow at µ0 = −0.0565 (3.2° past the disc's terminator, the
-    part the engine's N·L cannot deliver rebuilt as EMISSION) was rendered at
-    k = 0/0.35/0.5/0.7/1.0 and **moved the wall without removing it** — a linear ramp to a
-    hard zero translates its corner but keeps its shape, and the deck is still 16 % of the
-    pixel where it stops. Removing it needs the falloff SHAPE changed: a layer law, whose
-    radiance carries no µ0 projection (which is why this model's own glow survives to
-    µ0 −0.13 while the deck inside it does not), ENDED by a shadow graded through the deck's
-    own thickness rather than cut at a line. A layer law without that grading is worse, not
-    better. Both need the deck's optical depth separated from its coverage, which no asset
-    here supplies. `Earth.clouds.albedo.512.png` was rebuilt on 2026-08-28 and does now carry
-    a reflectance (0.5–0.97) and an opacity rather than white plus alpha — but both are
-    functions of the source's ONE number per texel, so nothing in it distinguishes a texel
-    half covered by opaque cloud from one fully covered by thin cloud. That needs a re-source
-    to a product publishing cloud optical thickness and cloud fraction separately (MODIS
-    does), not a re-derivation. A range tag would still buy nothing: the deck spans half the
-    scale and a tag is for a map that does not.
+    rejected 2026-08-28; the wall itself is FIXED 2026-09-08, below). Commenting out Earth's
+    cloud row settles the Mars asymmetry: the features that survive inside the band are
+    RELIEF, not albedo -- Mars has abundant relief to shade at grazing incidence and Earth's
+    map has almost none, which is why Earth's contrast falls 0.214 -> 0.054 across the band
+    while Mars' *rises* 0.066 -> 0.113. What reads as a defect is the abrupt end of the white
+    clouds. Isolated by hiding the shell, the deck's own contribution falls
+    0.0691 -> 0.0049 -> 0 over mu0 +0.065 -> -0.005, an e-folding length collapsing from 91
+    pixels to 2. A `clouds_grazing_extent` carrying the deck to its own geometric shadow at
+    mu0 = -0.0565 was rendered at k = 0/0.35/0.5/0.7/1.0 and **moved the wall without
+    removing it** -- a linear ramp to a hard zero translates its corner but keeps its shape,
+    and the deck is still 16 % of the pixel where it stops. What removes it is the falloff
+    SHAPE, and both halves of that needed the deck's optical depth separated from its
+    coverage, which the MODIS rebuild supplies and *Cloud shells* above describes. A range
+    tag would still buy nothing: the deck spans half the scale and a tag is for a map that
+    does not.
   - **Fixed: the shells were lit plane-parallel, so nothing was lit past the terminator.**
     Every shell took `albedo x max(mu0, 0) x atm_sun_transmittance`: flux entering the column
     goes as mu0, so illumination was pinned to zero at the geometric terminator WITH A CORNER,
@@ -1918,19 +1994,22 @@ lever a capped pass cannot offer is one the shader does not need.
     `limb_model.py` had **drifted from the table**, carrying 1.0 for Earth's shipped
     `atm_gas_multiple` of 1.3 -- the recurring failure that its own `--verify` cannot see,
     being a comparison of two integrals over the same body.
-  - **What is left is the DECK, and it is now well posed.** A cloud is a scattering layer, not
-    a horizontal Lambertian sheet, so its radiance carries no mu0 projection -- which is
-    exactly why this model's own glow survives to mu0 -0.13 while the deck inside it does not.
-    At mu0 = 0 the deck's sun ray is tangent at its own 10.19 km, where Earth's tangent optical
-    depth is **2.23, i.e. 10.7 % of the beam still arrives**, and a layer law would collect it
-    where the N.L projection throws all of it away. That is what makes real sunset cloud tops
-    glow, and it is deck-only: the ground IS a horizontal surface and its mu0 projection is
-    right. It needs the shadow graded through the deck's own thickness rather than cut at a
-    line (a cutoff law only moves the wall -- rejected above), and both halves need the deck's
-    optical depth separated from its coverage, which the rebuilt deck still does not carry
-    (above) -- a re-source, not a re-derivation. Also unresolved and unrelated: at
-    mu0 < 0.06 Earth's ocean cannot compete on albedo at all -- 0.05 against a glow that is
-    65-80 % of the pixel.
+  - **FIXED 2026-09-08: the deck's own law, and the shadow graded through it.** See *Cloud
+    shells* above for the mechanism. Three terms were missing and all three are in:
+    `R(mu0)` and `T(mu0) T(mu)` evaluated at each fragment's own cosines, which is the layer
+    law and the graded shadow and needed the map's coverage and thickness apart; and
+    `clouds_relief`, which carries the deck past the GROUND's terminator to its own shadow
+    entry at mu0 = -0.0565, graded across the deck's own height. The band's surviving feature
+    contrast goes 0.054 before any of this work to 0.099, and past the geometric cut reliefs
+    of 0, 0.08 and 0.15 render bit-identically. **One correction to what this item used to
+    say:** a layer law does NOT simply drop the mu0 projection. A plane-parallel layer's
+    reflected flux is `F mu0 R(mu0)` and, although R rises toward 1 at grazing incidence,
+    the product still falls to zero linearly in mu0 -- the atmosphere's own glow survives
+    past the terminator because its SHADOW is the domain boundary and it has no horizontal
+    surface, and a cloud deck survives because its SIDES are lit, which is what
+    `clouds_relief` states. Also unresolved and unrelated: at mu0 < 0.06 Earth's ocean
+    cannot compete on albedo at all -- 0.05 against a glow that is 65-80 % of the
+    pixel.
   - **The twilight curve runs 2.3x over Earth's observed illuminance, and that is the expected
     sign.** 927 lx at sunset against ~400 measured. Single scattering with no ozone: the
     Chappuis band is what takes real twilight down, over a horizontal path through the ozone

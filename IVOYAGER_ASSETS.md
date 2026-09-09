@@ -550,17 +550,55 @@ map's bright tail runs out of headroom. Rides a custom mesh.
 
 ## Cloud and emission overlays
 
-### Earth clouds — `/cubemaps/Earth.clouds.albedo.512.png`
+### Earth clouds — `/cubemaps/Earth.clouds.albedo.2048.png`
 
-The Blue Marble 2002 combined cloud product from the NASA Earth Observatory (image by Reto
-Stöckli), carried as a translucent shell above the surface map. Reprojected, and split by us
-into the two quantities a translucent shell needs: the source's single greyscale channel is
-read as the deck's reflectance and separated into an opacity (alpha) and a cloud reflectance
-(rgb) by the standard conservative two-stream relation, so that an overcast texel is opaque
-rather than partly transparent. The split leaves the deck's own brightness unchanged, texel
-for texel; what it changes is how much of the surface shows through it.
+Satellite cloud retrievals for 2019 September 23 and 24, carried as a translucent shell above
+the surface map. The shell's two channels are the two independent quantities a translucent deck
+needs, and both are measured rather than assumed. Alpha is MODIS's own cloud FRACTION — the
+share of each 5 km box that its cloud mask calls cloudy, Terra everywhere it looked and Aqua
+in the lens-shaped gaps between Terra's equatorial swaths, together 99 % of the globe. Rgb is
+the reflectance of the cloud that is there, from retrieved cloud OPTICAL THICKNESS through the
+standard conservative two-stream relation at a reference incidence of 60°, with ice and water
+clouds taking their own scattering asymmetry. Keeping the two apart is what lets a texel half
+covered by opaque cloud behave differently from one wholly covered by thin cloud, which they do
+at every sun angle: the first passes full sunlight through its clear part and the second dims
+it.
 
-- **Third-party:** the imagery — Public Domain (NASA Earth Observatory).
+Optical thickness is retrieved only where the mask calls a 1 km pixel confidently overcast, so
+no one satellite has much of it. Four contribute: MODIS on Terra and Aqua, and VIIRS on Suomi
+NPP and NOAA-20, whose wider swath leaves no equatorial gap. Averaged, they reach 82 % of the
+cloudy area, and each platform's own granule-to-granule differences average down with them.
+The thickness channel is then carried as a regional field with the retrieved detail riding on
+top of it, faded out over about 25 km wherever the retrieval thins — so what is measured is
+shown at full detail, what is not takes its surroundings' level, and there is no boundary
+between the two. An equinox date holds the region that gets no daylight retrieval at all to
+about 1 % of the sphere, at the two poles.
+
+Cloud fraction is reported over 5 km boxes, and a 5 km box is 5 km only directly beneath the
+satellite: the scan stretches it to some 24 by 10 km at the edge of the swath, so the coverage
+channel resolves about 10 km of ground where the map's own texel is 4.9 km, and the boxes
+arrive as a mosaic lying in the satellite's frame rather than the map's. The box edges carry no
+information and are dissolved, and the texel-scale structure they cannot hold is taken from
+three further products of the same overpass, each of which sees cloud where the others cannot:
+corrected-reflectance true colour at 250 m, band 31 brightness temperature at 1 km, and the
+optical-thickness retrieval's own footprint. They are combined at weights solved separately in
+each region against the cloud fraction itself, so a product contributes only where it really
+does predict it — the reflectance over ocean and forest, the thermal band over desert, the
+retrieval over ice, and none of them where there is no cloud to see. Together they account for
+29 % of the structure the fraction still resolves; what is left is filled with a fractal field
+carrying the fraction's own measured statistics, and the local mean is restored afterward, so
+the coverage the retrieval actually reported is unchanged and only the structure inside a box
+is new.
+
+An instrument in a sun-synchronous orbit passes over every place at the same local time of day,
+so going once around the world its observations gain a whole day: any global picture built from
+one satellite has a join in it somewhere, and no processing removes that. Two consecutive days
+let us choose where the join falls. It is put along the path where the two days' cloud fields
+agree most closely, which wanders 155 degrees of longitude and lands where they differ by 8 % of
+the global average — rather than down a meridian, where it would draw a perfectly straight line.
+Global mean cloud fraction 0.62, against a published MODIS value near 0.67.
+
+- **Third-party:** the retrievals — Public Domain (NASA).
 
 ### Neptune clouds — `/cubemaps/Neptune.clouds.albedo.512.l03864.lr02738.h09663.hg11302.hb09756.png`
 

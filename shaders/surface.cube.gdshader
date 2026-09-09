@@ -53,6 +53,7 @@ render_mode skip_vertex_transform, ambient_light_disabled;
 #include "_photometry.gdshaderinc"
 #include "_sun_occlusion.gdshaderinc"
 #include "_atmosphere.gdshaderinc"
+#include "_clouds.gdshaderinc"     // the cloud deck's shadow on this shell
 #include "_point_spread_function.gdshaderinc" // body_pixel_radius / body_disc_weight (the handoff)
 
 // Auto-bound channels (Cubemaps built by IVAssetPreloader). albedo/emission decode
@@ -145,7 +146,7 @@ void vertex() {
 	model_position = VERTEX; // captured before farwarp overwrites VERTEX
 	v_world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 	v_normal_matrix = MODELVIEW_NORMAL_MATRIX;
-	if (atm_present()) {
+	if (atm_present() || clouds_shadow_scale > 1.0) {
 		// The ray geometry for atm_disc_air() runs in the shell's own frame, where the
 		// (oblate) shell is the unit sphere; see atmosphere_limb.gdshader. Skipped on an
 		// airless body, whose varyings then go unread.
@@ -234,7 +235,12 @@ void fragment() {
 	float atm_mu0 = dot(macro_normal, sun_view);
 	float atm_mu = dot(macro_normal, VIEW);
 	vec3 atm_tint = atm_view_tint(atm_mu);
-	vec3 atm_sun_t = atm_sun_transmittance(atm_mu0);
+	// The deck's shadow folds into the sun leg, so every consumer of atm_sun_t below -- the
+	// lit albedo and the limb sliver's emission -- carries it and nothing else has to know.
+	// The twilight does not: that light arrives from the whole sky, and shading the sky is a
+	// term this model does not have.
+	vec3 atm_sun_t = atm_sun_transmittance(atm_mu0)
+			* clouds_sun_transmittance(normalize(model_position), v_sun_local, atm_mu0);
 	ALBEDO *= atm_sun_t * atm_tint;
 	// The sun angle averaged across this pixel's radial extent, which one shading sample cannot
 	// resolve at the rim (see limb_mean_incidence). The engine's diffuse carries
