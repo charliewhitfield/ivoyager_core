@@ -147,6 +147,7 @@ func _init(sbg: IVSmallBodiesGroup) -> void:
 			half_aabb_size = maxf(half_aabb_size, IVCoreSettings.max_camera_distance)
 		var half_aabb := Vector3.ONE * half_aabb_size
 		points_mesh.custom_aabb = AABB(-half_aabb, 2.0 * half_aabb)
+		sorting_use_aabb_center = false # f32 collapses that AABB's centre; sort by the node origin
 		mesh = points_mesh
 
 	# set shader parameters

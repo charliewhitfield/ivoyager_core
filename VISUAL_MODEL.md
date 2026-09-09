@@ -192,7 +192,7 @@ single `top_level` point that cannot ride a vertex shader). Its compressed posit
 distance. Never derive it by differencing large true-scale positions; the rounding of the
 large terms swamps the small result.
 
-Two obligations fall on every farwarp consumer:
+Three obligations fall on every farwarp consumer:
 
 - **Defeat frustum culling.** Culling tests the true-scale AABB against the far plane,
   and the true positions fail that test exactly when farwarp is doing its job. Every
@@ -201,6 +201,14 @@ Two obligations fall on every farwarp consumer:
   path visuals, SBG points and orbit lines, the star field, the sun point. A new farwarp
   consumer that forgets this renders correctly until the camera zooms in somewhere, then
   vanishes.
+- **Opt out of AABB-centre sorting.** Godot takes an instance's sort depth from the centre
+  of its *transformed* AABB, which for the box above is not where the object is: at
+  `max_camera_distance` a f32 coordinate quantizes at ~6.7e7 m, and the model scale a
+  shell or a ring rides multiplies that further, so the centre collapses to a constant and
+  every such instance reports one identical depth — an arbitrary blend order for the
+  transparent ones, a lost front-to-back pass for the opaque ones. Each consumer therefore
+  pairs its `custom_aabb` with `sorting_use_aabb_center = false`, which takes the node's own
+  origin — the true position the AABB was never describing — as the pivot instead.
 - **Keep enough vertices to follow the curve.** A surface far beyond T is compressed
   near-uniformly, but geometry that *spans* decades of distance bends along g(). The
   shared ring `PlaneMesh` is subdivided (`plane_mesh_subdivisions` = 64) for exactly

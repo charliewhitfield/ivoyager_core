@@ -243,6 +243,7 @@ func _init(body: IVBody) -> void:
 	quad_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	var half_extent := IVCoreSettings.max_camera_distance
 	quad_mesh.custom_aabb = AABB(-Vector3.ONE * half_extent, 2.0 * Vector3.ONE * half_extent)
+	sorting_use_aabb_center = false # f32 collapses that AABB's centre; sort by the node origin
 	mesh = quad_mesh
 	var shader: Shader = IVGlobal.resources[&"body_psf_shader"]
 	_material = ShaderMaterial.new()

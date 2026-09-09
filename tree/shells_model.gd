@@ -505,6 +505,7 @@ func _set_visibility_and_layers() -> void:
 		# remap keeps the surface on-screen even when that test fails; make it always pass.
 		var extent := IVCoreSettings.max_camera_distance
 		custom_aabb = AABB(-Vector3.ONE * extent, 2.0 * Vector3.ONE * extent)
+		sorting_use_aabb_center = false # f32 collapses that AABB's centre; sort by the node origin
 
 
 # A shell that readies after a dynamic grant would miss the caster bit until

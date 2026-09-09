@@ -184,6 +184,7 @@ func _build() -> void:
 	var half_extent := maxf(max_distance, IVCoreSettings.max_camera_distance)
 	var half_aabb := half_extent * Vector3.ONE
 	points_mesh.custom_aabb = AABB(-half_aabb, 2.0 * half_aabb)
+	sorting_use_aabb_center = false # f32 collapses that AABB's centre; sort by the node origin
 	mesh = points_mesh
 
 

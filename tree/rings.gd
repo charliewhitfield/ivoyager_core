@@ -183,6 +183,7 @@ func _ready() -> void:
 	# above is what actually retires the ring.
 	var extent := IVCoreSettings.max_camera_distance
 	custom_aabb = AABB(-Vector3.ONE * extent, 2.0 * Vector3.ONE * extent)
+	sorting_use_aabb_center = false # f32 collapses that AABB's centre; sort by the node origin
 
 	_rings_material.shader = IVGlobal.resources[&"rings_shader"]
 	_rings_material.set_shader_parameter(&"rings_textures", _texture_array)
