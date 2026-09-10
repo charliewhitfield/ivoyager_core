@@ -33,7 +33,7 @@ extends PopupPanel
 ## Depending on value type, an option item can be a [CheckBox], [OptionButton],
 ## [SpinBox], [LineEdit] or [ColorPickerButton]. Individual option Controls
 ## can be modified by [member option_enumerations] and [member
-## option_control_properties].
+## option_control_properties], and given a tooltip by [member option_tooltips].
 
 
 ## Stop the simulator while this popup is open. This setting will be overridden
@@ -140,6 +140,40 @@ extends PopupPanel
 	small_bodies_symbol_size_percent = {min_value = 10, max_value = 250, step = 10, suffix = "%"},
 	small_bodies_point_size = {min_value = 1, max_value = 20},
 	screenshot_width = {min_value = 300, max_value = 8192, step = 2, suffix = "px"},
+}
+
+## Option tooltips, keyed by setting. Values are translation keys (Core's are in
+## [code]text/hints_text.csv[/code]); an option with no entry has no tooltip.
+@export var option_tooltips: Dictionary[StringName, StringName] = {
+	save_base_name = &"HINT_SAVE_BASE_NAME",
+	append_date_to_save = &"HINT_APPEND_DATE_TO_SAVE",
+	pause_on_load = &"HINT_PAUSE_ON_LOAD",
+	autosave_time_min = &"HINT_AUTOSAVE_TIME_MIN",
+	camera_transfer_time = &"HINT_CAMERA_TRANSFER_TIME",
+	camera_mouse_in_out_inverse = &"HINT_CAMERA_MOUSE_IN_OUT_INVERSE",
+	camera_mouse_in_out_rate = &"HINT_CAMERA_MOUSE_IN_OUT_RATE",
+	camera_mouse_move_rate = &"HINT_CAMERA_MOUSE_MOVE_RATE",
+	camera_mouse_pitch_yaw_rate = &"HINT_CAMERA_MOUSE_PITCH_YAW_RATE",
+	camera_mouse_roll_rate = &"HINT_CAMERA_MOUSE_ROLL_RATE",
+	camera_key_in_out_rate = &"HINT_CAMERA_KEY_IN_OUT_RATE",
+	camera_key_move_rate = &"HINT_CAMERA_KEY_MOVE_RATE",
+	camera_key_pitch_yaw_rate = &"HINT_CAMERA_KEY_PITCH_YAW_RATE",
+	camera_key_roll_rate = &"HINT_CAMERA_KEY_ROLL_RATE",
+	screenshot_width = &"HINT_SCREENSHOT_WIDTH",
+	screenshot_aspect = &"HINT_SCREENSHOT_ASPECT",
+	screenshot_file_dialog = &"HINT_SCREENSHOT_FILE_DIALOG",
+	language = &"HINT_LANGUAGE",
+	gui_size = &"HINT_GUI_SIZE",
+	label3d_names_size_percent = &"HINT_LABEL3D_NAMES_SIZE_PERCENT",
+	body_symbol_size_percent = &"HINT_BODY_SYMBOL_SIZE_PERCENT",
+	small_bodies_symbol_size_percent = &"HINT_SMALL_BODIES_SYMBOL_SIZE_PERCENT",
+	small_bodies_point_size = &"HINT_SMALL_BODIES_POINT_SIZE",
+	hide_hud_when_close = &"HINT_HIDE_HUD_WHEN_CLOSE",
+	physical_light = &"HINT_PHYSICAL_LIGHT",
+	directional_shadow_size = &"HINT_DIRECTIONAL_SHADOW_SIZE",
+	msaa_3d = &"HINT_MSAA_3D",
+	fxaa = &"HINT_FXAA",
+	use_taa = &"HINT_USE_TAA",
 }
 
 var _enumerations: Dictionary[StringName, Dictionary] = {}
@@ -286,7 +320,11 @@ func _build_content() -> void:
 
 
 func _build_item(option_text: StringName, setting: StringName) -> HBoxContainer:
+	# Labels ignore the mouse and value Controls stop the tooltip search at themselves,
+	# so both the row and its value Control need the tooltip.
+	var tooltip: StringName = option_tooltips.get(setting, &"")
 	var setting_hbox := HBoxContainer.new()
+	setting_hbox.tooltip_text = tooltip
 	var label := Label.new()
 	setting_hbox.add_child(label)
 	label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
@@ -306,6 +344,7 @@ func _build_item(option_text: StringName, setting: StringName) -> HBoxContainer:
 			var checkbox := CheckBox.new()
 			setting_hbox.add_child(checkbox)
 			checkbox.size_flags_horizontal = Control.SIZE_SHRINK_END
+			checkbox.tooltip_text = tooltip
 			_set_overrides(checkbox, setting)
 			checkbox.button_pressed = value
 			checkbox.toggled.connect(_on_change.bind(setting, default_button))
@@ -319,6 +358,7 @@ func _build_item(option_text: StringName, setting: StringName) -> HBoxContainer:
 				setting_hbox.add_child(option_button)
 				for key: String in keys:
 					option_button.add_item(key)
+				option_button.tooltip_text = tooltip
 				_set_overrides(option_button, setting)
 				option_button.selected = value
 				option_button.item_selected.connect(_on_change.bind(setting, default_button))
@@ -331,6 +371,7 @@ func _build_item(option_text: StringName, setting: StringName) -> HBoxContainer:
 				spin_box.rounded = is_int
 				spin_box.min_value = 0.0
 				spin_box.max_value = 100.0
+				spin_box.tooltip_text = tooltip
 				_set_overrides(spin_box, setting)
 				spin_box.value = value
 				spin_box.value_changed.connect(_on_change.bind(setting, default_button, is_int))
@@ -344,6 +385,7 @@ func _build_item(option_text: StringName, setting: StringName) -> HBoxContainer:
 			line_edit.alignment = HORIZONTAL_ALIGNMENT_RIGHT
 			line_edit.size_flags_horizontal = Control.SIZE_SHRINK_END
 			line_edit.custom_minimum_size.x = 100.0
+			line_edit.tooltip_text = tooltip
 			_set_overrides(line_edit, setting)
 			line_edit.text = value
 			line_edit.text_changed.connect(_on_change.bind(setting, default_button))
@@ -353,6 +395,7 @@ func _build_item(option_text: StringName, setting: StringName) -> HBoxContainer:
 			setting_hbox.add_child(color_picker_button)
 			color_picker_button.custom_minimum_size.x = 60.0
 			color_picker_button.edit_alpha = false
+			color_picker_button.tooltip_text = tooltip
 			_set_overrides(color_picker_button, setting)
 			color_picker_button.color = value
 			color_picker_button.color_changed.connect(_on_change.bind(setting, default_button))
