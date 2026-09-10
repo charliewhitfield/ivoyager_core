@@ -614,10 +614,12 @@ func _propagate_cloud_shadow(shell_specs: Array, asset_preloader: IVAssetPreload
 				continue
 			# The lookup is a DIRECTION, so only a cubemap deck can answer it; an equirect one
 			# would need its own sampler and a uv the surface shader does not carry. Tested on
-			# the layered type and not with `as Cubemap`, because an imported cube arrives as
-			# CompressedCubemap, which extends TextureLayered and NOT Cubemap -- the cast would
-			# be null on every real asset and the feature would silently never run.
-			var layered := channels[param] as TextureLayered
+			# the layered type and not against `Cubemap`, because an imported cube arrives as
+			# CompressedCubemap, which extends TextureLayered and NOT Cubemap -- that test
+			# would fail on every real asset and the feature would silently never run.
+			var layered: TextureLayered = null
+			if channels[param] is TextureLayered:
+				layered = channels[param]
 			if not layered or layered.get_layered_type() != TextureLayered.LAYERED_TYPE_CUBEMAP:
 				push_warning("Body %s shell %d: a cloud shadow needs a cubemap deck; skipping"
 						% [_body_name, shell_index])
