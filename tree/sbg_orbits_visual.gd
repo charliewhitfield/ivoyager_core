@@ -85,6 +85,7 @@ func _init(sbg: IVSmallBodiesGroup) -> void:
 		# make the test always pass wherever the camera can be.
 		var extent := IVCoreSettings.max_camera_distance
 		custom_aabb = AABB(-Vector3.ONE * extent, 2.0 * Vector3.ONE * extent)
+		sorting_use_aabb_center = false # f32 collapses that AABB's centre; sort by the node origin
 
 	# id overlay, orthogonal to appearance (_bypass_fragment_identifier suppresses it)
 	if _fragment_identifier and !_bypass_fragment_identifier:

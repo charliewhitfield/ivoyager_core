@@ -387,14 +387,29 @@ simulated one; it distorts what is drawn and nothing that is queried.
 
 Below the threshold where a body earns a node, populations are `IVSmallBodiesGroup`s: one
 node per group holding packed float32 element arrays for every member — `e, i, Ω, ω` |
-`a, M₀, n` | `s, g, mag, de` | and for Trojans `da, dl, f, θ₀` — plus names. The shipped
+`a, M₀, n` | `s, g, mag` | and for Trojans `da, dl, f, θ₀` — plus names. The shipped
 eleven groups are the near-Earth objects, Mars-crossers, inner/middle/outer main belt,
 Hildas, the two Jupiter Trojan clouds and a "suspect Trojan" catch-all, Centaurs and
 trans-Neptunian objects, each loaded from `asteroid_binaries/` by magnitude bin up to the
 group's `mag_cutoff` (or `IVCoreSettings.sbg_mag_cutoff_override`). The elements are
 AstDyS *proper* elements, and *g* and *s* are the proper frequencies of perihelion and
 node — secular precession rates, which is the same "perturbations as rates" idea as
-`IVOrbit` applied catalog-wide. The binaries are built externally by `ivbinary_maker`.
+`IVOrbit` applied catalog-wide. The binaries are built by `build_asteroid_binaries.py` in
+the `tools` submodule, whose module docstring specifies the file format and cites its
+sources.
+
+**`n` is the mean *longitude* rate, so mean anomaly advances at `n − g`.** That is what
+AstDyS publishes — the fundamental frequencies of (λ, ϖ, Ω) — and the distinction is not
+cosmetic. For a body in a mean-motion resonance the published `g` is not a secular
+precession at all but the rate that holds the resonant argument stationary: for a Hilda,
+`g = 3n_J − 2n`, which holds for 96.9 % of them within 50 "/yr where a middle-belt control
+matches at 0.0 %. Advancing mean anomaly at `n` adds `g` to every asteroid's mean motion
+and unlocks the Hildas from Jupiter — 1344° of drift over 3000 BC – 3000 AD against 5°.
+The shader applies the difference; `get_mean_anomaly_rate()` is the CPU-side equivalent.
+(A blanket ÷3 on `s` and `g` used to hide this, tuned on the Hildas because dividing `g`
+by three is algebraically the same correction *for a 3:2 resonance only*. It left every
+non-resonant asteroid precessing at a third of its catalog rate and was removed once the
+cause was found.)
 
 **Positions are visual state; elements are physical state.** No CPU code ever computes an
 asteroid's position. `IVSBGPositionsVisual` hands the arrays to the GPU as vertex custom
@@ -412,14 +427,14 @@ member's *a* and mean anomaly oscillate about the secondary's (Jupiter's) semi-m
 and its mean longitude ± 60°, fed per frame from the live `IVBody`, through a harmonic
 oscillator with a non-linear tail term that exaggerates the excursion when distal to the
 secondary. It is a stated rough approximation — libration about a Lagrange point has no
-closed form — and the eccentricity libration amplitude `de` in the arrays is unused. The
-proper treatment, an `IVResonantOrbit` whose elements oscillate under the secondary's
-influence, is on the roadmap for individual bodies.
+closed form. The proper treatment, an `IVResonantOrbit` whose elements oscillate under the
+secondary's influence, is on the roadmap for individual bodies. The phase `θ₀` is solved
+rather than assumed: since *a* and mean longitude oscillate in quadrature, a member's own
+osculating pair at the source epoch fixes its phase, longitude giving the angle and *a*
+only its sign. That places every Trojan at its true mean longitude at epoch.
 
-**Two known rough edges** are carried in TODO: the group orbit lines are static ellipses at
-the epoch elements while the points precess, so line and point separate over centuries;
-and a blanket factor of three on every group's *g* and *s*, added to keep the Hildas in
-place over ±5,000 years, is marked in code as working for an unknown reason.
+**One known rough edge** is carried in TODO: the group orbit lines are static ellipses at
+the epoch elements while the points precess, so line and point separate over centuries.
 
 ## Frames, units and constants
 
@@ -728,11 +743,12 @@ Roadmap items consolidated from the class headers (`IVBody`, `IVOrbit`,
 - **Kepler solvers.** The 1e-5 rad Newton tolerance on the true-anomaly solvers is marked
   to tighten, and a better-conditioned starter or algorithm is wanted above e ≈ 0.8; the
   shader's unrolled five steps are the same solver.
-- **Small-body groups.** The factor of three applied to every group's `s` and `g` (added
-  for the Hildas, cause unknown — verify each group's source units before trusting a
-  blanket divisor); group orbit lines drawn at epoch elements while the points precess;
-  `de` (eccentricity libration) unimplemented; the Trojan libration approximation; comet
-  and artificial-satellite group classes reserved; `get_orbit_elements` flagged
+- **Small-body groups.** Group orbit lines drawn at epoch elements while the points
+  precess; the Trojan libration approximation itself (its phase is now anchored, but the
+  modified harmonic oscillator is still a stand-in); eccentricity libration in secular
+  resonance unmodelled, and unmodellable from AstDyS alone, which publishes the amplitude
+  but neither the frequency nor the phase — those members carry their osculating `e`;
+  comet and artificial-satellite group classes reserved; `get_orbit_elements` flagged
   experimental and not reflecting Trojan libration.
 - **Audit findings in `IVBody`.** `_set_system_radius()` computes the radius-multiple and
   table-value candidates but never stores them — only the outermost-satellite branch

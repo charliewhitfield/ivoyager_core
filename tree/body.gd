@@ -325,6 +325,20 @@ var farwarp_position := Vector3.ZERO
 ## a ramp this smooth. Left at the shader defaults for a body with no
 ## [IVBodyPSF], whose disc does not fade at all. Read-only!
 var psf_handoff := Vector2(1.0, 2.5)
+## Current contribution of this body's rings to its POINT-SOURCE flux, in the same terms
+## the body's own disc contributes [code]geometric_albedo * phase_function * radius^2[/code]:
+## multiply by the star's illuminance at the body and divide by the camera distance squared
+## for the illuminance the rings put at the camera. Published each frame by [IVRings] and
+## read by [IVBodyPSF], on the same one-frame lag and for the same reason as
+## [member psf_handoff]. Zero for a body with no rings, and zero while the rings are large
+## enough on screen for their own plane to draw them -- the two are a crossfade, so the pair
+## carries the ring's light exactly once. Read-only!
+var rings_psf_flux_factor := 0.0
+## V colour index of this body's rings, published by [IVRings] beside
+## [member rings_psf_flux_factor] and used with it: [IVBodyPSF] combines the two sources'
+## indices through their fluxes, so the point does not recolour the ring's light as it takes
+## it over. Meaningless where that factor is zero. Read-only!
+var rings_psf_color_b_v := 0.0
 ## Current visibility state for associated HUD elements, including
 ## IVBodyPositionVisual and IVPathVisual. Read-only!
 var huds_visible := false

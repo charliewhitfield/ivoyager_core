@@ -23,13 +23,14 @@ extends MeshInstance3D
 ## Catalog star field drawn as farwarp-remapped point sprites.
 ##
 ## Builds one [constant Mesh.PRIMITIVE_POINTS] surface from magnitude-binned star
-## binaries (produced by [code]addons/tools/build_star_binaries.py[/code]) on [signal
-## IVStateManager.core_initialized]. Each vertex is a star at its true ecliptic
-## position (internal units); a [code]CUSTOM0[/code] channel carries raw
-## (V magnitude, B-V), which the [code]stars[/code] shader converts to point
-## size, brightness and color. The shader's per-vertex farwarp remap (shared with
-## the small-body points) keeps distant stars inside the camera far plane and
-## behind every simulation visual at any zoom.[br][br]
+## binaries (produced by [code]addons/tools/build_star_binaries.py[/code] from the
+## Hipparcos and Tycho-2 catalogues) on [signal IVStateManager.core_initialized].
+## Each vertex is a star at its true ecliptic position (internal units); a
+## [code]CUSTOM0[/code] channel carries raw (V magnitude, B-V), which the
+## [code]stars[/code] shader converts to point size, brightness and color. The
+## shader's per-vertex farwarp remap (shared with the small-body points) keeps
+## distant stars inside the camera far plane and behind every simulation visual at
+## any zoom.[br][br]
 ##
 ## Authored as a fixed node under [code]Universe[/code] (no PERSIST_MODE), so it
 ## rides the [IVCamera] origin shift automatically, builds once, and survives
@@ -42,19 +43,22 @@ extends MeshInstance3D
 
 ## Magnitude-bin upper edges; must match the bins written by
 ## [code]addons/tools/build_star_binaries.py[/code]. Each bin file holds stars up to its edge.
-const BINARY_FILE_MAGNITUDES: Array[String] = ["2.0", "3.0", "4.0", "5.0", "6.0", "7.0", "8.0",
-		"9.0", "99.9"]
+const BINARY_FILE_MAGNITUDES: Array[String] = ["2.0", "2.5", "3.0", "3.5", "4.0", "4.5", "5.0",
+		"5.5", "6.0", "6.5", "7.0", "7.5", "8.0", "8.5", "9.0", "9.5", "10.0", "10.5", "11.0",
+		"11.5", "12.0", "12.5", "13.0", "99.9"]
 
 const _ARRAY_FLAGS := Mesh.ARRAY_CUSTOM_RG_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
 const _BINARY_MAGIC := 0x54535649 # b"IVST", little-endian
-const _BINARY_VERSION := 1
+const _BINARY_VERSION := 2
 
 ## Path prefix for the star binaries. The loader appends
 ## [code].<magnitude>.ivbinary[/code] for each bin in [member BINARY_FILE_MAGNITUDES].
-@export var stars_binary_path := "res://addons/ivoyager_assets/starmaps/hipparcos_stars"
+@export var stars_binary_path := "res://addons/ivoyager_assets/starmaps/stars"
 
 ## Loads magnitude bins up to and including this V-magnitude cutoff. Lower it (or
-## remove bin files from the asset directory) to trade completeness for size.
+## remove bin files from the asset directory) to trade completeness for size. A
+## project that renders at a fixed fov can drop every bin that fov cannot show;
+## the ivoyager_assets README tabulates where each bin becomes invisible.
 @export var magnitude_cutoff := 99.9
 
 # The tuning surface for IVPSFSettings, the camera every source images through -- this
@@ -149,11 +153,12 @@ func _ready() -> void:
 func _build() -> void:
 	var vertices := PackedVector3Array()
 	var magnitudes_colors := PackedFloat32Array() # (V_mag, B-V) per vertex -> CUSTOM0
-	var max_distance_sq := 0.0
+	var max_distance := 0.0
 	for magnitude_str in BINARY_FILE_MAGNITUDES:
 		if magnitude_str.to_float() > magnitude_cutoff:
 			break
-		max_distance_sq = _append_binary(magnitude_str, vertices, magnitudes_colors, max_distance_sq)
+		max_distance = maxf(max_distance,
+				_append_binary(magnitude_str, vertices, magnitudes_colors))
 	if vertices.is_empty():
 		push_warning("IVStarsVisual: no star binaries found at '%s.*.ivbinary'" % stars_binary_path)
 		return
@@ -176,9 +181,10 @@ func _build() -> void:
 	# Frustum culling tests this AABB against the far plane, but farwarp-remapped
 	# points stay on-screen even when the true-scale test fails; size the AABB so
 	# it always contains the camera (as IVSBGPositionsVisual does for its points).
-	var half_extent := maxf(sqrt(max_distance_sq), IVCoreSettings.max_camera_distance)
+	var half_extent := maxf(max_distance, IVCoreSettings.max_camera_distance)
 	var half_aabb := half_extent * Vector3.ONE
 	points_mesh.custom_aabb = AABB(-half_aabb, 2.0 * half_aabb)
+	sorting_use_aabb_center = false # f32 collapses that AABB's centre; sort by the node origin
 	mesh = points_mesh
 
 
@@ -203,42 +209,69 @@ func _apply_psf_uniforms() -> void:
 
 
 # Appends one magnitude bin's stars to [param vertices] (internal units) and
-# [param magnitudes_colors] (CUSTOM0 float pairs), returning the running maximum
-# squared distance for the AABB. A missing file is skipped silently (missing
-# bin = no items, as with the asteroid binaries).
+# [param magnitudes_colors] (CUSTOM0 float pairs), returning the bin's own farthest
+# star distance for the AABB. A missing file is skipped silently (missing bin = no
+# items, as with the asteroid binaries) -- which is what lets a project ship only
+# the bins its own fov can show.
+#
+# The file is the packed v2 format; build_star_binaries.py's docstring is its
+# specification, and the quantization constants ride in the header rather than
+# being duplicated here so a rebuild cannot silently disagree with this decode.
 func _append_binary(magnitude_str: String, vertices: PackedVector3Array,
-		magnitudes_colors: PackedFloat32Array, max_distance_sq: float) -> float:
+		magnitudes_colors: PackedFloat32Array) -> float:
 	var path := stars_binary_path + "." + magnitude_str + ".ivbinary"
 	var file := FileAccess.open(path, FileAccess.READ)
 	if !file:
-		return max_distance_sq
+		return 0.0
 	if file.get_32() != _BINARY_MAGIC:
 		push_warning("IVStarsVisual: bad magic in '%s'" % path)
-		return max_distance_sq
+		return 0.0
 	var version := file.get_32()
 	if version != _BINARY_VERSION:
 		push_warning("IVStarsVisual: unexpected version %s in '%s'" % [version, path])
+		return 0.0
 	var count := file.get_32()
+	var parallax_count := file.get_32()
+	var shell_pc := file.get_float()
+	var max_distance_pc := file.get_float()
+	var parallax_scale := file.get_float()
+	var magnitude_min := file.get_float()
+	var magnitude_step := file.get_float()
+	var b_v_min := file.get_float()
+	var b_v_step := file.get_float()
 	if count == 0:
-		return max_distance_sq
-	var position_floats := file.get_buffer(count * 12).to_float32_array() # x,y,z SI meters
-	var custom_floats := file.get_buffer(count * 8).to_float32_array() # V_mag, B-V
+		return 0.0
+	# Two uint32 per star, bulk-read as one int32 array so the decode below is integer
+	# masks on a packed buffer rather than a FileAccess call per field.
+	var words := file.get_buffer(count * 8).to_int32_array()
+	var parallax_codes := file.get_buffer(parallax_count * 2)
 	file.close()
 
-	# SI meters -> internal units. Mandatory before the shader: raw meters (~1e19
-	# for the 1 kpc shell) overflow float32 in farwarp()'s length() -> +inf/NaN.
-	const METER := IVUnits.METER
+	# Direction components are quantized over +/-1 and deliberately left unnormalized
+	# (see build_star_binaries.py); folding the 1/32767 into the distance is what keeps
+	# the loop to one Vector3 multiply. The parallax stars come first in the file, so
+	# the index alone says which distance a star takes.
+	const PARSEC := IVUnits.PARSEC
+	var shell_scale := shell_pc * PARSEC / 32767.0
+	var parallax_numerator := 1000.0 * parallax_scale * PARSEC / 32767.0
 	var base := vertices.size()
+	var base_custom := magnitudes_colors.size()
 	vertices.resize(base + count)
+	magnitudes_colors.resize(base_custom + count * 2)
 	var i := 0
 	while i < count:
-		var k := i * 3
-		var star_position := Vector3(position_floats[k], position_floats[k + 1],
-				position_floats[k + 2]) * METER
-		vertices[base + i] = star_position
-		var distance_sq := star_position.length_squared()
-		if distance_sq > max_distance_sq:
-			max_distance_sq = distance_sq
+		var word_0 := words[i * 2]
+		var word_1 := words[i * 2 + 1]
+		var distance_scale := shell_scale
+		if i < parallax_count:
+			distance_scale = parallax_numerator / float(parallax_codes.decode_u16(i * 2))
+		vertices[base + i] = Vector3(
+				float((word_0 & 0xFFFF) - 32768),
+				float(((word_0 >> 16) & 0xFFFF) - 32768),
+				float((word_1 & 0xFFFF) - 32768)) * distance_scale
+		magnitudes_colors[base_custom + i * 2] = (magnitude_min
+				+ magnitude_step * float((word_1 >> 16) & 0xFF))
+		magnitudes_colors[base_custom + i * 2 + 1] = (b_v_min
+				+ b_v_step * float((word_1 >> 24) & 0xFF))
 		i += 1
-	magnitudes_colors.append_array(custom_floats)
-	return max_distance_sq
+	return max_distance_pc * PARSEC

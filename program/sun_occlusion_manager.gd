@@ -92,6 +92,7 @@ var _ring_profile_images: Dictionary[StringName, Image] = {}
 # while the frankensteined slot 1 rendered someone else's).
 var _occluder_data_a := PackedVector4Array()
 var _occluder_data_b := PackedVector4Array()
+var _occluder_data_c := PackedVector4Array()
 var _keeper_bodies: Array[IVBody] = []
 var _keeper_scores := PackedFloat64Array()
 
@@ -161,7 +162,11 @@ static func get_two_disc_visible_fraction(sun_angular_radius: float,
 ## one oblate-spheroid occluder. [param sun_direction] and [param occluder_pole]
 ## are unit vectors; either pole sign works. All positions and lengths must
 ## share one frame and unit. GLSL twin:
-## [code]sun_occlusion_spheroid_fraction()[/code].
+## [code]sun_occlusion_spheroid_fraction()[/code], which differs in one place by design: a
+## point at or inside the occluder's own figure answers FULL sun here and NO sun there. The
+## camera can sit inside a body without that meaning the sun is gone, where the only shader
+## receiver that can reach the case is a ring plane running through the body that shadows
+## it.
 static func get_spheroid_occlusion_fraction(position: Vector3, sun_direction: Vector3,
 		sun_angular_radius: float, occluder_center: Vector3, occluder_pole: Vector3,
 		equatorial_radius: float, polar_radius: float) -> float:
@@ -174,7 +179,7 @@ static func get_spheroid_occlusion_fraction(position: Vector3, sun_direction: Ve
 			+ stretch * sun_direction.dot(occluder_pole) * occluder_pole).normalized()
 	var dist := offset_stretched.length()
 	if dist <= equatorial_radius:
-		return 1.0 # at/inside the occluder
+		return 1.0 # at/inside the occluder; see the divergence noted above
 	var to_occluder := offset_stretched / dist
 	if to_occluder.dot(sun_direction_stretched) <= 0.0:
 		return 1.0 # occluder is not sunward of the position
@@ -232,6 +237,7 @@ func _ready() -> void:
 	process_priority = 100 # after IVCamera (0) has origin-shifted the Universe
 	_occluder_data_a.resize(MAX_OCCLUDERS)
 	_occluder_data_b.resize(MAX_OCCLUDERS)
+	_occluder_data_c.resize(MAX_OCCLUDERS)
 	IVGlobal.current_camera_changed.connect(_on_current_camera_changed)
 	IVGlobal.camera_tree_changed.connect(_on_camera_tree_changed)
 	IVStateManager.about_to_free_procedural_nodes.connect(_clear_procedural)
@@ -349,9 +355,12 @@ func _register_rings(system_name: StringName, rings: IVRings) -> void:
 	if _rings_nodes.get(system_name) == rings:
 		return
 	var asset_preloader: IVAssetPreloader = IVGlobal.program[&"AssetPreloader"]
+	var profile_texture := asset_preloader.get_rings_shadow_profile_texture(rings.name)
+	if !profile_texture:
+		return # no profile, no ring shadow; leaving these unregistered is what every
+		# consumer's existing "are there rings" test then reads (IVAssetPreloader warned)
 	_rings_nodes[system_name] = rings
-	_ring_profile_textures[system_name] = asset_preloader.get_rings_shadow_profile_texture(
-			rings.name)
+	_ring_profile_textures[system_name] = profile_texture
 	_ring_profile_images[system_name] = asset_preloader.get_rings_shadow_profile_image(
 			rings.name)
 
@@ -373,6 +382,7 @@ func _feed_body(body: IVBody, materials: Array) -> void:
 	var occluder_count := 0
 	var occluder_data_a := PackedVector4Array()
 	var occluder_data_b := PackedVector4Array()
+	var occluder_data_c := PackedVector4Array()
 	if _analytic_enabled:
 		occluder_count = _select_occluders(body, body_position, sun_direction,
 				sun_angular_radius)
@@ -380,6 +390,7 @@ func _feed_body(body: IVBody, materials: Array) -> void:
 			# Own copy per receiver; the shared scratch aliases into fed materials.
 			occluder_data_a = _occluder_data_a.duplicate()
 			occluder_data_b = _occluder_data_b.duplicate()
+			occluder_data_c = _occluder_data_c.duplicate()
 	var system_name := StringName()
 	if body.star_orbiter:
 		system_name = body.star_orbiter.name
@@ -395,6 +406,7 @@ func _feed_body(body: IVBody, materials: Array) -> void:
 		if occluder_count > 0:
 			material.set_shader_parameter(&"occluder_data_a", occluder_data_a)
 			material.set_shader_parameter(&"occluder_data_b", occluder_data_b)
+			material.set_shader_parameter(&"occluder_data_c", occluder_data_c)
 		if rings:
 			material.set_shader_parameter(&"ring_alpha_r8", _ring_profile_textures[system_name])
 			material.set_shader_parameter(&"ring_alpha_width",
@@ -429,13 +441,18 @@ func _feed_ring_material(body: IVBody, material: ShaderMaterial, sun_direction: 
 	# _feed_body), and this ringed body is not the only receiver in the frame.
 	var occluder_data_a := PackedVector4Array()
 	var occluder_data_b := PackedVector4Array()
+	var occluder_data_c := PackedVector4Array()
 	occluder_data_a.resize(MAX_OCCLUDERS)
 	occluder_data_b.resize(MAX_OCCLUDERS)
+	occluder_data_c.resize(MAX_OCCLUDERS)
 	occluder_data_a[0] = Vector4(position.x, position.y, position.z, body.get_equatorial_radius())
 	occluder_data_b[0] = Vector4(pole.x, pole.y, pole.z, body.get_polar_radius())
+	occluder_data_c[0] = _get_stretched_sun(pole, body.get_equatorial_radius(),
+			body.get_polar_radius(), sun_direction)
 	material.set_shader_parameter(&"occluder_count", 1)
 	material.set_shader_parameter(&"occluder_data_a", occluder_data_a)
 	material.set_shader_parameter(&"occluder_data_b", occluder_data_b)
+	material.set_shader_parameter(&"occluder_data_c", occluder_data_c)
 
 
 # Fills the occluder scratch arrays with the candidates whose shadow reaches the
@@ -490,7 +507,19 @@ func _select_occluders(body: IVBody, body_position: Vector3, sun_direction: Vect
 		_occluder_data_a[slot] = Vector4(position.x, position.y, position.z,
 				occluder.get_equatorial_radius())
 		_occluder_data_b[slot] = Vector4(pole.x, pole.y, pole.z, occluder.get_polar_radius())
+		_occluder_data_c[slot] = _get_stretched_sun(pole, occluder.get_equatorial_radius(),
+				occluder.get_polar_radius(), sun_direction)
 	return count
+
+
+# The sun direction under an occluder's own pole stretch, with that stretch in w. Both are
+# constant over a frame, so the shaders take them fed rather than paying a normalize and a
+# divide per occluder on every lit fragment.
+func _get_stretched_sun(pole: Vector3, equatorial_radius: float, polar_radius: float,
+		sun_direction: Vector3) -> Vector4:
+	var stretch := equatorial_radius / polar_radius - 1.0
+	var stretched := (sun_direction + stretch * sun_direction.dot(pole) * pole).normalized()
+	return Vector4(stretched.x, stretched.y, stretched.z, stretch)
 
 
 func _get_candidates(body: IVBody) -> Array:

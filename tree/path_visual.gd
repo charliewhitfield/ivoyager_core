@@ -125,6 +125,7 @@ func _ready() -> void:
 		# make the test always pass wherever the camera can be.
 		var extent := IVCoreSettings.max_camera_distance
 		custom_aabb = AABB(-Vector3.ONE * extent, 2.0 * Vector3.ONE * extent)
+		sorting_use_aabb_center = false # f32 collapses that AABB's centre; sort by the node origin
 	if _fragment_identifier: # add self-identifying id overlay pass
 		var data := _body.get_fragment_data(FRAGMENT_BODY_ORBIT)
 		var fragment_id := _fragment_identifier.get_new_id_as_vec3(data)

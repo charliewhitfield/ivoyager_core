@@ -202,6 +202,7 @@ func _ready() -> void:
 	if _shell == 0:
 		_build_child_shells(shell_specs)
 		_propagate_atmosphere_overrides(shell_specs)
+		_propagate_cloud_shadow(shell_specs, asset_preloader)
 
 
 func _process(delta: float) -> void:
@@ -363,7 +364,7 @@ func _build_shader_material(shader_name: StringName, channels: Dictionary,
 	# A shell may opt into a ShaderMaterial (its shells.tsv "shader" column naming a
 	# Shader in IVGlobal.resources). Discovered channel textures feed it as named
 	# uniforms, and each shells.tsv override column feeds the uniform of the same name
-	# (so e.g. a "clouds_detail_strength" column tunes the shader per body); a column
+	# (so e.g. a "clouds_relief" column tunes the shader per body); a column
 	# that isn't a uniform is ignored. The shader owns its own blending.
 	# The spec names the cubemap variant already where the channels are cubemaps; the
 	# asset format decides that and IVAssetPreloader resolves it (cube_shader_variants).
@@ -504,6 +505,7 @@ func _set_visibility_and_layers() -> void:
 		# remap keeps the surface on-screen even when that test fails; make it always pass.
 		var extent := IVCoreSettings.max_camera_distance
 		custom_aabb = AABB(-Vector3.ONE * extent, 2.0 * Vector3.ONE * extent)
+		sorting_use_aabb_center = false # f32 collapses that AABB's centre; sort by the node origin
 
 
 # A shell that readies after a dynamic grant would miss the caster bit until
@@ -582,6 +584,66 @@ func _propagate_atmosphere_overrides(shell_specs: Array) -> void:
 	for material in materials:
 		for field: StringName in atmosphere:
 			material.set_shader_parameter(field, atmosphere[field])
+
+
+func _propagate_cloud_shadow(shell_specs: Array, asset_preloader: IVAssetPreloader) -> void:
+	# A cloud deck shadows what is under it, and the shell that draws the deck is not the shell
+	# the shadow lands on -- so the deck's map has to reach shell 0. Same shape as
+	# _propagate_atmosphere_overrides above, and for the same reason: authored on one row, read
+	# by another. The shader does the rest (clouds_sun_transmittance in _clouds.gdshaderinc).
+	#
+	# Only a deck declaring `clouds_two_stream_map` qualifies. A deck built from a single
+	# source channel carries a composited opacity in its alpha, which is a compositing weight
+	# and not a transmittance, so reading it as one would invent a shadow out of a number that
+	# does not mean that (Neptune's dark spots would darken the bands beneath them by their own
+	# contrast). Nothing is pushed for such a deck and it renders exactly as before.
+	var deck_scale := 0.0
+	var deck_texture: Texture = null
+	var deck_range_lo := Vector3.ZERO
+	var deck_range_hi := Vector3.ONE
+	for shell_index in range(1, shell_specs.size()):
+		var spec: Dictionary = shell_specs[shell_index]
+		var overrides: Dictionary = spec[&"overrides"]
+		if not overrides.get(&"clouds_two_stream_map", false):
+			continue
+		var texture_channels: Dictionary[int, StringName] = asset_preloader.texture_channels
+		var channels: Dictionary = spec[&"channels"]
+		var channel_ranges: Dictionary = spec.get(&"channel_ranges", {})
+		for param: int in channels:
+			if texture_channels.get(param, &"") != &"albedo":
+				continue
+			# The lookup is a DIRECTION, so only a cubemap deck can answer it; an equirect one
+			# would need its own sampler and a uv the surface shader does not carry. Tested on
+			# the layered type and not against `Cubemap`, because an imported cube arrives as
+			# CompressedCubemap, which extends TextureLayered and NOT Cubemap -- that test
+			# would fail on every real asset and the feature would silently never run.
+			var layered: TextureLayered = null
+			if channels[param] is TextureLayered:
+				layered = channels[param]
+			if not layered or layered.get_layered_type() != TextureLayered.LAYERED_TYPE_CUBEMAP:
+				push_warning("Body %s shell %d: a cloud shadow needs a cubemap deck; skipping"
+						% [_body_name, shell_index])
+				continue
+			deck_texture = layered
+			deck_scale = spec[&"scale"]
+			if channel_ranges.has(param):
+				var pair: Array = channel_ranges[param]
+				deck_range_lo = pair[0]
+				deck_range_hi = pair[1]
+		break
+	if not deck_texture:
+		return
+	var material := get_surface_override_material(0) as ShaderMaterial
+	if not material:
+		return
+	# Scales are measured against the body, and this shell has its own; the ratio is what the
+	# shader wants, its own sphere being the unit one. A deck at or below the surface casts
+	# nothing, which the shader's own <= 1 test also enforces.
+	var surface_scale: float = shell_specs[0][&"scale"]
+	material.set_shader_parameter(&"clouds_shadow_map", deck_texture)
+	material.set_shader_parameter(&"clouds_shadow_scale", deck_scale / surface_scale)
+	material.set_shader_parameter(&"clouds_shadow_range_lo", deck_range_lo)
+	material.set_shader_parameter(&"clouds_shadow_range_hi", deck_range_hi)
 
 
 # Render priority = this shell's rank by scale (ascending; shell index breaks ties),

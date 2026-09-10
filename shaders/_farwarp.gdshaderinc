@@ -29,11 +29,30 @@
 global uniform float iv_farwarp_start;
 
 
+// Distance, without length()'s overflow. length() sums squares, so it needs the SQUARE
+// of a coordinate to be representable, not the coordinate: in metre units that is a
+// ceiling of ~345 pc, where the position itself would reach 1e38. Past it length()
+// returns +inf, the compression below hands back position * (inf / inf) = NaN, and the
+// rasterizer drops the vertex in silence -- which is what the catalog star field's 1 kpc
+// shell had been doing to 98 % of its stars. Dividing by the largest component first
+// makes the square unconditionally safe and costs two max()es in a vertex shader.
+//
+// This is a real ceiling for any project, not a star-field quirk: it is 345 pc only
+// because IVUnits.METER is 1.0, and it scales with whatever METER a project sets.
+float farwarp_length(vec3 position) {
+	float largest = max(max(abs(position.x), abs(position.y)), abs(position.z));
+	if (largest == 0.0) {
+		return 0.0;
+	}
+	return largest * length(position / largest);
+}
+
+
 vec3 farwarp(vec3 position) {
 	if (iv_farwarp_start <= 0.0) {
 		return position;
 	}
-	float dist = length(position);
+	float dist = farwarp_length(position);
 	if (dist <= iv_farwarp_start) {
 		return position;
 	}

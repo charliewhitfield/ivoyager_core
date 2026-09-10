@@ -98,9 +98,20 @@ extends Node
 ## Toggle the physical_light user setting off before capturing icons (dev tool;
 ## inert outside source runs).
 
+## Default [member background_peak_magnitude_per_arcsec2], separated out so
+## [method compute_sky_energy] can be called without this node.
+const DEFAULT_BACKGROUND_PEAK_MAGNITUDE_PER_ARCSEC2 := 20.0
+## The fixed exposure with physical light off, and 2^[member exposure_max_ev] at
+## its default - so a project running without the compensating camera renders
+## every self-luminous source at the same level this one rests at, and toggling
+## the system changes what the camera RESPONDS to rather than how bright the sky
+## is. Duplicated as the [code]iv_exposure[/code] default in ivoyager_core.cfg,
+## which is what a project gets with this node erased; the two must agree.
+const INACTIVE_EXPOSURE := 2.0
+
 ## Current relative exposure; the value written to the [code]iv_exposure[/code]
-## shader global. 1.0 whenever inactive. Read-only.
-static var exposure := 1.0
+## shader global. [constant INACTIVE_EXPOSURE] whenever inactive. Read-only.
+static var exposure := INACTIVE_EXPOSURE
 ## The metered and adapted auto exposure, in EV relative to the authored sky
 ## look (log2 of the exposure it alone would apply): rests at
 ## [member exposure_max_ev] fully dark-adapted and falls as metering pulls
@@ -136,7 +147,7 @@ var exposure_adjustment_ev := 0.0
 ## photographic photometry of the brightest extended bulge patches (Sgr/Sct
 ## star clouds, ~19.5-20.5) pending measured refinement against LMC/SMC/M31
 ## levels in the shipped map.
-var background_peak_magnitude_per_arcsec2 := 20.0
+var background_peak_magnitude_per_arcsec2 := DEFAULT_BACKGROUND_PEAK_MAGNITUDE_PER_ARCSEC2
 ## Rendered value a fully-metered body's mean luminance lands at (mid-exposure
 ## target, in [0, 1] display terms).
 var metering_key := 0.5
@@ -175,13 +186,14 @@ var limb_meter_fraction_start := 0.05
 ## [code]limb_exposure_ceiling[/code]; see [member limb_meter_fraction_start].
 ## Roughly the body framed at the default view zoom with its lit limb in frame.
 var limb_meter_fraction_full := 0.5
-## The screen-edge gate on every candidate's metering weight: a body influences
+## The screen-edge gate on a body's DISC candidates: a body's own surface influences
 ## exposure only while its disc is actually inside the frame, ramping from zero
 ## as the disc crosses the frame edge to full influence when its center is this
 ## fraction of the frame dimension inside. Panning toward a bright body, it
 ## enters the frame still overexposed and compensation completes as it moves
-## in; a body just OUT of frame never meters (it can't - the same gate is what
-## keeps an off-frame sun from black-crushing the view).
+## in; an off-frame sun cannot black-crush the view. A candidate for something
+## that stands OUTSIDE the disc — a ring, a limb — carries its own gate on its
+## own geometry instead, so such a body still meters with its disc off frame.
 var meter_edge_fraction := 0.15
 ## The screen-edge gate on the limb ring's own samples (taken at the limb's
 ## foot), standing in for
@@ -205,16 +217,58 @@ var adapt_brighten_ev_per_second := 8.0
 var snap_ev_threshold := 6.0
 ## Albedo assumed for bodies without an [code]albedo[/code] table value.
 var default_albedo := 0.3
-## The ring metering candidate's base reflectance: the bright-ring level
-## (area-weighted 90th percentile x transparency) of the lit-side backscatter
-## profile, BEFORE the shader's phase boost, which the candidate mirrors per
-## frame - the boosted product near opposition well exceeds any Lambert
-## sphere's albedo, which is why lit rings clip white when only the globe
-## meters. Anchored at the bright-ring level rather than the ring mean so
-## metering protects the B-ring highlights; the fainter rings then render
-## mid-dim, as real photographs show them. Measured from the shipped Saturn
-## assets.
-var ring_meter_albedo := 0.55
+## The LIT ring face's metering level: the bright ring's SCATTERING STRENGTH,
+## times the ring system's [code]scattering_scale[/code]. The candidate
+## multiplies it by CPU mirrors of the ring shader's slab geometry and phase
+## function, whose product near opposition well exceeds any Lambert sphere's
+## albedo - which is why lit rings clip white when only the globe meters.
+## Anchored at the bright-ring level rather than the ring mean so metering
+## protects the B-ring highlights; the fainter rings then render mid-dim, as
+## real photographs show them. Derived from the shipped Saturn assets by
+## dividing the brightest radiance the shader produces over the whole radial
+## profile by the geometry term the manager uses - for this face the SATURATED
+## LIMIT, the term being monotone in optical depth, which makes the number nearly
+## independent of opening angle (1.173 to 1.210 across the whole range the
+## openness ramp below gives the candidate weight, so one number costs 0.02 EV at
+## worst). Re-derive it with scratch/rings/meter_albedos.py whenever the asset,
+## [code]scattering_scale[/code] or [code]unlit_level[/code] moves: it is not a
+## property of the rings but of the built file, and a stale pair is a flat
+## exposure error with nothing to announce it.
+var ring_meter_albedo := 1.19
+## The same for the UNLIT face, whose term has an interior peak instead. The peak
+## sits at optical depth mu, so as the rings close it walks out of the outer B ring
+## and into the C ring and the implied anchor swings with it: 1.515 at 26.7 deg,
+## 0.898 at 16, and about 1.05 from 12 down. One number therefore costs 0.38 EV at
+## worst on this face, which the openness ramp does NOT cover - both extremes sit
+## at full weight - so the value is the minimax over that range rather than a
+## median, and the alternative to accepting it is a per-mu table. It is comparable
+## with the lit face's, which is not the accident it looks: both faces take the
+## same phase term, and an unlit view is only reachable at a large phase angle, so
+## the phase level is what makes that face dim. The unlit face needs its own
+## candidate at all because it is not the faint object it looks like from the lit
+## side - an optically thin ring transmits nearly as much as it reflects, so the C
+## ring and the Cassini Division come through bright there while the B ring goes
+## dark.
+var ring_meter_unlit_albedo := 1.17
+## Ring openness - the sine of the camera's elevation above the ring plane -
+## below which the rings begin to hand the meter back, and above which they hold
+## it in full. A ring system closing toward edge-on is the same problem as a
+## planet going to crescent, and takes the same two-part answer: its screen AREA
+## is already in the ramp above, and this is the SHAPE term beside it, the exact
+## counterpart of [member nightside_onset_lit_fraction]. Area alone cannot do the
+## job - it carries only one power of the foreshortening against a ramp that
+## spans decades: measured with this ramp disabled, and the globe out of frame so
+## the rings alone hold the meter, the exposure sits within half a stop of its
+## metered value from a 12 deg opening down to 0.5 and then dumps 13.9 stops
+## between 0.2 deg and the plane, which is the flash. With the ramp the same 17.6
+## stops run from 8 deg to 1.5. Purely a taste setting: a ring at a low opening is
+## a bright line, and this is how readily the camera stops the whole frame down
+## for one.
+var ring_meter_onset_openness := 0.2
+## Ring openness below which the rings hold no metering at all; see
+## [member ring_meter_onset_openness], whose ramp ends here. The default spans
+## one decade, 11.5 deg of opening down to 1.15.
+var ring_meter_full_openness := 0.02
 ## The camera's fully dark-adapted exposure, in EV above the authored sky
 ## look (exposure 1.0): the RESTING exposure with nothing metered - the empty
 ## sky far from any body - and the bound that night-side metering rides to,
@@ -223,7 +277,7 @@ var ring_meter_albedo := 0.55
 ## sides stay black); the physical camera would keep adapting until starlit
 ## terrain is mid-exposed (~9-11 EV depending on albedo), blowing out the
 ## Milky Way on the way.
-var exposure_max_ev := 3.0
+var exposure_max_ev := 1.0
 ## Shapes the exposure path across the metering weight ramp: 1.0 spends EV
 ## uniformly across the (log-space) screen-fraction ramp, which reads as
 ## instant saturation on zoom-out - a fully-metered body has only ~1 EV of
@@ -270,12 +324,14 @@ var _captured_ambient_energy := NAN
 var _captured_tonemap_exposure := NAN
 var _ambient_energy_base := 0.0 # Environment ambient at exposure 1.0; x exposure per frame
 var _ring_meter_data: Dictionary[StringName, Vector2] = {} # body name -> (inner, outer) radius
+var _ring_photometry: Dictionary[StringName, PackedFloat64Array] = {} # -> the shader's own cells
 var _ring_meter_data_built := false
 var _limb_geometry: Dictionary[StringName, Vector2] = {} # body name -> (disc, shell) radius
 var _exposure_ceilings: Dictionary[StringName, Array] = {} # body name -> [(shell radius, ceiling)]
 var _limb_ceilings: Dictionary[StringName, float] = {} # body name -> limb_exposure_ceiling
+# Bodies with a candidate reaching outside their own disc; see _get_metering_target().
+var _wide_candidate_bodies: Dictionary[StringName, bool] = {}
 var _shell_meter_data_built := false
-var _ring_litside_phase_boost := 3.0 # rings.gdshader default
 
 
 func _ready() -> void:
@@ -294,7 +350,7 @@ func _exit_tree() -> void:
 	if physical_active:
 		_restore_scene_values()
 		physical_active = false
-	exposure = 1.0
+	exposure = INACTIVE_EXPOSURE
 	auto_exposure_ev = 0.0
 	_neutralize_shader_globals()
 
@@ -342,7 +398,7 @@ func _apply_transition() -> void:
 	else:
 		_restore_scene_values()
 		physical_active = false
-		exposure = 1.0
+		exposure = INACTIVE_EXPOSURE
 		auto_exposure_ev = 0.0
 		_neutralize_shader_globals()
 
@@ -358,19 +414,7 @@ func _recompute_photometry() -> bool:
 		_warned_off_nominal = true
 		push_warning("IVExposureManager: IVPSFSettings intensity_gamma/fov_compensation differ "
 				+ "from 1.0; the physical calibration assumes the photometric values")
-	# The star chain's fov/resolution compensation is exactly the inverse pixel
-	# solid angle of the PSF (a fixed-f-number camera), so the panorama's level
-	# reduces to the star photometry evaluated at the map's per-texel equivalent
-	# magnitude - the anchor minus 2.5*log10 of the reference pixel's arcsec^2.
-	# omega_ref uses the same reference fov and viewport height the star
-	# shaders compensate against, which is what makes the result view-invariant.
-	var reference_height := _get_reference_viewport_height()
-	var arcsec_per_pixel := psf_settings.fov_reference_deg * 3600.0 / reference_height
-	var omega_ref := arcsec_per_pixel * arcsec_per_pixel
-	var psf_area := TAU * psf_settings.psf_sigma * psf_settings.psf_sigma
-	sky_energy = (psf_settings.intensity_scale * psf_area * omega_ref
-			* 10.0 ** (0.4 * (psf_settings.intensity_faint_mag
-			- background_peak_magnitude_per_arcsec2)))
+	sky_energy = compute_sky_energy(background_peak_magnitude_per_arcsec2)
 	var anchor_luminance := IVPhotometry.get_luminance_from_surface_brightness(
 			background_peak_magnitude_per_arcsec2)
 	gain = sky_energy / anchor_luminance
@@ -444,9 +488,20 @@ func _build_ring_meter_data() -> void:
 	for row in IVTableData.get_n_rows(&"rings"):
 		var inner_radius := IVTableData.get_db_float(&"rings", &"inner_radius", row)
 		var outer_radius := IVTableData.get_db_float(&"rings", &"outer_radius", row)
+		# The same cells rings.gdshader takes, so the mirror cannot drift from the render.
+		var photometry := PackedFloat64Array([
+			IVTableData.get_db_float(&"rings", &"back_phase", row),
+			IVTableData.get_db_float(&"rings", &"forward_phase", row),
+			IVTableData.get_db_float(&"rings", &"forward_level", row),
+			IVTableData.get_db_float(&"rings", &"opposition_surge", row),
+			IVTableData.get_db_float(&"rings", &"opposition_width", row),
+			IVTableData.get_db_float(&"rings", &"clumping", row),
+		])
 		var ring_bodies: Array[StringName] = IVTableData.get_db_array(&"rings", &"bodies", row)
 		for ring_body_name: StringName in ring_bodies:
 			_ring_meter_data[ring_body_name] = Vector2(inner_radius, outer_radius)
+			_ring_photometry[ring_body_name] = photometry
+			_wide_candidate_bodies[ring_body_name] = true
 
 
 func _build_shell_meter_data() -> void:
@@ -490,6 +545,7 @@ func _build_shell_meter_data() -> void:
 							IVTableData.get_db_float(&"shells", &"exposure_ceiling", shell_row)))
 			if ceilings:
 				_exposure_ceilings[body_name] = ceilings
+				_wide_candidate_bodies[body_name] = true
 			if limb_row == -1:
 				continue
 			_limb_geometry[body_name] = Vector2(mean_radius * surface_scale,
@@ -497,6 +553,7 @@ func _build_shell_meter_data() -> void:
 			if IVTableData.db_has_value(&"shells", &"limb_exposure_ceiling", limb_row):
 				_limb_ceilings[body_name] = IVTableData.get_db_float(&"shells",
 						&"limb_exposure_ceiling", limb_row)
+				_wide_candidate_bodies[body_name] = true
 
 
 func _find_world_environment() -> void:
@@ -520,14 +577,41 @@ func _find_starmap_material() -> void:
 		_starmap_material = sky_material
 
 
-func _get_psf_settings() -> IVPSFSettings:
+## The background panorama's [code]energy_multiplier[/code] at exposure 1.0, from
+## [IVPSFSettings] and [param peak_magnitude_per_arcsec2]. This is the star field's
+## own photometry evaluated on the panorama, so it is what puts the two on one
+## brightness scale - a sky authored by eye instead sits at whatever factor against
+## the stars it was picked at, and moves out of agreement whenever a PSF value does.
+## Static and self-resolving so a project running WITHOUT physical light can still
+## author its sky here ([IVWorldEnvironment]); the default argument is what such a
+## caller gets, this node's own anchor being unreachable when the node is erased.
+static func compute_sky_energy(
+		peak_magnitude_per_arcsec2 := DEFAULT_BACKGROUND_PEAK_MAGNITUDE_PER_ARCSEC2) -> float:
+	# The star chain's fov/resolution compensation is exactly the inverse pixel
+	# solid angle of the PSF (a fixed-f-number camera), so the panorama's level
+	# reduces to the star photometry evaluated at the map's per-texel equivalent
+	# magnitude - the anchor minus 2.5*log10 of the reference pixel's arcsec^2.
+	# omega_ref uses the same reference fov and viewport height the star
+	# shaders compensate against, which is what makes the result view-invariant.
+	var psf_settings := _get_psf_settings()
+	if !psf_settings:
+		return 0.0
+	var arcsec_per_pixel := (psf_settings.fov_reference_deg * 3600.0
+			/ _get_reference_viewport_height())
+	var omega_ref := arcsec_per_pixel * arcsec_per_pixel
+	var psf_area := TAU * psf_settings.psf_sigma * psf_settings.psf_sigma
+	return (psf_settings.intensity_scale * psf_area * omega_ref
+			* 10.0 ** (0.4 * (psf_settings.intensity_faint_mag - peak_magnitude_per_arcsec2)))
+
+
+static func _get_psf_settings() -> IVPSFSettings:
 	var psf_settings_var: Variant = IVGlobal.program.get(&"PSFSettings")
 	if psf_settings_var is IVPSFSettings:
 		return psf_settings_var
 	return null
 
 
-func _get_reference_viewport_height() -> float:
+static func _get_reference_viewport_height() -> float:
 	# ProjectSettings, not RenderingServer.global_shader_parameter_get(): the
 	# latter is editor-only and returns null in a running project.
 	var setting_var: Variant = ProjectSettings.get_setting(
@@ -586,7 +670,13 @@ func _get_metering_target() -> float:
 		# completing compensation meter_edge_fraction inside the frame.
 		var view_factor := _get_view_factor(body.global_position, angular_radius,
 				view_size, tan_half_fov, aspect)
-		if view_factor <= 0.0:
+		# This gate is the DISC's, and every candidate below multiplies by it or by a gate
+		# of its own, so it can only skip the body outright where nothing of it reaches
+		# outside that disc. A ring stands more than twice the globe's radius out and an
+		# atmosphere shell stands above it, and skipping here on the disc alone is what
+		# kept Saturn's rings from metering with the rings filling the frame and the globe
+		# panned off the side.
+		if view_factor <= 0.0 and !_wide_candidate_bodies.has(body_name):
 			continue
 		if body.flags & IVBody.BodyFlags.BODYFLAGS_STAR:
 			if body != _star:
@@ -648,9 +738,9 @@ func _get_metering_target() -> float:
 					dark_weight, log_rest, rest_exposure))
 		if _ring_meter_data.has(body_name):
 			min_exposure = minf(min_exposure, _get_ring_candidate_exposure(body,
-					_ring_meter_data[body_name], camera_vector, camera_distance, star_vector,
-					star_distance, illuminance, shadow_fraction, fraction_per_theta_sq,
-					view_size, tan_half_fov, aspect, log_rest, rest_exposure))
+					_ring_meter_data[body_name], _ring_photometry[body_name], camera_vector,
+					camera_distance, star_vector, star_distance, illuminance, shadow_fraction,
+					fraction_per_theta_sq, view_size, log_rest, rest_exposure))
 		if _exposure_ceilings.has(body_name):
 			var ceilings: Array[Vector2] = _exposure_ceilings[body_name]
 			for shell in ceilings:
@@ -724,46 +814,180 @@ func _get_view_factor(global_position: Vector3, angular_radius: float, view_size
 	return smoothstep(0.0, maxf(meter_edge_fraction, 1e-4), penetration)
 
 
-## Metering candidate for a lit ring face (rings.tsv bodies): a flat annulus
-## whose screen fraction is its area foreshortened by the camera's elevation
-## from the ring plane, lit as a Lambert surface at the sun's elevation, with
-## [member ring_meter_albedo] and a CPU mirror of the ring shader's
-## backscatter phase boost carrying the map and phase response. A thin layer
-## shows its bright face only from the sun's side of the plane, so the unlit
-## side needs no candidate - it stays correctly exposed at the globe's own
-## metering. Returns rest_exposure when the ring doesn't meter.
-func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2, camera_vector: Vector3,
-		camera_distance: float, star_vector: Vector3, star_distance: float, illuminance: float,
+## Metering candidate for a ring face (rings.tsv bodies): a flat annulus whose
+## screen fraction is its area foreshortened by the camera's elevation from the
+## ring plane, at [member ring_meter_albedo] (or
+## [member ring_meter_unlit_albedo]) times CPU mirrors of the ring shader's two
+## photometric terms - the single-scattering slab's geometry at the two
+## elevations, and the phase function with its opposition surge.[br][br]
+##
+## What holds it is the ring's OWN geometry, in two parts, exactly as a body's lit
+## candidate is held by its lit area and then again by its lit fraction. The annulus is
+## sampled in azimuth and radius and each sample counts by how far inside the frame it
+## sits ([member meter_edge_fraction]); their share scales the annulus' screen area, so
+## the rings meter whenever the rings are the view - filling the frame with the globe
+## panned off the side, which a gate on the globe's own disc position cannot see - and
+## release as the camera flies inside them. Then the openness ramp
+## ([member ring_meter_onset_openness]), which is the shape term the area cannot supply:
+## area carries one power of the foreshortening against a ramp spanning decades, so on
+## area alone the rings held full weight to within a fraction of a degree of the plane
+## and released across it in a step.[br][br]
+##
+## BOTH faces meter. The unlit face is not the faint object it looks like from
+## the other side: an optically thin ring transmits nearly as much as it
+## reflects, so at a low opening angle the C ring and the Cassini Division come
+## through bright while the B ring goes dark, and a camera metered on the globe
+## alone clips them. The two branches also MEET at the plane rather than
+## switching, because each takes the slab term's own maximum over optical depth
+## and those converge as the camera approaches grazing (measured: 0.998 lit
+## against 0.988 unlit at 0.05 deg) - a thin ring really does look the same from
+## either side. Returns rest_exposure when the ring doesn't meter.
+func _get_ring_candidate_exposure(body: IVBody, ring_radii: Vector2,
+		ring_photometry: PackedFloat64Array, camera_vector: Vector3, camera_distance: float,
+		star_vector: Vector3, star_distance: float, illuminance: float,
 		shadow_fraction: float, fraction_per_theta_sq: float, view_size: Vector2,
-		tan_half_fov: float, aspect: float, log_rest: float, rest_exposure: float) -> float:
-	const PHASE_EXPONENT := 6.0 # rings.gdshader
+		log_rest: float, rest_exposure: float) -> float:
 	var axis := body.rotation_axis
 	var sin_camera_elevation := -camera_vector.dot(axis) / camera_distance
 	var sin_sun_elevation := star_vector.dot(axis) / star_distance
-	if sin_camera_elevation * sin_sun_elevation <= 0.0:
-		return rest_exposure # camera on the unlit side
+	var mu := absf(sin_camera_elevation)
+	var mu0 := absf(sin_sun_elevation)
 	var annulus_theta_sq := (ring_radii.y * ring_radii.y - ring_radii.x * ring_radii.x) \
-			* absf(sin_camera_elevation) / (camera_distance * camera_distance)
-	var ring_fraction := fraction_per_theta_sq * annulus_theta_sq
-	var view_factor := _get_view_factor(body.global_position,
-			minf(ring_radii.y / camera_distance, 1.0), view_size, tan_half_fov, aspect)
-	var ring_weight := view_factor * _get_ramp_weight(ring_fraction,
+			* mu / (camera_distance * camera_distance)
+	# Both gates before the screen scan, which costs 48 camera projections: the openness
+	# ramp needs only `mu`, and the whole annulus' screen area bounds what the scan can
+	# return, its visible share being at most 1. A ring at another planet's distance fails
+	# that bound by orders of magnitude, which is most frames ever rendered.
+	var openness_weight := _get_ramp_weight(mu, ring_meter_full_openness,
+			ring_meter_onset_openness)
+	var ring_bound := fraction_per_theta_sq * annulus_theta_sq
+	if openness_weight <= 0.0 or _get_ramp_weight(ring_bound, meter_fraction_start,
+			meter_fraction_full) <= 0.0:
+		return rest_exposure
+	var ring_fraction := ring_bound * _get_ring_visible_fraction(body, ring_radii,
+			camera_vector, camera_distance, view_size)
+	var ring_weight := openness_weight * _get_ramp_weight(ring_fraction,
 			meter_fraction_start, meter_fraction_full)
 	if ring_weight <= 0.0:
 		return rest_exposure
-	# Phase mirror of the shader's backscatter boost: phase_mix is 1.0 at zero
-	# phase angle (sun straight behind the camera), where the boost peaks. The
-	# boost value is per-renderer, which is why ring_meter_albedo is defined
-	# before it.
+	# The slab geometry term's own maximum over optical depth, which is where the brightest
+	# ring sits at this geometry. On the LIT face the term is monotone in tau, so that
+	# maximum is the saturated limit and no optical depth has to cross into this file; on
+	# the unlit one it has an interior peak, which the helper scans for.
+	var geometry: float
+	var ring_albedo: float
+	if sin_camera_elevation * sin_sun_elevation > 0.0:
+		geometry = mu0 / maxf(mu + mu0, 1e-6) # monotone in tau, so this is its saturated limit
+		ring_albedo = ring_meter_albedo
+	else:
+		geometry = _get_ring_transmission_peak(mu, mu0, ring_photometry[5])
+		ring_albedo = ring_meter_unlit_albedo
+	# Phase mirror of the shader's level: a straight line in magnitudes between the two lit
+	# profiles' own phase angles, plus the narrow opposition surge. The cells come from
+	# rings.tsv, which is also what the shader reads, so the two cannot drift apart. The
+	# shader evaluates phase per FRAGMENT, so close in it lights only the opposition spot
+	# where this lights the whole annulus; the error is toward under-exposure and vanishes
+	# with distance.
 	var to_sun := (star_vector + camera_vector).normalized() # camera -> sun
-	var phase_mix_base := (to_sun.dot(-camera_vector / camera_distance) + 1.0) * 0.5
-	var phase_mix := phase_mix_base ** PHASE_EXPONENT
-	var phase_factor := _ring_litside_phase_boost * phase_mix + 1.0
-	var ring_luminance := ring_meter_albedo * phase_factor * (illuminance * shadow_fraction
-			* absf(sin_sun_elevation) + ambient_starlight_illuminance) / PI
+	var phase := acos(clampf(to_sun.dot(-camera_vector / camera_distance), -1.0, 1.0))
+	var phase_fraction := (phase - ring_photometry[0]) \
+			/ maxf(ring_photometry[1] - ring_photometry[0], 1e-4)
+	var level := maxf(ring_photometry[2], 1e-6) ** phase_fraction
+	level *= 1.0 + ring_photometry[3] * exp(-phase / maxf(ring_photometry[4], 1e-6))
+	var ring_luminance := ring_albedo * geometry * level * (illuminance * shadow_fraction
+			+ ambient_starlight_illuminance) / PI
 	if ring_luminance <= 0.0:
 		return rest_exposure
 	return _get_candidate_exposure(ring_luminance, ring_weight, log_rest, rest_exposure)
+
+
+## The share of the ring annulus that is inside the frame, sampled on its own geometry:
+## azimuths at radii spaced by equal AREA, so every sample stands for the same amount of
+## ring, each counted by how far inside the frame it lands ([member meter_edge_fraction]).
+## Follows [method _get_limb_ceiling_candidate_exposure], and for the same reason - a ring
+## is not a disc, so its body's screen position says little about whether it is the view.
+func _get_ring_visible_fraction(body: IVBody, ring_radii: Vector2, camera_vector: Vector3,
+		camera_distance: float, view_size: Vector2) -> float:
+	const AZIMUTHS := 16
+	const ANNULI := 3
+	var axis := body.rotation_axis
+	# The camera's own in-plane direction, so the samples sit symmetrically about the near
+	# and far points of the annulus and do not walk in azimuth as the camera moves.
+	var sample_axis := -camera_vector / camera_distance
+	sample_axis -= axis * sample_axis.dot(axis)
+	if sample_axis.length_squared() < 1e-12: # camera on the axis: any azimuth will do
+		sample_axis = axis.cross(Vector3.UP if absf(axis.y) < 0.9 else Vector3.RIGHT)
+	sample_axis = sample_axis.normalized()
+	var crosswise_axis := axis.cross(sample_axis)
+	var center := body.global_position
+	var offsets: Array[Vector3] = []
+	offsets.resize(AZIMUTHS)
+	for index in AZIMUTHS:
+		var azimuth := TAU * (index + 0.5) / AZIMUTHS
+		offsets[index] = sample_axis * cos(azimuth) + crosswise_axis * sin(azimuth)
+	var visible := 0.0
+	for annulus in ANNULI:
+		var radius := sqrt(ring_radii.x * ring_radii.x + (annulus + 0.5) / ANNULI
+				* (ring_radii.y * ring_radii.y - ring_radii.x * ring_radii.x))
+		for index in AZIMUTHS:
+			var point := center + offsets[index] * radius
+			if _camera.is_position_behind(point):
+				continue
+			var screen_position := _camera.unproject_position(point)
+			var position_x := screen_position.x / view_size.x
+			var position_y := screen_position.y / view_size.y
+			var penetration := minf(minf(position_x, 1.0 - position_x),
+					minf(position_y, 1.0 - position_y))
+			if penetration <= 0.0:
+				continue
+			visible += smoothstep(0.0, maxf(meter_edge_fraction, 1e-4), penetration)
+	return visible / (AZIMUTHS * ANNULI)
+
+
+## Maximum over optical depth of the slab's transmitted term - the optical depth that looks
+## brightest through a ring at this geometry, which is the C ring and the Cassini Division
+## at a wide opening and the B ring itself once the camera is near the plane.
+##
+## Scanned rather than solved. The homogeneous form peaks at the closed
+## [code]tau = ln(b/a)/(b-a)[/code], but the CLUMPY one the shader uses has no such form, and
+## a scan cannot drift from whatever the shader does the way a second closed form would. 24
+## logarithmic samples cost nothing once a frame.
+##
+## HAZARD: the span must cover the optical depths a ring actually has, or the scan returns a
+## point on the rising side rather than the peak — and [member ring_meter_unlit_albedo] is
+## derived through this scan, so a short span looks calibrated at the geometry it was
+## derived at and nowhere else. The shader clamps transmission at 0.001, i.e. tau 6.91.
+func _get_ring_transmission_peak(mu: float, mu0: float, clumping: float) -> float:
+	var a := 1.0 / maxf(mu0, 1e-4)
+	var b := 1.0 / maxf(mu, 1e-4)
+	var span := b - a
+	var is_limit := absf(span) < 1e-4 * maxf(a, b)
+	var peak := 0.0
+	var tau := 0.002 # walks to 10 by a constant ratio; see the doc
+	var step := 5000.0 ** (1.0 / 23.0)
+	for index in 24:
+		var value: float
+		if is_limit:
+			# The a == b limit is the transmission's own derivative there.
+			value = b * tau * _get_ring_beam_transmission(tau, a, clumping)
+			if clumping <= 1e4:
+				value /= 1.0 + a * tau / maxf(clumping, 1e-4)
+		else:
+			value = b * (_get_ring_beam_transmission(tau, a, clumping)
+					- _get_ring_beam_transmission(tau, b, clumping)) / span
+		peak = maxf(peak, value)
+		tau *= step
+	return peak
+
+
+## The ring layer's transmission at [param rate] through the beam, mirroring
+## [code]ring_beam_transmission()[/code] in rings.gdshader: optical depth taken as
+## gamma-distributed about its mean with shape [param clumping], whose large-clumping limit
+## is exactly [code]exp(-rate * tau)[/code].
+func _get_ring_beam_transmission(tau: float, rate: float, clumping: float) -> float:
+	if clumping > 1e4:
+		return exp(-rate * tau)
+	return (1.0 + rate * tau / clumping) ** -clumping
 
 
 ## Metering candidate for a shell that asserts an [code]exposure_ceiling[/code] in
@@ -1029,13 +1253,13 @@ func _clear_procedural() -> void:
 	_camera = null
 	_star = null
 	_snap_next = true
-	exposure = 1.0
+	exposure = INACTIVE_EXPOSURE
 	auto_exposure_ev = 0.0
 	_neutralize_shader_globals()
 
 
 func _neutralize_shader_globals() -> void:
-	RenderingServer.global_shader_parameter_set(&"iv_exposure", 1.0)
+	RenderingServer.global_shader_parameter_set(&"iv_exposure", INACTIVE_EXPOSURE)
 	RenderingServer.global_shader_parameter_set(&"iv_emission_energy_scale", 1.0)
 	RenderingServer.global_shader_parameter_set(&"iv_emission_luminance_scale", 0.0)
 	RenderingServer.global_shader_parameter_set(&"iv_limb_scale", 1.0)

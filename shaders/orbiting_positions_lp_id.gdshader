@@ -33,9 +33,8 @@ render_mode unshaded, cull_disabled, skip_vertex_transform;
 // da: amplitude of axis ocillation
 // dl: amplitude of longitudinal ocillation
 // f: frequency of ocillation (period = TAU / f)
-// th0: phase at epoch
+// th0: phase at J2000, solved from the osculating a & mean longitude at the source epoch
 // e, i, s, g: same as non-lagrange-point orbits
-// de (not used): e ocillation, I think. If so, what is the frequency & phase?
 //
 // We're using a modified harmonic ocillator as a *very* rough approximation.
 // The "modified" part gives the long leading and lagging tails. There are no
@@ -106,7 +105,7 @@ void vertex() {
 	float s = CUSTOM2[0]; // nodal precession (=longitude_ascending_node_rate)
 	float g = CUSTOM2[1]; // apsidal precession (=longitude_of_periapsis_rate)
 
-//	float mag = CUSTOM2[3]; // magnitude; NOT IMPLEMENTED
+//	float mag = CUSTOM2[2]; // magnitude; NOT IMPLEMENTED
 
 	// orbit precessions
 	lan += s * iv_time;

@@ -36,7 +36,8 @@ shader_type sky;
 
 uniform sampler2D panorama : filter_linear, source_color, hint_default_black;
 uniform float energy_multiplier : hint_range(0, 128) = 1.0;
-// Compensating-camera exposure; 1.0 when that system is off (see stars.gdshader). The
+// Compensating-camera exposure; its INACTIVE_EXPOSURE when that system is off (see
+// stars.gdshader). The
 // panorama is an extended source, so exposure is its ONLY view-dependent term -- surface
 // brightness holds across fov and resolution, which the star sprites compensate for and
 // per-pixel sampling gets for free.

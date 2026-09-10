@@ -25,9 +25,13 @@ scene every frame and adapts a relative exposure, the way an eye or a camera on
 Four shader globals carry the state to materials:
 
 - `iv_exposure` — the relative exposure. 1.0 is the *authored empty-sky look*; smaller
-  values darken self-luminous content (stars, the sky panorama) as the camera stops
-  down for a bright subject. Lit surfaces do not read it; they receive exposure baked
-  into `light_energy` by `IVDynamicLight` (never both — that would double-expose).
+  values darken self-luminous content (stars, the sky panorama, a body's PSF quad, a
+  star's disc) as the camera stops down for a bright subject. Lit surfaces do not read
+  it; they receive exposure baked into `light_energy` by `IVDynamicLight` (never both —
+  that would double-expose). It is the one global that is not neutral with the system
+  off: it holds `IVExposureManager.INACTIVE_EXPOSURE` (2.0, matching the
+  `exposure_max_ev` default) so a project without the compensating camera renders every
+  self-luminous source at the level this one rests at.
 - `iv_emission_luminance_scale` — rendered units per cd/m² (exposure × gain), which
   renders an emission map (city lights) at the physical luminance its `shells.tsv`
   `emission_luminance` column asserts. 0.0 while the system is off.
@@ -38,9 +42,9 @@ Four shader globals carry the state to materials:
 - `iv_limb_scale` — rebases the atmosphere-limb glow while the system is active
   (see *Atmosphere limbs* below).
 
-Every one is neutral whenever physical light is off — 1.0 where it multiplies an authored
-value, 0.0 where it gates a channel the authored look does not use — so every shader
-renders the authored look unchanged.
+The other three are neutral whenever physical light is off — 1.0 where one multiplies an
+authored value, 0.0 where one gates a channel the authored look does not use — so every
+shader renders the authored look, at the fixed exposure `iv_exposure` names.
 
 **Why not Godot's own physical light units and auto exposure?**
 1. Both come with `CameraAttributesPhysical`, whose exposure and auto-exposure act
@@ -615,11 +619,100 @@ Shells (`shells.tsv`) are concentric sub-models around a body's surface.
 
 ### Cloud shells
 
-A cloud deck (e.g. Earth's) is an overlay shell whose color is white with coverage in
-the alpha channel. It is lit by the same light as the surface, so under an exposure
-metered for the *cloudless* surface albedo, cloud tops overexpose by a factor of a few —
-bright, occasionally clipped white, which matches real orbital photography. No separate
-cloud compensation exists, deliberately: compensating for clouds would crush the surface.
+A cloud deck (e.g. Earth's) is an overlay shell whose map carries the deck's reflectance in
+rgb and its coverage in alpha. What that pair MEANS is set by `clouds_two_stream_map`, and
+the difference is the difference between a deck built from one number per texel and one
+built from two.
+
+**Without it (Neptune's), the two channels are already composited and go straight through.**
+A source cloud map supplies one number per texel, so the conservative two-stream relates
+them, `A = 1 − (1 − R)²` and `C = R / A`, giving `A·C = R` identically — the deck's own
+light is the source's, and what the split fixes is the surface beneath it. A texel half
+covered by opaque cloud and one wholly covered by thin cloud arrive as the same middling
+value, which is why nothing about such a deck can depend on the sun's angle.
+
+**With it (Earth's), the two are independent measurements and the shell composites them at
+each fragment's own geometry.** Alpha is the geometric cloud FRACTION `f`; rgb is the
+cloud's own conservative two-stream albedo, which is a monotone encoding of the scaled
+optical depth `τ* = (1 − g)τ` at a reference `µ = 1/2`, so the shell recovers
+`τ* = R / (1 − R)` — that reference is fixed at 1/2 for exactly this inverse and the build
+script must agree. Then each leg of the light's path takes its own cosine,
+
+    R(µ) = τ* / (τ* + 2µ)          T(µ) = 1 − R(µ)
+
+and matching `ALPHA·ALBEDO + (1 − ALPHA)·surface` against
+`f (R(µ0) + surface·T(µ0)·T(µ)) + (1 − f)·surface` gives the deck's albedo `R(µ0)` and its
+opacity `f (1 − T(µ0) T(µ))`. The two channels do not arrive at the same resolution and the
+build does not pretend they do: a cloud mask reports coverage everywhere, while an optical
+thickness is retrieved only on a confidently overcast pixel and so reaches 82 % of the cloudy
+area even with four satellites — so the shell's rgb is a regional field with the retrieved
+detail faded in over it, and a viewer sees measured thickness where there is one and its
+neighbourhood's level where there is not. Two things follow that a composited pair cannot say. The
+deck's own **layer law**: its albedo rises toward the limb the way a cloud's does instead of
+sitting at one value, which measured on Earth is 0.86× the disc at phase 20 and 1.08× at
+phase 90, with clipping more than halved (4.3 % → 2.0 %) — a cloud deck is much less
+limb-darkened than a Lambert surface. And the **graded shadow**: the covered fraction's sun
+leg goes as `T(µ0)` and shuts off as the sun grazes, while the clear fraction passes full
+sunlight at any incidence. That is the shadow graded through the deck's own thickness rather
+than cut at a line, and it is the half that needed the fraction and the thickness apart.
+
+**`clouds_relief` carries the deck past the body's own terminator, and it is the one
+judgment here.** A plane-parallel layer takes `F µ0` and so goes dark at `µ0 = 0` however
+thick it is — right for the ground, which *is* a horizontal surface, and wrong for a cloud
+field, whose sides are what a low sun lights. The cell is that side area per unit ground,
+and `sqrt(µ0² + relief²)` reaches it smoothly: at Earth's 0.15 it is worth 1.3 % of a
+near-full disc and nothing measurable on a crescent. What bounds it is geometry, not taste:
+a deck stands above the disc, so it stays sunlit out to `µ0 = −sqrt(1 − (surface/shell)²)`
+— 3.2° past the ground's terminator for Earth's 10.19 km — and it enters that shadow across
+its own height rather than at a line, the same lit-height grading the limb exposure ceiling
+uses. Past that cut the term is exactly zero and reliefs of 0, 0.08 and 0.15 render
+bit-identically. Measured on the terminator band's surviving feature contrast, its minimum
+across `µ0 ∈ [−0.06, +0.13]` goes 0.059 at relief 0 to 0.078 at 0.08 and 0.099 at 0.15,
+against 0.054 before any of this work. The term is delivered as EMISSION, because the
+engine's N·L has already thrown this light away, and it takes the disc law's isotropic
+response, because light on a vertical face is not light at the layer's own incidence. One
+approximation is stated rather than modelled: the sun-path transmittance is `atm_sun_
+transmittance`, which clamps its column at `µ0 = 0`, so across the last 3.2° the beam is
+reddened as it is at the tangent and no further; the lit-height ramp dominates that band.
+
+**The deck's shadow lands where it falls, not underneath the cloud (2026-09-08).** The sun ray
+from a surface point crosses the deck at a horizontally displaced place, so the shadow belongs
+there — `atm_cloud_shadow()` in `_atmosphere.gdshaderinc`, fed the deck's own map by
+`IVShellsModel._propagate_cloud_shadow` and folded into the surface's sun leg, while the deck's
+alpha keeps only its view leg so nothing is counted twice. It is a REDISTRIBUTION and the
+render says so: over a lit disc the mean moves 0.998–1.001× while 10–19 % of the frame changes,
+and from ISS altitude 44 %. Solved against the deck's sphere rather than as `h tan(z)`, which
+diverges at a grazing sun. **Whether it can be SEEN was a question about the deck's
+resolution, not about the term**, and the answer moved with the deck: at Earth's 10.19 km
+shell the displacement is 5.9 km at a 30° solar zenith, 17.6 at 60 and 56 at 80, which
+against the retired 19.5 km texel put most of the lit disc's shadow inside the texel casting
+it — and against the shipped 4.89 km one puts it 1.2, 3.6 and 11 texels away. Measured at
+face 2048 from 1900 km up, the term moves 38–51 % of the lit disc, p99 1 DN at phase 35 and
+8 DN at phase 75, and costs nothing outside run-to-run drift. Nothing about it changed; the
+map did. Bodies without a two-stream deck are untouched — Mars and Neptune render
+bit-identically.
+
+**The deck's resolution is the map's, and it carries no procedural stand-in (2026-09-08).**
+Both cloud shaders had a domain warp and five octaves of fbm to hide a map four times coarser
+than the surface it sat on; they were deleted, with `clouds_warp_*`, `clouds_detail_*` and
+`clouds_edge_gamma`, when Earth's deck went to face 2048 — the surface's own 4.89 km texel,
+and essentially the cloud fraction's own limit. Measured with the deck filling the frame, the
+procedural path cost **139 µs, 4.2 % of the frame**, where going from face 512 to 2048 cost
+**2 µs against 3 µs of run-to-run drift**: a modern GPU pays per fragment for the ALU whether
+it is wanted or not, and pays nothing for a bigger texture that is mipmapped and cache-
+coherent under magnification. So a deck that looks coarse magnified wants a finer map, and
+this is where to reach for one. Two consequences, both wanted: a deck and its shadow now read
+ONE map and line up by construction, where a procedural field the shadow lookup did not share
+could never be shadowed correctly; and the deck's coverage stops spreading, so real gaps open
+and the ground shows through them. The `.gdshader` files are the interface here — a body
+overriding a retired uniform through a `shells.tsv` column of the same name is silently
+ignored, as any unknown column is.
+
+A deck is lit by the same light as the surface, so under an exposure metered for the
+*cloudless* surface albedo, cloud tops overexpose by a factor of a few — bright, occasionally
+clipped white, which matches real orbital photography. No separate cloud compensation exists,
+deliberately: compensating for clouds would crush the surface. The build and its measurements
+are in `records/Earth.md` in the assets build tree.
 
 ### Atmospheres
 
@@ -841,31 +934,463 @@ body meters the scene down, and return at rest exposure.
 The background panorama (`starmap_background.gdshader`) is a linear-radiance image of
 the Milky Way. Its level is not authored: it is computed from the anchor
 (`sky_energy`, see the calibration chain), which corrected the legacy by-eye level —
-the panorama had been ~6× too bright relative to the stars it sits behind. At rest
-exposure the whole sky rides `exposure_max_ev` above the authored look.
+the panorama had been ~6× too bright relative to the stars it sits behind.
+`IVWorldEnvironment` authors the sky from that same expression
+(`IVExposureManager.compute_sky_energy()`, static so it is reachable with this node
+erased), so the correction holds with physical light OFF as well and the two modes
+differ by exposure alone — toggling the setting moves the sky and the stars together.
+At rest exposure the whole sky rides `exposure_max_ev` above the authored look.
 
 ## Rings
 
-Saturn's rings (`rings.gdshader`, `rings.tsv`) carry their authored scatter model
-(forward/back-scatter, unlit-side transmission), riding `light_energy` like a surface.
-Their shadows — on the planet and from the planet on them — and all eclipse and transit
-dimming come from the **analytic occlusion system** (`IVSunOcclusionManager` with
-`_sun_occlusion.gdshaderinc`), which computes sun visibility per fragment instead of
-shadow maps; the same system supplies the eclipse factor metering uses, so an eclipsed
-moon meters dark and night adaptation opens up inside a totality. The same term covers a
-spacecraft passing into its planet's shadow, confirmed in-app.
+Saturn's rings (`rings.gdshader`, `rings.tsv`) render a **plane-parallel single-scattering
+slab**, riding `light_energy` like a surface. The shader is generic -- every photometric
+number is a `rings.tsv` cell -- so a different real or invented ring system is a new
+texture and a new table row.
 
-The lit ring face is brighter per unit area than any Lambert sphere — the shader's
-backscatter response near zero phase angle exceeds an albedo of 2 — so a camera
-metering the globe alone would clip the rings white. The lit face therefore meters as
-its **own candidate**: a flat annulus whose screen fraction is its area foreshortened
-by the camera's elevation from the ring plane, lit at the sun's elevation, with
-`ring_meter_albedo` (the bright-ring reflectance of the shipped assets, measured
-before the phase boost) and a CPU mirror of the shader's phase boost carrying the map
-response. Near opposition the candidate pulls exposure below the globe's target and
-the B ring holds detail; at quadrature or near ring-plane equinox the dim rings stop
-mattering and the globe meters as before. The unlit face never needs a candidate — a
-thin layer shows its bright face only from the sun's side of the plane.
+Their texture is one `CompressedTexture2DArray` of three radial profiles, built by
+`addons/tools/build_saturn_rings.py` from Björn Jónsson's Voyager profiles. Its alpha is
+`1 - exp(-tau_normal)` from the stellar occultation, and its rgb is **scattering
+strength** -- the published brightness with the slab's geometry term DIVIDED OUT, so what
+the file holds is a property of the particles rather than of one observing geometry. The
+shader multiplies the term back at the angles it is actually rendering:
+
+    lit    mu0/(mu+mu0) * (1 - T(1/mu + 1/mu0))
+    unlit  mu0/(mu0-mu) * (T(1/mu0) - T(1/mu))
+
+with mu and mu0 the sines of the camera's and the sun's elevation above the plane and
+`T(rate) = (1 + rate tau / clumping)^-clumping` the layer's transmission -- optical depth
+taken as gamma-distributed across the beam, self-gravity wakes being what makes it vary,
+with the homogeneous slab as the large-`clumping` limit. That is what makes the rings answer
+to their opening angle: as the camera drops toward the plane the optically thin rings
+brighten toward the saturated value while the B ring, already saturated, barely moves.
+
+**The reference geometry the build divides out is PINNED at the geometry the images were
+taken at**, and that decides how much radial contrast every render carries. Jónsson's
+profiles are Voyager, 1980-81, and Jónsson publishes none of that geometry -- so it is
+measured from the spacecraft's own trajectories in the running simulation
+(`voyager_ring_elevation.py` in the assets build tree, which parks the camera on the craft
+and reads `get_rings_geometry`). Voyager 2's backscatter frames sit at camera 10.63 degrees
+with the sun at 8.12, at the 6.8 degree lowest phase its lit side ever reaches; Voyager 1's
+forwardscatter at 12.35 and 3.94, where its stated phase of 139 occurs; and Voyager 1's
+unlit view at 39.4, the floor of the 22.7-hour dip below the ring plane that is the only
+time it saw that face at all. The sun elevations are the check and were not fitted to
+anything: a few degrees, as eight and sixteen months after Saturn's March 1980 ring-plane
+crossing they must be, and the unlit profile's own sun leg is still FREE and lands at 3.94
+against a measured 3.69-4.13.
+
+A fit cannot supply that, and the two Voyager 1 profiles prove it between them:
+`forwardscattered` and `unlitside` are the same spacecraft at the same encounter, a lit fit
+determines only `k = 1/mu + 1/mu0`, and k can never be less than 1/mu0 -- yet forwardscatter
+fits k = 7.20 where a sun at 3.94 degrees demands at least 14.55, and backscatter fits 3.24
+against at least 7.08. Both are impossible. What the fit absorbs is the
+RADIAL VARIATION OF PARTICLE ALBEDO, which the model has no term for.
+
+Getting it wrong flattens the bands, since too wide a reference divides out too little
+saturation. At the measured geometry the B ring against the C ring renders 8.10 at Saturn's
+widest opening and 4.49 at 12 degrees, against published Cassini radial scans of 6 to 12 at
+low phase. The independent check is the particle strength a reference implies: the C ring and
+the Cassini Division are the known dark, contaminated regions, at roughly 0.2-0.5 of the A and
+B rings' albedo, and this one puts them at 0.43 and 0.75 where a reference at Saturn's maximum
+opening would put the Division brighter than the A ring.
+
+**`clumping` is PINNED, and what pins it is now a confound rather than an absence of
+leverage.** The UNLIT profile still measures nothing: its apparent leverage came from the
+flat deep end, which is the source image's own background and not ring light, and scanned on
+the live radii with that background removed its R2 moves **0.0079** across the whole family,
+against a factor of forty in what the parameter actually does. The LIT profile is a different
+story from what this document said until 2026-09-08. Its insensitivity (R2 moving 0.8733 to
+0.8787) was measured at the 26.7 degree reference that shipped until 2026-09-06, and the
+leverage grows sharply as the reference narrows -- span 0.0124 at 26.7 degrees, 0.0970 at 12,
+**0.1483 at the measured geometry** -- with the fit preferring the most clumped end at every
+one of them. That is not a measurement of clumping, because a low clumping shape flattens
+saturation in exactly the way the radial variation of particle albedo does, which is the same
+confound that makes a free lit fit return an impossible geometry two paragraphs above.
+
+**What settles it is the transparency layer's own definition, and it is not a fit at all.**
+The alpha channel stores what the archive calls a NORMAL OPTICAL DEPTH -- `-sin(B) ln(T)`
+from a stellar occultation at one ring elevation, Cassini UVIS beta Centauri at 66.7 degrees.
+For a layer whose depth varies across the beam that is by definition the APPARENT depth at
+that elevation, so it already carries whatever clumping the ring has. Read through the
+homogeneous law it reproduces the measured transmission exactly at the geometry it was
+measured at and approximates it elsewhere; read through a clumped law it would count the same
+inhomogeneity twice. The cell therefore stays at the homogeneous limit -- which is also the
+family's darkest transmission, and the closest to what real unlit images show -- and moving
+off it is not a one-cell change: it needs the mean depth re-derived from occultations
+spanning elevation, and the ceiling scales as `sin(B)`, so a low-elevation set can only reach
+the A ring, where the wakes are strongest and where one shape parameter shared with a
+wake-free C ring is least defensible.
+
+**There is no floor under the unlit face.** Jónsson's unlit profile stops falling at about
+0.047 by tau 2.33 and is flat to 6 % from there to the profile's deepest 8.5 -- a factor of
+nearly four in optical depth over which single scattering falls by 1e6 and even conservative
+two-stream diffuse transmission, the most generous physical model there is, falls threefold.
+(The threshold is measured rather than assumed, and it moves with the optical depth SCALE:
+the same radii read 1.4 under the saturating Voyager profile.) That flat tail is the source
+image's own background rather than ring light, and carried as a constant it would put a floor
+under the unlit face that does not fall with tau at all, so an opaque ring would glow. The
+build subtracts it, and where the subtraction leaves nothing takes the strength from the lit
+layer, in a ratio the build measures on the densest material that still has signal (7.56x
+layer 0). That ratio is NOT the constant this document once called it: it read flat only
+while both references were fitted, because two fits absorb the same radial albedo variation
+and it cancels in the quotient. Measured against pinned references it varies with radius,
+p16-p84 5.0 to 10.2, which is a phase-function difference -- an unlit view is a high-phase
+view, and the dusty C ring and Cassini Division forward-scatter more than the B ring. What that leaves out is stated plainly: real multiple scattering inside a dense layer is
+not zero, and a truly opaque B ring renders black where a real one is merely very dark.
+
+Phase carries the LEVEL and the texture carries only the shape, because all three profiles
+are published independently peak-normalized: `forward_level` is the lit face's brightness at
+`forward_phase` relative to `back_phase`, interpolated as a straight line in magnitudes,
+with `opposition_surge` and `opposition_width` adding the narrow spike on top. Phase is
+evaluated per fragment, so a close camera gets the local opposition spot under it. Which
+face a fragment shows is also decided per fragment, from the signs of the two elevations,
+so a camera near the plane sees the lit face on one side of itself and the unlit face on
+the other.
+
+**`forward_level` is 0.04, and it is a MEASURED phase ratio rather than the continuity
+anchor it was until 2026-09-08.** The instrument is Dones, Cuzzi & Showalter's (1993)
+Voyager phase curve for the inner A ring at 122500 km, plotted as scaled reflectivity
+`I/F 4(mu+mu0)/mu0` -- which at one radius is exactly this quantity, the geometry and the
+optical depth cancelling in the ratio. It gives **0.045 to 0.053** at 139 degrees against a
+surge-free extrapolation to zero phase, and dividing by the 1.229 the asset's own two lit
+layers differ by at that radius (they are peak-normalized independently, which is what this
+cell exists to undo) puts the cell at 0.037 to 0.043. Two independent checks agree. The
+published magnitude relation, which sees the cell only weakly through
+`forward_level^(alpha/139)` over its 6.5 degree window, prefers lower monotonically: refitting
+the surge at each candidate, the worst residual against the published curve falls from 3.2 %
+at 0.25 to 1.9 % at 0.04. And the ring's brightness against Saturn's own globe in the
+reference frames, which is the only image measurement available, put the old 0.25 between 15
+and 32 times too bright at 138 and 152 degrees -- a bound rather than a value, its denominator
+being a limb crescent, where the globe shader has no forward-scattering term of its own.
+`scattering_scale`, `opposition_surge` and `opposition_width` are fitted WITH it and were
+re-derived in the same pass (0.457 to 0.486, 0.515 to 0.418, 0.883 to 0.661 deg); the asset
+itself is unchanged, all four being table cells.
+
+What that number really carries is worth stating, because it is not the particles' own phase
+function. Published values for those are far steeper -- the Dones power law at the index
+Porco et al. (2008) fit to Cassini gives 0.021 at 139 degrees, and the index Salo & French
+(2010) prefer for the B ring gives 0.010 -- and the gap is multiple scattering, which
+dominates the lit face at high phase (27 times single scattering at 155 degrees in Dones'
+own decomposition) and which this model has no term for. So 0.04 is an EFFECTIVE ratio:
+particle phase function times the multiple scattering that is missing, calibrated on the
+observed ring rather than on its particles. It is therefore geometry-dependent in principle,
+the multiple-scattering share growing with albedo and optical depth, and one constant cannot
+be exactly right everywhere.
+
+**`forward_reddening` still has no cited source, and no available image can give it one.**
+Its 1.05 is worth +2.8 % of rendered red-over-blue across the whole phase range (measured
+1.585 at 15 degrees against 1.629 at 138), about four codes of 255 in blue. The eight RGB
+"natural colour" frames in the reference set cannot resolve that: their ring red-over-blue
+spans **0.68 to 3.31** with no relation to phase, two frames 8 degrees apart differing by
+2.2 times, so they carry no common white balance and cannot arbitrate a few percent. The
+asset's own colour comes from five-band disc-integrated photometry with no image anywhere in
+the chain, which is the better instrument by far. The same measurement settles the
+opposition surge's missing colour, which is real and tiny: the surge is stronger in blue
+(C3 0.525 in B against 0.378 in V), so the rings run B-V 0.844 at exactly zero phase against
+0.931 from 2 degrees out, and at a fixed luminance that whole spike is +4.3, -0.8 and -7.5
+codes of 255 -- inside a window under two degrees wide, where the achromatic surge itself
+moves the level by about 90. An achromatic `opposition_surge` is not a defect worth a
+chromatic term.
+
+**Both faces take that same phase term**, which is physics rather than convenience: the
+phase angle is the sun-ring-observer angle, so a photon's scattering angle is `180 - phase`
+whichever side the observer is on, and one phase function serves both. What differs is the
+geometry term above. Without it the unlit face renders 1.8 to 2.8 times too bright at the
+phases it can actually be seen at -- a low phase angle on the unlit side is geometrically
+impossible, since reaching one means standing near the sun's direction and the sun is on the
+other side of the plane. `unlit_level` is then DERIVED rather than chosen:
+it is the reciprocal of the measured unlit/lit strength ratio, which is what puts both faces
+on one scattering strength -- the two profiles are peak-normalized independently AND were
+observed at different phase angles, and that one number undoes both at once. The build
+prints the cell. That ratio is a ratio of PHASE FUNCTIONS, so it is not flat in radius: the
+dustier C ring and Cassini Division forward-scatter more than the B ring, and it runs 17.7
+at optical depth 0.02-0.1 down to 6.2 by 0.7-1.2. The build therefore measures it twice --
+once over the whole live profile for the
+level, and once on the densest tenth for the fallback that carries the deep B ring, which is
+the material that fallback adjoins. It is derived because it CANNOT be measured the way the
+lit level below is: Mallama & Hilton define their effective ring inclination as zero when the
+Sun and the observer are on opposite sides of the plane, so the disc-integrated relation that
+anchors the lit face says nothing whatever about this one.
+
+**The lit face's level and its surge are anchored on SATURN'S OWN MAGNITUDE**, which is
+disc-integrated photometry and therefore immune to the stretch on any image. Mallama &
+Hilton (2018) publish the system (globe plus rings) and the globe alone as separate
+equations, and their difference is the rings' own flux; adding back the 6.0 % of the globe
+the rings occult (at zero phase the ring shadow hides behind that same silhouette, so it is
+the whole loss) and dividing by the projected areas gives the rings' area-weighted mean I/F.
+`scattering_scale`, `opposition_surge` and `opposition_width` are fitted to that relation
+over its stated validity range and reproduce it to within 3.6 % from zero phase to 6
+degrees. The published curve is much steeper than the source's own prose: a 40.3 % drop
+from 0 to 6 degrees against Jónsson's stated "20-25 %".
+
+That fit is at Saturn's WIDEST opening, and the model runs above the published relation as
+the rings close: integrating the ring's whole flux against the globe's gives 1.007 of the
+published value at a 26.7 degree opening and 1.11, 1.25 and 1.42 at 20, 12 and 6 degrees.
+The sign is what single scattering has to do -- as the opening closes, the slab saturates
+toward `mu0/(mu+mu0)` and the flux falls only as `sin(beta)`, where the real ring loses more
+than that to mutual shadowing between its own particles, which this model has no term for.
+That is an accepted deficiency and not an open question. Anchoring at the widest opening is
+what makes it one-signed -- 0.48 EV by 6 degrees and 0.73 by 3, never negative -- and the
+relation cannot calibrate the missing term anyway over the range where it would matter: its
+phase coefficients hand the whole system's phase dimming to the rings, which at a small
+opening, where the rings are a small part of the system, is numerically unstable (at 3
+degrees of opening and 4 of phase it returns a ring mean I/F of 0.02).
+
+At the far end of that range the rings go essentially black, and that too is the model rather
+than a defect. Every term rides `mu0`, so a sun IN the ring plane takes the whole system to
+about 1e-3 of its normal level and leaves only a shadow line on the globe. Real rings at
+equinox were dramatically dark and not invisible, because a real layer has thickness and
+vertical structure -- neither of which this models, by decision. A lit-side floor would be
+the lever and the data does not ask for one: the lit fits reach R2 0.87 with no floor where
+the unlit one needs 0.0985 to fit at all.
+
+The fragment is **self-lit on both renderers** and its output is premultiplied: rgb is the
+ring's own light over black sky and alpha is the SLANT occlusion `1 - (1-a)^(1/mu)`, so a
+ring seen edge-on hides what is behind it however thin it is at normal incidence. Self-
+lighting is not a stylistic choice -- the engine flips a double-sided primitive's normal, so
+an engine-lit ALBEDO clamps N.L to zero on whichever face is turned away, which would leave
+the unlit profile unreachable.
+
+**A self-lit fragment must zero SPECULAR as well as ALBEDO.** A spatial shader that sets
+neither gets Godot's defaults (SPECULAR 0.5, so F0 = 0.04), and the engine adds that lobe on
+top of the self-lit EMISSION -- unshadowed, since the shader's own occlusion multiplies only
+its own term, and Fresnel-amplified toward 1.0 at grazing incidence, which is exactly where
+a ring is seen. Left in, it is an additive floor on every ring pixel (0.157 linear on an 8.3
+degree view at phase 145, 29 % of the lit ansa), so what it costs is the radial contrast
+everywhere and not only at grazing.
+
+Their shadows -- on the planet and from the planet on them -- and all eclipse and transit
+dimming come from the **analytic occlusion system** (`IVSunOcclusionManager` with
+`_sun_occlusion.gdshaderinc`), which computes sun visibility per fragment instead of shadow
+maps and applies the same slant law to the sun's own leg through the layer; the same system
+supplies the eclipse factor metering uses, so an eclipsed moon meters dark and night
+adaptation opens up inside a totality. The same term covers a spacecraft passing into its
+planet's shadow, confirmed in-app.
+
+**Going edge-on is a sampling problem, and it breaks in two places.** A pixel's cone meets
+the ring plane in a segment that lengthens as `1/mu`, so the share of the pixel that is ring
+falls as the sine of the opening angle -- that share is computed exactly (the segment's
+radius is quadratic in its parameter, and its crossings of the two circles are closed form)
+and scales the fragment's radiance and its occlusion together. It is the same quantity
+`limb_mean_incidence()` calls coverage, one dimension lower: a fraction of the camera's own
+aperture, derived rather than tuned.
+
+That aperture is the pixel's own box CONVOLVED with the camera's point spread function --
+`iv_psf_sigma`, the same Gaussian that images every star and every sunlit rim -- so the ring
+goes through one camera model with everything else. It is taken as a single Gaussian of the
+summed variance, which is within 0.002 of the true convolution at the shipped sigma, and
+truncated at six of its own sigmas, where a Gaussian stops being representable at the worst
+exposure this camera reaches (a metered ring left at the dark-adapted rest, ~15 stops, where
+one 8-bit code is 1e-7 of the peak; the star field's `psf_visible_size()` cuts at 5.6 px
+there against the 6.9 this draws). Two things follow, both measured against ray casts
+convolved with the same Gaussian. It holds the sine law to 0.999-1.003 from a 4 degree
+opening down to 0.02, where a plain pixel box under-integrates a band a pixel or two tall by
+up to 16 % -- it samples at pixel centres a function it treats as flat across the pixel. And
+at ~15 stops over **everything drawn clips**, so what a viewer sees is a count of rows: the
+aperture floors that count at 8 across the ring's thin middle, nearly three times what a box
+leaves, and its last row falls off through intermediate values rather than ending in a cliff
+(ray-cast truth at a 1 degree opening ends 255, 148, 0 display codes and the aperture ends
+255, 88, 0).
+
+A convolution can only put light where the rasterizer made a fragment, so the plane is also
+EXPANDED outward, to `plane_extent`, sized so the aperture's reach fits at the plane's own
+far rim, where the footprint is largest. That expansion is bounded by the tilt below, and
+that is the tilt's second job: the reach is measured in footprints, magnifying shrinks the
+footprint, and both operations are exactly flux-neutral. Untilted, a camera at its floor
+against a hairline ring would want a plane twenty times the ring's radius.
+
+That aperture runs on BOTH screen axes. It is isotropic on the screen, so pulled back into
+the plane it is `sigma x footprint` along the footprint axis and `sigma x pixel_angle x
+distance` across it -- the second being `mu` times the first, hence negligible at grazing and
+equal face on. Dropping it costs nothing while the ring is large, because its chord is then
+almost linear in `across`; it costs everything once the ring is a few pixels wide, where a
+blur along one screen axis draws a DASH across the ring's own long axis (measured at 700
+plane radii, the drawn shape's aspect was 2.28 against a true 0.69). The across integral is
+five-node Gauss-Hermite because what it has to resolve is a square root -- the chord through
+a circle has infinite slope at the tangency, so the correction never becomes smooth however
+small the sigma is. That tangency is also the ansa TIP, the one place the segment picture is
+weak, and the same nodes carry it: whole-frame rms 0.0175, 0.0063, 0.0043 at one, three and
+five nodes against the box's 0.0379.
+
+**The texture read takes those same two axes**, its filter width being the radial span the
+covered segment crosses. The segment measures that along the view ray, which at an ansa is
+backwards: the ray runs tangent to a circle of constant radius there, so the along axis
+carries almost none of the pixel's radial spread and the across axis carries all of it (on the
+unlit face at a 13.4 degree opening, 2 km against 419 at worst, and `across > along` maps to
+two lens-shaped patches covering 19 % of the ring and nothing else). Shifting the ray across
+moves its whole closest approach with it, so what the second axis adds is the pixel's own
+unforeshortened extent projected onto the radius, `dR/dc = c/R` -- combined with the first in
+QUADRATURE, two extents of one aperture being variances rather than supports. Without it the
+narrow gaps at each ansa comb into dashes, at 2.8 times the truth's own high-frequency content
+against 1.2 with it.
+
+What is left is the far field. Past roughly 300 plane radii the ring is smaller than the
+camera's own PSF, and rasterizing a plane is the wrong instrument for it at all -- the drawn
+shape's aspect and its flux both drift from the truth however many nodes are spent. What that
+regime wants is a point-source quad like the body's own, which has no ring term.
+
+The other half no coverage term can argue with. Without MSAA a fragment exists only where
+the primitive covers a pixel CENTRE, so once the ring's image is thinner than a pixel the
+line goes dashed and then, when it falls between two rows of centres, disappears whole
+(measured at 1080p from six ring radii: the lit-pixel count went 996, 682, 408, 0 as the
+projected minor axis passed 1.5, 1.2, 1.0 and 0.8 pixels). So the plane is TILTED about the
+camera's own ground line until its projected minor axis reaches `MIN_SCREEN_THICKNESS`
+pixels, and its light divided by exactly the factor it was thickened. A rigid tilt magnifies
+the image by ONE number, so a pixel's footprint on the true plane shrinks by that same
+number and the division conserves flux exactly: measured in the app, the rendered flux is
+proportional to the sine of the opening angle to 0.3 % over a 24-fold range in angle, the
+lit-pixel count is constant across it, and the brightest ring pixel falls 0.68, 0.46, 0.29,
+0.17, 0.11, 0.057, 0.031 to nothing. `MIN_SCREEN_THICKNESS` is the one tuned number, and
+what it buys is the sub-pixel middle of the ring, whose own band is a fifth of the minor
+axis and dashes below the threshold. It is also the ceiling on the outward expansion above,
+which is why the two live in one expression: the magnification taken is whichever of the two
+demands is larger -- and then CAPPED at face on, because a ring is thin on screen for two
+different reasons and the minor axis alone cannot tell them apart. Foreshortening is what the
+tilt is for; distance is not, and magnifying past `major / minor` gives the ring a shape no
+ring has (measured at 4000 plane radii, a 0.50 px ring held 3.5 px tall). The cap is
+`1 / sin(elevation)`, so it diverges at grazing and bites only on a ring that is small in
+both directions.
+
+**The plane passes through its own planet, and the part inside must not draw.** A ring plane
+is a disc through the globe's centre, so everything inside the globe's figure -- the circle
+`r = R_equatorial`, which lies well inside the ring's own hole -- is somewhere no camera can
+look at the ring from: every ray reaching it meets the globe first. The coverage term cannot
+know that, because the aperture reaches `APERTURE_REACH` sigmas along the plane and at a
+grazing view that is most of a plane radius, so a fragment buried in the planet still gathers
+real ring light from outside it. So the shader discards on the occluder's own figure --
+`sun_occlusion_inside_occluder()`, the same pole stretch the shadow term uses, so the figure
+tested is exactly the one that casts the shadow, at one dot product per occluder. That guard
+answers "at or inside the occluder" with ZERO sun, which is what a point inside an opaque body
+should get; the manager's rule that a body is excluded from its own occluder list is true of a
+surface and false of a ring, whose one occluder is the planet it circles.
+
+**Past the point where a plane cannot be rasterized, the rings hand their light to the
+body's own POINT SOURCE.** `IVBodyPSF` already draws a body's whole disc as one point of
+light; the ring system is one more source in that magnitude, and about a magnitude of light
+at a wide opening (-0.99 at zero phase and Saturn's own maximum). What the point needs is
+the same integral the plane rasterizes, `sum S geometry(tau, mu, mu0) dA` over the annulus
+times the phase level and the projection `mu` -- and far from the body every part of the ring
+shares one phase and one pair of elevations, which is exactly the regime a point source is
+for, so it reduces to a sum over radius. `IVRings` takes that sum at load time down to
+optical-depth bins, geometry depending on radius ONLY through optical depth, and evaluates
+the same slab model over them each frame; against the full 13177-texel profile, 64 bins hold
+the flux to 0.9 % at worst and 0.03 % at the median. They are spaced in LOG optical depth,
+because what the slab is sensitive to is tau against `1/rate` and the rate runs from 2 face
+on to 2e4 at `MIN_MU`: the same count spaced linearly runs 76 % out and is no better at 128,
+a grazing ray's whole answer being carried by material thinner than the first bin's own mean.
+
+The two are a CROSSFADE, so the light is drawn exactly once at every distance: the plane
+scales its coverage by `plane_light_fraction` (coverage being what a fragment holding part of
+a ring already means, so the light and the occlusion fade together) and `IVRings` publishes
+`1 - that` of the flux to `IVBody.rings_psf_flux_factor`, which `IVBodyPSF` adds before the
+magnitude conversion -- flux sums where magnitude does not. The ramp is the ring system's own
+projected outer radius, 8 px down to 3, and both ends are measured: against convolved ray
+casts the drawn flux holds within 1 % of truth out to a 10 px outer radius, runs 5-10 % out
+by 3 px, then swings 0.7 to 1.2 and collapses to nothing once the image falls off pixel
+centres. Above the ramp a ring is a shape a viewer can see and must not become a dot; below
+it, a plane that cannot be rasterized must not be what carries the light. Measured in the
+app, the engine's sum reproduces the offline full-resolution integral to 0.9988-1.0001 on
+both faces from 5 to 98 degrees of phase, and a render at the ramp's top is bit-identical to
+one with none of this in it.
+
+A ring's colour has to cross that handoff with its light. The quad draws a body in the tint
+of its catalog `color_b_v`, and a ring system's is not its planet's -- Saturn's rings are
+flux-weighted R/B 1.575 where its own index 1.04 draws its point at 1.812 -- so handing them
+over without saying so recolours a third to a half of the system's light. rings.tsv carries
+its own `color_b_v` (0.90 for Saturn, whose point-source tint is 99.5 % of the asset's own
+red-over-blue, so the point matches the plane), and the two indices combine through their
+FLUXES rather than by averaging. What the point still leaves out is small and is left out of
+the body's own point
+flux too: the planet's shadow on the rings, the rings' shadow on the planet, and the 6 % of
+the globe the rings occult.
+
+**That colour is measured in both halves, from two sources that share no instrument.** How red
+the system is overall is B-V 0.93, from Mallama, Krobusek & Pavlov (2017)'s five-band magnitude
+model by the same globe-minus-system difference the level is anchored on -- tan, and less red
+than the planet it circles. How the colour varies with radius is Cassini VIMS: Hedman et al.
+(2013) publish the two visible spectral slopes as radial profiles at 20 km, and a reflectance
+spectrum built from each pair and integrated against the CIE functions gives every radius its
+own colour. The two agree on the system's mean to 6 %. Both are applied as luma-neutral
+per-channel gains on the built layers, so a colour change can never move the level:
+`scattering_scale` and the magnitude anchor stand under either.
+
+A ring face is brighter per unit area than any Lambert sphere near opposition, so a camera
+metering the globe alone would clip the rings white. **Both faces** therefore meter as their
+own candidate: a flat annulus whose screen fraction is its area foreshortened by the
+camera's elevation, at `ring_meter_albedo` or `ring_meter_unlit_albedo` (the bright ring's
+scattering strength times `scattering_scale`, derived per face) times CPU mirrors of the slab
+geometry and the phase function. The unlit face is not the faint object it looks like from
+the other side: an optically thin ring transmits nearly as much as it reflects, so at a low
+opening angle the C ring and the Cassini Division come through bright while the B ring goes
+dark.
+
+The geometry mirror takes each face's slab term at **its own maximum over optical depth** --
+the saturated limit `mu0/(mu+mu0)` on the lit face, where the term is monotone, and an
+interior peak at `tau = ln(b/a)/(b-a)` on the unlit one. That keeps optical depth out of the
+manager and makes the two branches MEET at the plane instead of switching (measured, 0.998
+lit against 0.988 unlit at a 0.05 deg opening) -- a thin ring really does look the same from
+either side.
+
+**One anchor per face holds on the lit face and not quite on the unlit one, and both are
+properties of the built FILE rather than of the rings.** Each stands in for a max over radius
+the mirror cannot afford, so it is exact only at the opening it was derived at. On the lit
+face there is nothing to drift: the implied anchor runs 1.103 to 1.138 across the whole range
+the openness ramp below gives the candidate weight, worth 0.02 EV. On the unlit face the
+term's peak sits at `tau = mu`, so as the rings close it walks out of the outer B ring and
+into the C ring, and the anchor swings with it -- 1.424 at 26.7 deg, 0.844 at 16, about 1.0
+from 12 down -- which one number costs 0.38 EV at worst, at full ramp weight rather than
+where the ramp has released. That is a third of a stop on the fainter face against a per-mu
+table as the alternative, and it is accepted; the cell takes the minimax rather than a
+median. What is NOT acceptable is letting either go stale: they move with the asset and with
+`scattering_scale` and `unlit_level`, and after the 2026-09-08 transparency re-source the
+unlit anchor was a full stop out with nothing to announce it. Re-derive both with
+`scratch/rings/meter_albedos.py` (in the assets build tree) whenever any of the three moves.
+
+**The phase mirror uses the body's CENTRE where the shader uses each fragment's own**, so
+close in the two disagree about the opposition surge. The error is bounded by the surge's own
+amplitude and runs BOTH ways, contrary to what this document said until 2026-09-08: over
+standoffs of 3 to 200 ring radii it reaches +0.27 EV where the centre sits inside the 0.883
+deg window and no ring fragment does, and -0.51 EV where a ring fragment sits in the camera's
+own shadow while the centre is degrees away. Neither shows. The metering key leaves a stop of
+headroom above the metered subject, so even the worst under-metered case puts the surge spot
+at 0.71 of full scale rather than clipping, and both directions converge beyond about 100
+ring radii, where the ring subtends too little for a fragment's phase to differ from the
+centre's.
+
+**Neither face clips at any distance tested** -- 3.5 to 30 body radii, both faces, an 18 deg
+opening: 0.00 % of every frame above 0.99, with p99.9 between 0.25 and 0.65. So a ring that
+reads too bright is a level judgment and not an exposure failure. What follows from that is
+that the ring candidate rarely WINS, now that the level is anchored on photometry: at the
+photometric level the rings meter dimmer than Saturn's globe over most of the opening range,
+so the globe's own candidate holds and the ring branch does nothing -- correctly, since
+nothing clips. Measured, the lit face pulls at most 0.17 EV and the unlit face none at all,
+against 0.53 and 0.28 at the pre-anchor level. The branch is live rather than dead code: it
+produces a candidate at every geometry, the globe's is simply lower, and it would take
+control for a brighter or a more open ring system.
+
+**What holds that candidate is the ring's own geometry, in two parts** -- the same shape as
+a body's lit candidate, which is held by its lit AREA and then again by its lit FRACTION.
+The annulus is sampled in azimuth at radii spaced by equal area, and each sample counts by
+how far inside the frame it lands (`meter_edge_fraction`); their share scales the annulus'
+screen area. A ring is not a disc, so its body's screen position says little about whether
+it is the view. That, with the disc's own gate no longer skipping a body whose ring or shell
+reaches outside it, is what lets the rings meter with the rings filling the frame and the
+globe panned off the side: measured over a yaw sweep at six body radii, the globe's disc
+gate is exactly 0.000 from 50 to 60 degrees of yaw while the rings are still 19 % to 0.5 %
+in frame and hold the exposure at -14.92 EV. Without it that whole window sits at the
+dark-adapted rest, 15.9 stops brighter, with the rings blown white.
+
+Then the **openness ramp**, `ring_meter_onset_openness` down to
+`ring_meter_full_openness`, on the sine of the camera's elevation above the ring plane.
+This is the shape term the area cannot supply: the area carries one power of the
+foreshortening against a ramp that spans decades. Measured by disabling the ramp in the
+same app run, area alone holds the exposure within half a stop of its metered value from a
+12 deg opening all the way down to 0.5, and then dumps 13.9 stops between 0.2 deg and the
+plane -- the rings hold the camera until they are almost exactly edge-on and then let go all
+at once, which is the flash. With the ramp the release runs from 8 deg to 1.5 and spans 17.6
+stops, symmetric about the plane. Purely a taste
+setting, and the reason it is one: a ring at a low opening angle is a bright line, and this
+is how readily the camera stops the whole frame down for one.
 
 ## Renderer parity
 
@@ -1066,24 +1591,18 @@ as SPECULAR². Mimas in eclipse lands within one code of Forward+.
 **The rings' restatement is the one blend correction kept.** A partially transparent sheet is
 dimmed by the display-referred blend itself — `alpha * enc(C)` against the linear
 pipeline's `enc(alpha * C)`, 0.73x over Saturn's lit ring face — so the ring self-lights on
-the display-referred branch and hands `display_mix` a zero pedestal: it stands over empty
-sky almost everywhere, and the escalation case is pedestal-blind. The engine lights only
-the sunlit face (the unlit face is ambient alone), and the shader's existing model-space
-side test — `IVRings` keeps +y sunward — says which this is;
-`IVSunOcclusionManager._feed_ring_material` now passes `sun_light_energy` beside the sun's
-direction. Two confounds had to fall before the diffuse model could be chosen honestly. The
-`IVRings` Compatibility overrides of `litside_phase_boost` / `unlitside_phase_boost`
-(1.25 / 1.5 against the 3.0 / 2.0 every other renderer uses) are retired along with the
-matching metering constant in `IVExposureManager`: tuned against the old display-referred
-pipeline, where a boost `m` acted as `m^2.4`, they became a deliberate divergence once it
-was corrected — and they were quietly dimming every Compatibility ring measurement by
-0.88x, which made a Burley restatement (the engine's documented default diffuse at these
-shells' roughness of 1.0) look closer than it is. With the mask removed and the
-boosts equal, the end-to-end measurement is unambiguous: a LAMBERT self-light lands the
-lit ring face at 0.99x of Forward+ and the Burley one at 1.23x — at this near-equinox
-grazing incidence, where the sun stands a degree or two off the ring plane and Burley's
-grazing terms run 1.5–2x over Lambert, the engine's own ring shading sits close to
-Lambert.
+the display-referred branch. Since the ring texture became premultiplied the fragment's
+colour is its whole term, so it goes through `display_write()` alone and the `display_mix`
+pair is no longer needed; what stays approximate is the blend's own `(1 - alpha)`
+attenuation of what lies behind, exact over the empty sky the ring stands on almost
+everywhere. The fragment computes its own radiance from `sun_light_energy`, which
+`IVSunOcclusionManager._feed_ring_material` passes beside the sun's direction, and decides
+its own face per fragment, so the engine lights neither face on either renderer. The
+`IVRings` Compatibility overrides of `litside_phase_boost` / `unlitside_phase_boost` are
+retired along with the matching metering constant in `IVExposureManager`: tuned against the
+old display-referred pipeline, where a boost `m` acted as `m^2.4`, they became a deliberate
+divergence once that was corrected, and they had been quietly dimming every Compatibility
+ring measurement by 0.88x.
 
 ## Glow: the bloom pass
 
@@ -1144,15 +1663,15 @@ cloud tops, clipped city cores, the near-opposition ring face. Because our expos
 pre-tonemap (in `light_energy` and `iv_exposure`), the threshold is applied *after*
 adaptation: a source blooms exactly when the camera is exposed such that it clips, and an
 eclipse that dims `light_energy` takes the bloom down with it, automatically. The background
-panorama never reaches the threshold in either mode (peak ≈ 0.087 × 2^`exposure_max_ev` ≈ 0.7
+panorama never reaches the threshold in either mode (peak ≈ 0.087 × 2^`exposure_max_ev` ≈ 0.17
 at rest), so the Milky Way correctly does not bloom.
 
 **The star PSF is not redundant with this, and could not be.** The PSF is the star's image —
 the calibrated core-plus-skirt that carries photometric proportionality and the `sqrt(ln I)`
 size law. Glow adds the wide scattering wings the Gaussian does not have, and its per-texel
 energy caps at 12 while star peaks run to the 32768 f16 ceiling: bloom is proportional to
-flux only between threshold and cap — roughly V 3 to 5.5 at the 1080 reference height and
-reference fov, the band riding the same resolution and fov compensations as the field — and
+flux only between threshold and cap — roughly V 1.5 to 4 at the 1080 reference height,
+reference fov and rest exposure, the band riding the same compensations as the field — and
 every brighter star blooms at the cap, differentiated only by footprint, which grows as
 `sqrt(ln I)`. That is why glow shows on a small subset of stars, and why that subset's halos
 look alike. The cap is also half-deliberate protection: wings proportional to flux would
@@ -1183,7 +1702,7 @@ about it:
   a power law in the wings, exponent ~2 over the decades that matter for an eye or a lens
   (the CIE disability-glare law, `L_veil = 10 E / θ²`). But that law puts ~10 % of a source's
   light in the wings, and 10 % of the sun's flux at the dark-adapted rest exposure is about
-  4500× saturation over the *whole frame* — a photograph exposed for the Milky Way cannot
+  1100× saturation over the *whole frame* — a photograph exposed for the Milky Way cannot
   also hold the sun. So the amplitude carries a compression exponent, `glare_gamma`, exactly
   as `intensity_gamma` does for the field, and the outer radius grows as `I^(gamma/2)`: one
   doubling per 5.3 magnitudes at the shipped 0.286, against the core's one per 19.
@@ -1336,7 +1855,8 @@ lever a capped pass cannot offer is one the shader does not need.
 | | `limb_meter_fraction_start` / `_full` | The same ramp for an atmosphere limb's ceiling, on the sunlit, forward-scattering, in-frame share of its ring (later again — a limb may clip far more readily than a disc). |
 | | `meter_edge_fraction` | Screen-edge gate width: compensation completes when a body's center is this fraction of the frame inside. |
 | | `limb_meter_edge_fraction` | The same gate on the limb ring's own samples (taken at the limb's foot), wider: it is also the centrality test. |
-| | `ring_meter_albedo` | Lit-ring metering reflectance (bright-ring level of the shipped assets, before the phase boost). |
+| | `ring_meter_albedo` / `ring_meter_unlit_albedo` | The bright ring's scattering strength as each face meters it, before the phase level. Derived per face; see *Rings*. |
+| | `ring_meter_onset_openness` / `ring_meter_full_openness` | Camera elevation sines where the rings begin to hand the meter back / hold none of it. The shape term beside their screen area, as the nightside lit fractions are beside a body's. |
 | | `exposure_max_ev` | Dark-adapted resting exposure, in EV above the authored sky. The empty-sky and deep-night state. |
 | | `meter_transition_exponent` | Shapes zoom-out: slower climb into overexposure, faster star arrival. |
 | | `nightside_onset_lit_fraction` / `nightside_full_lit_fraction` | Lit-disc fractions where night adaptation begins / completes. |
@@ -1389,11 +1909,12 @@ lever a capped pass cannot offer is one the shader does not need.
   renderer the limb's whole radiance crosses the engine's conversion bracket and blends on
   an sRGB-encoded target, so its veil and band render well under Forward+ — the first
   accepted deficiency above.
-- **Earth's terminator band on FORWARD+ — measured 2026-08-28, PART of it fixed, and what is
-  left is a decision rather than a bug.** Measure it with `scratch/compat/termband.py` in the
-  assets build tree, which poses the body at a solved phase 90 (so the terminator runs through
-  the disc centre, where it is widest on screen, rather than wherever a guessed longitude put
-  it) and reports against μ0 with a contrast metric — the illumination taken out as a median
+- **Earth's terminator band on FORWARD+ — measured 2026-08-28 and CLOSED 2026-09-08. Kept
+  here for the measurements and for the two candidates that were rejected on the way.**
+  Measure it with `scratch/compat/termband.py` in the assets build tree, which poses the body
+  at a solved phase 90 (so the terminator runs through the disc centre, where it is widest on
+  screen, rather than wherever a guessed longitude put it) and reports against μ0 with a
+  contrast metric — the illumination taken out as a median
   profile on one-pixel bins, since "no features here" is a statement about contrast that no
   luma profile can see. What it says: Earth's relative feature contrast falls **0.21 → 0.054**
   across μ0 ∈ [−0.06, +0.06], a 4× collapse, while Mars over the same span **rises** 0.066 →
@@ -1408,24 +1929,21 @@ lever a capped pass cannot offer is one the shader does not need.
     It bought Earth +5–17 % contrast across the day-side half of the band and Mars +10–90 %,
     for +2.0 % / +6.9 % of disc level. It is a real correction and it is not enough.
   - **The deck's edge is what reads as a wall, and a cutoff law only moves it** (tried and
-    rejected 2026-08-28). Commenting out Earth's cloud row settles the Mars asymmetry: the
-    features that survive inside the band are RELIEF, not albedo — Mars has abundant relief
-    to shade at grazing incidence and Earth's map has almost none, which is why Earth's
-    contrast falls 0.214 → 0.054 across the band while Mars' *rises* 0.066 → 0.113. What
-    reads as a defect is the abrupt end of the white clouds. Isolated by hiding the shell,
-    the deck's own contribution falls 0.0691 → 0.0049 → 0 over µ0 +0.065 → −0.005, an
-    e-folding length collapsing from 91 pixels to 2. A `clouds_grazing_extent` carrying the
-    deck to its own geometric shadow at µ0 = −0.0565 (3.2° past the disc's terminator, the
-    part the engine's N·L cannot deliver rebuilt as EMISSION) was rendered at
-    k = 0/0.35/0.5/0.7/1.0 and **moved the wall without removing it** — a linear ramp to a
-    hard zero translates its corner but keeps its shape, and the deck is still 16 % of the
-    pixel where it stops. Removing it needs the falloff SHAPE changed: a layer law, whose
-    radiance carries no µ0 projection (which is why this model's own glow survives to
-    µ0 −0.13 while the deck inside it does not), ENDED by a shadow graded through the deck's
-    own thickness rather than cut at a line. A layer law without that grading is worse, not
-    better. Both need the deck's optical depth separated from its coverage, which
-    `Earth.clouds.albedo.512.png` cannot supply: RGB is 255 in one distinct value with alpha
-    carrying everything, so reflectance is pinned at 1.0 and a range tag would buy nothing.
+    rejected 2026-08-28; the wall itself is FIXED 2026-09-08, below). Commenting out Earth's
+    cloud row settles the Mars asymmetry: the features that survive inside the band are
+    RELIEF, not albedo -- Mars has abundant relief to shade at grazing incidence and Earth's
+    map has almost none, which is why Earth's contrast falls 0.214 -> 0.054 across the band
+    while Mars' *rises* 0.066 -> 0.113. What reads as a defect is the abrupt end of the white
+    clouds. Isolated by hiding the shell, the deck's own contribution falls
+    0.0691 -> 0.0049 -> 0 over mu0 +0.065 -> -0.005, an e-folding length collapsing from 91
+    pixels to 2. A `clouds_grazing_extent` carrying the deck to its own geometric shadow at
+    mu0 = -0.0565 was rendered at k = 0/0.35/0.5/0.7/1.0 and **moved the wall without
+    removing it** -- a linear ramp to a hard zero translates its corner but keeps its shape,
+    and the deck is still 16 % of the pixel where it stops. What removes it is the falloff
+    SHAPE, and both halves of that needed the deck's optical depth separated from its
+    coverage, which the MODIS rebuild supplies and *Cloud shells* above describes. A range
+    tag would still buy nothing: the deck spans half the scale and a tag is for a map that
+    does not.
   - **Fixed: the shells were lit plane-parallel, so nothing was lit past the terminator.**
     Every shell took `albedo x max(mu0, 0) x atm_sun_transmittance`: flux entering the column
     goes as mu0, so illumination was pinned to zero at the geometric terminator WITH A CORNER,
@@ -1476,18 +1994,22 @@ lever a capped pass cannot offer is one the shader does not need.
     `limb_model.py` had **drifted from the table**, carrying 1.0 for Earth's shipped
     `atm_gas_multiple` of 1.3 -- the recurring failure that its own `--verify` cannot see,
     being a comparison of two integrals over the same body.
-  - **What is left is the DECK, and it is now well posed.** A cloud is a scattering layer, not
-    a horizontal Lambertian sheet, so its radiance carries no mu0 projection -- which is
-    exactly why this model's own glow survives to mu0 -0.13 while the deck inside it does not.
-    At mu0 = 0 the deck's sun ray is tangent at its own 10.19 km, where Earth's tangent optical
-    depth is **2.23, i.e. 10.7 % of the beam still arrives**, and a layer law would collect it
-    where the N.L projection throws all of it away. That is what makes real sunset cloud tops
-    glow, and it is deck-only: the ground IS a horizontal surface and its mu0 projection is
-    right. It needs the shadow graded through the deck's own thickness rather than cut at a
-    line (a cutoff law only moves the wall -- rejected above), and both halves need the deck's
-    optical depth separated from its coverage, which `Earth.clouds.albedo.512.png` cannot
-    supply. Also unresolved and unrelated: at mu0 < 0.06 Earth's ocean cannot compete on
-    albedo at all -- 0.05 against a glow that is 65-80 % of the pixel.
+  - **FIXED 2026-09-08: the deck's own law, and the shadow graded through it.** See *Cloud
+    shells* above for the mechanism. Three terms were missing and all three are in:
+    `R(mu0)` and `T(mu0) T(mu)` evaluated at each fragment's own cosines, which is the layer
+    law and the graded shadow and needed the map's coverage and thickness apart; and
+    `clouds_relief`, which carries the deck past the GROUND's terminator to its own shadow
+    entry at mu0 = -0.0565, graded across the deck's own height. The band's surviving feature
+    contrast goes 0.054 before any of this work to 0.099, and past the geometric cut reliefs
+    of 0, 0.08 and 0.15 render bit-identically. **One correction to what this item used to
+    say:** a layer law does NOT simply drop the mu0 projection. A plane-parallel layer's
+    reflected flux is `F mu0 R(mu0)` and, although R rises toward 1 at grazing incidence,
+    the product still falls to zero linearly in mu0 -- the atmosphere's own glow survives
+    past the terminator because its SHADOW is the domain boundary and it has no horizontal
+    surface, and a cloud deck survives because its SIDES are lit, which is what
+    `clouds_relief` states. Also unresolved and unrelated: at mu0 < 0.06 Earth's ocean
+    cannot compete on albedo at all -- 0.05 against a glow that is 65-80 % of the
+    pixel.
   - **The twilight curve runs 2.3x over Earth's observed illuminance, and that is the expected
     sign.** 927 lx at sunset against ~400 measured. Single scattering with no ozone: the
     Chappuis band is what takes real twilight down, over a horizontal path through the ozone
@@ -1557,3 +2079,59 @@ lever a capped pass cannot offer is one the shader does not need.
 - **Sun surface tuning**: in-app judgment of the procedural photosphere (every parameter
   is a uniform) and granulation time evolution, which is static by decision rather than
   oversight — a granule lives ~10 minutes, so the time input belongs on the sim clock.
+- **Multiple stars: metering, star colour, and the star field from elsewhere.** Audited
+  2026-09-05 for 3–6 light sources at a location and more than one system at once; the light
+  rig, the engine's light budget and how occlusion reaches each light are the sibling
+  document's entry. Nothing here is persisted, and `IVPhotometry`'s conversions are already
+  star-parameterized — every call site is not.
+  - **Metering lights every body from the camera's star.** `IVExposureManager._star` comes
+    from `camera_tree_changed`; each body's illuminance, parent-shadow fraction, lit fraction,
+    ring and limb candidates take that one star, and any other star is skipped as a candidate
+    outright. Per body, over its fed stars (the sibling's selection): lit luminance sums
+    `albedo × Σ Eᵢ × shadowᵢ / π`, each star's disc is its own candidate with its own
+    camera-point fraction, and the ring and limb ceilings take the brightest star's geometry.
+    The lit/dark split assumes one terminator: start with the dominant star driving the
+    phase, night-side ramp and horizon cutoff, and secondaries adding their own visible-lit
+    share to BOTH candidates — a 1 % companion lights the "dark" side ~7 EV under the day
+    side, and the night ramp must not carry the camera past it to starlight. Exposure,
+    `iv_exposure`, the emission globals and the ambient floor stay one scalar each.
+  - **Nonphysical light cannot sum.** `nonphysical_energy_at_1_au / d^0.5` was tuned for one
+    sun: two curves add to blowout, and a companion at 100 au reads at a tenth of the primary
+    instead of 1e-4. Require physical light for multi-star, or normalize the curve to the
+    dominant star and scale the others by their physical ratio.
+  - **Star colour and white balance.** `light_color` is never set: every surface is lit white
+    while discs, points and the catalog take `color_from_b_v()` (the Sun's 0.63 tints its
+    disc, not its light). A per-star light colour wants the same ramp, luminance-normalized
+    so V-band illuminance still meters, through a CPU mirror that cannot drift from the
+    shader's. Then decide the white point: tinting the Sun's light shifts every calibrated
+    map, so white-balance to the home star and let an M dwarf read red *relative* to it. The
+    photosphere's limb darkening and Planck anchors are solar (5777 K) and stand as an
+    approximation for other types.
+  - **Per-star terms in the shell shaders.** The disc laws, `limb_mean_incidence()`,
+    `atm_sun_transmittance`, the twilight excess and the atmosphere's shadow cylinder each
+    take one sun; the `atm_sky_*` curve is a function of µ₀ scaling linearly with
+    illuminance, so it reuses per star with no refit. `IVBodyPSF` should sum reflected flux
+    over stars, each through its own phase law, while its geometry — phase, wing offset, limb
+    sun angles — is one star's: dominant-star geometry with summed flux is the starting
+    approximation, and a binary's crescent glow is the view that tests it. Rings: per-star
+    lit face and phase boost, no mesh flip.
+  - **The star field is Earth-centric.** `CUSTOM0.x` is V at the Sun; from another system
+    each catalog star shifts by `5 log10(d_camera / d_catalog)`, computable per vertex from
+    the model-space position (f32 is fine at parsec magnitudes), but a star the catalog
+    carries at a placeholder distance for want of a parallax shifts wrongly. The visited star
+    must leave the catalog and the Sun must appear from there (its quad; sibling document).
+    The panorama needs no parallax at these ranges.
+  - **Cost.** Six stars in the uniform interface cost nothing; per-fragment cost is linear in
+    the fed count under uniform loop bounds, and the atmosphere quadrature is the term that
+    multiplies. The engine's directional-light count is the only hard limit (sibling).
+
+- **Rings: a ring shadow renders truly black, and the real one is not.** What lights it is
+  not Saturnshine off the lit hemisphere: a ring element inside the shadow sees the planet's
+  NIGHT side by construction, the lit hemisphere being on the other side of the terminator,
+  so the only planetary light reaching it is the thin crescent near the terminator's limb.
+  The larger term is the rings' own -- the shadowed region is surrounded by brilliantly lit
+  ring, and multiple scattering carries light into it. Neither is modelled and neither is
+  estimated here. (The same term the other way, ringshine on the globe's night side, is what
+  makes Saturn's dark hemisphere visible beside unlit rings in one exposure, as in PIA12590
+  -- though that frame cannot constrain the ring LEVEL, ringshine being proportional to it.)
+  Both need a light term rather than a ring-shader change.

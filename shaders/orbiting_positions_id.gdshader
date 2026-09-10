@@ -55,12 +55,12 @@ void vertex() {
 	float lan = CUSTOM0[2]; // longitude of the ascending node
 	float aop = CUSTOM0[3]; // argument of periapsis
 	float m0 = CUSTOM1[1]; // mean anomaly at epoch
-	float n = CUSTOM1[2]; // mean motion
+	float n = CUSTOM1[2]; // proper mean motion (=mean longitude rate)
 
 	// precessions & magnitude
 	float s = CUSTOM2[0]; // nodal precession (=longitude ascending node rate)
 	float g = CUSTOM2[1]; // apsidal precession (=longitude of periapsis rate)
-//	float mag = CUSTOM2[3]; // magnitude; NOT IMPLEMENTED
+//	float mag = CUSTOM2[2]; // magnitude; NOT IMPLEMENTED
 
 	// orbit precessions
 	lan += s * iv_time;
@@ -68,8 +68,11 @@ void vertex() {
 	lan = mod(lan, TAU);
 	aop = mod(aop, TAU);
 
-	// mean anomaly
-	float m = m0 + n * iv_time;
+	// Mean anomaly = mean longitude - longitude of periapsis, so it advances at n - g.
+	// AstDyS publishes n as the mean LONGITUDE rate; using it as the mean anomaly rate
+	// adds g to every asteroid's mean motion, which unlocks a resonant body from its
+	// resonance -- for a Hilda, g IS the 3:2 locking rate 3*n_Jupiter - 2*n.
+	float m = m0 + (n - g) * iv_time;
 	m = mod(m + PI, TAU) - PI;
 
 	vec3 position = get_orbit_position(a, e, i, lan, aop, m);

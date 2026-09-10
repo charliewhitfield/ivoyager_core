@@ -210,7 +210,7 @@ float psf_core_light(float intensity, float radius_px, float sigma) {
 // exponent is ~2 over the decades that matter for both an eye and a lens (the CIE
 // disability-glare law, L_veil = 10 E / theta^2). The shape is that. The AMPLITUDE is not
 // physical and cannot be: the CIE law puts ~10 % of a source's light in the wings, and 10 % of
-// the sun's flux at the camera's dark-adapted rest exposure is about 4500x saturation over the
+// the sun's flux at the camera's dark-adapted rest exposure is about 1100x saturation over the
 // WHOLE frame -- a photograph exposed for the Milky Way cannot also hold the sun. So the
 // amplitude carries a compression exponent, exactly as intensity_gamma does for the field, and
 // the pair is anchored where an anchor exists: at the far sun the shipped defaults reproduce

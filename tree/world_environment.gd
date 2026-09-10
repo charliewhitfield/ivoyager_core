@@ -51,9 +51,13 @@ extends WorldEnvironment
 ## Directories searched for the background panorama. Prepend a directory to
 ## prioritize a custom override.
 var starmaps_search: Array[String] = ["res://addons/ivoyager_assets/starmaps"]
-## Energy multiplier applied to the background sky ([code]starmap_background[/code]
-## shader).
-@export_range(0.0, 2.0, 0.01, "or_greater") var starmap_background_energy := 0.5
+## Scales the background sky's energy multiplier. 1.0 is
+## [method IVExposureManager.compute_sky_energy], the level at which the panorama
+## and the star field are one photometric system: both are then the same camera's
+## image of the same sky, so toggling physical light moves the two together instead
+## of changing their ratio. Raising it is a taste call about the Milky Way alone.
+## Physical light supersedes it, as it does every by-eye value it replaces.
+@export_range(0.0, 4.0, 0.01, "or_greater") var starmap_background_energy_scale := 1.0
 ## Euler angles assigned to [member Environment.sky_rotation], which rotates the background
 ## panorama out of the frame it is drawn in and into the simulator's ecliptic frame. Zero
 ## means the panorama is already ecliptic. The default suits the galactic-coordinate
@@ -96,9 +100,33 @@ func _ready() -> void:
 	IVStateManager.assets_preloaded.connect(_on_asset_preloader_finished)
 
 
+# A fixed scene node's _ready() precedes core init, so IVGlobal.program is empty there
+# (the same reason IVStarsVisual defers its build); this signal is well after it.
 func _on_asset_preloader_finished() -> void:
-	if add_starmap:
-		_add_starmap_sky()
+	if !add_starmap:
+		return
+	_add_starmap_sky()
+	# The sky's level is IVPSFSettings photometry (see _get_starmap_energy), so this node
+	# is a consumer of those values and re-applies on the signal like the rest of them.
+	var psf_settings: IVPSFSettings = IVGlobal.program.get(&"PSFSettings")
+	if psf_settings:
+		psf_settings.changed.connect(_on_psf_settings_changed)
+
+
+# IVExposureManager drives energy_multiplier itself while active, and restores what it
+# captured when it stops, so writing here then would fight it over one parameter.
+func _on_psf_settings_changed() -> void:
+	if IVExposureManager.physical_active:
+		return
+	var sky_material := _get_starmap_material()
+	if sky_material:
+		sky_material.set_shader_parameter(&"energy_multiplier", _get_starmap_energy())
+
+
+func _get_starmap_material() -> ShaderMaterial:
+	if !environment or !environment.sky:
+		return null
+	return environment.sky.sky_material as ShaderMaterial
 
 
 func _add_starmap_sky() -> void:
@@ -112,9 +140,19 @@ func _add_starmap_sky() -> void:
 	var sky_material := ShaderMaterial.new()
 	sky_material.shader = IVGlobal.resources[&"starmap_background_shader"]
 	sky_material.set_shader_parameter(&"panorama", background)
-	sky_material.set_shader_parameter(&"energy_multiplier", starmap_background_energy)
+	sky_material.set_shader_parameter(&"energy_multiplier", _get_starmap_energy())
 	var sky := Sky.new()
 	sky.sky_material = sky_material
 	environment.sky = sky
 	environment.sky_rotation = sky_rotation
 	environment.background_mode = Environment.BG_SKY
+
+
+# The anchor is IVExposureManager's when that node exists, so a project that moved it
+# does not get one panorama level under physical light and another without.
+func _get_starmap_energy() -> float:
+	var exposure_manager: IVExposureManager = IVGlobal.program.get(&"ExposureManager")
+	var sky_energy := (IVExposureManager.compute_sky_energy(
+			exposure_manager.background_peak_magnitude_per_arcsec2) if exposure_manager
+			else IVExposureManager.compute_sky_energy())
+	return sky_energy * starmap_background_energy_scale
