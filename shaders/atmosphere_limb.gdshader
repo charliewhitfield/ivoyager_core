@@ -40,6 +40,13 @@ render_mode blend_premul_alpha, ambient_light_disabled, shadows_disabled, skip_v
 // pastiche. Its output is I/F, so it rides the sun's light_energy exactly like the surface
 // beneath it, exposure and all, and meters with it (IVExposureManager's limb candidate).
 //
+// WHERE IT DRAWS. On a camera-facing annulus of the shell around its silhouette -- only the
+// rays atm_limb() can return light for -- on the shared limb_annulus_mesh, whose vertices
+// limb_annulus_vertex() places each frame. IVShellsModel.shader_meshes gives that mesh to any
+// shell naming this shader; on any other mesh this draws nothing sensible, and its shell must
+// not cast shadows (a shadow pass would place the annulus for the light). Why the shell is
+// drawn this way is under "Atmospheres" in PHOTOMETRIC_MODEL.md.
+//
 // HOW IT COMPOSITES. Per fragment the include returns the path radiance and the
 // transmittance of whatever lies behind the ray. With blend_premul_alpha the engine forms
 // src.rgb + dst.rgb * (1 - src.a), so ALBEDO is the radiance as-is and ALPHA is one minus
@@ -48,8 +55,8 @@ render_mode blend_premul_alpha, ambient_light_disabled, shadows_disabled, skip_v
 // the sky and the stars, so the pedestal is the provable constant 0 and the restatement
 // needs no estimate of anything — the rings shell's pattern, simpler here because a
 // premultiplied fragment's colour IS its whole term. Where the air is thin, alpha is ~0
-// and nothing darkens. The shell renders its front faces only, so every pixel gets exactly
-// one fragment whose whole ray - both halves - the include integrates.
+// and nothing darkens. The annulus is one layer on the shell's near side, so every pixel it
+// covers gets exactly one fragment whose whole ray - both halves - the include integrates.
 //
 // LIGHTING. A custom light() adds LIGHT_COLOR * ATTENUATION / PI; the engine multiplies by
 // ALBEDO afterwards, and LIGHT_COLOR carries a factor PI, so the rendered value is
@@ -67,7 +74,7 @@ render_mode blend_premul_alpha, ambient_light_disabled, shadows_disabled, skip_v
 #include "_atmosphere.gdshaderinc"
 #include "_point_spread_function.gdshaderinc" // body_pixel_radius / body_disc_weight (the handoff)
 
-varying vec3 model_position; // unit-sphere local position (captured before farwarp overwrites VERTEX)
+varying vec3 model_position; // shell-local entry point of the pixel's ray (pre-farwarp)
 varying vec3 v_camera_local; // the camera in this shell's local frame; the same at every vertex
 varying vec3 v_sun_local;    // the sun direction in that frame, unit; the same at every vertex
 varying flat float v_far_floor; // atm_far_floor() is uniform-only: per vertex, not per fragment
@@ -84,13 +91,51 @@ uniform float handoff_high = -1.0;  // px at/above which this shell fully replac
 
 
 
+// How far inside the rays atm_limb() returns light for the annulus begins, in px.
+const float LIMB_ANNULUS_MARGIN_PX = 2.0;
+
+
+// The shell-local position of one limb_annulus_mesh vertex: where the camera ray that its
+// (azimuth, row) parameters name enters the shell, from just inside the rays atm_limb() can
+// return light for out to the shell's own silhouette. A camera inside the shell collapses the
+// whole annulus, as it would turn every face of the sphere away. See "Atmospheres" in
+// PHOTOMETRIC_MODEL.md for why the shell is drawn this way.
+vec3 limb_annulus_vertex(vec3 annulus, vec3 camera_local, float proj_11, float viewport_height) {
+	float camera_distance = length(camera_local); // in shell radii
+	if (camera_distance <= 1.0) {
+		return vec3(0.0);
+	}
+	vec3 axis = camera_local / camera_distance;
+	vec3 side = normalize(cross(axis,
+			abs(axis.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
+	vec2 azimuth = normalize(annulus.zx); // (cos, sin)
+	vec3 outward = azimuth.x * side + azimuth.y * cross(axis, side);
+	float disc = surface_scale / shell_scale;
+	// One px of impact parameter at the limb: an upper bound off axis, so the edge errs inward.
+	float pixel = 2.0 * sqrt(max(camera_distance * camera_distance - disc * disc, 0.0))
+			/ (abs(proj_11) * viewport_height);
+	// Below both the handoff band and the ring filter's reach, atm_limb() returns nothing.
+	float b_inner = max(min(disc * (1.0 - ATM_RIM_HANDOFF),
+			disc - 0.5 * ATM_RING_FILTER_PX * pixel) - LIMB_ANNULUS_MARGIN_PX * pixel, 0.0);
+	// Rows even in arc on the shell: even in b, the outermost row alone would span half of it.
+	float b = sin(mix(asin(b_inner), 0.5 * ATM_PI, 0.5 * (annulus.y + 1.0)));
+	vec3 closest = b * (b / camera_distance * axis
+			+ sqrt(max(1.0 - b * b / (camera_distance * camera_distance), 0.0)) * outward);
+	// Where the ray enters the shell, which is the depth the whole sphere gave this pixel.
+	return closest - sqrt(max(1.0 - b * b, 0.0)) * normalize(closest - camera_local);
+}
+
+
 void vertex() {
-	model_position = VERTEX;
 	// The geometry runs in the shell's own frame, where the (oblate) shell is the unit sphere
 	// and altitude is exact. The camera is origin-shifted to the world origin each frame, so
 	// this stays well inside float32 at any zoom.
 	mat4 inverse_model = inverse(MODEL_MATRIX);
 	v_camera_local = (inverse_model * vec4(CAMERA_POSITION_WORLD, 1.0)).xyz;
+	model_position = limb_annulus_vertex(VERTEX, v_camera_local, PROJECTION_MATRIX[1][1],
+			VIEWPORT_SIZE.y);
+	VERTEX = model_position;
+	NORMAL = model_position;
 	v_sun_local = normalize(mat3(inverse_model) * sun_direction);
 	v_far_floor = atm_far_floor();
 	farwarp_lit_vertex(MODELVIEW_MATRIX, MODELVIEW_NORMAL_MATRIX, VERTEX, NORMAL);

@@ -40,7 +40,9 @@ extends MeshInstance3D
 ## ([code]<file_prefix>.<file_tag>.<channel>[/code]); blank for a textureless shell and
 ## for the surface, whose textures use [code]file_prefix[/code] alone.[br]
 ## - [code]shader[/code] ([StringName]): give the shell a [ShaderMaterial] using the
-## named [Shader] in [member IVGlobal.resources], instead of a [StandardMaterial3D].[br]
+## named [Shader] in [member IVGlobal.resources], instead of a [StandardMaterial3D]. An
+## overlay whose shader is keyed in [member shader_meshes] draws that mesh in place of the
+## shared sphere.[br]
 ## - [code]process[/code] ([StringName]): name a [member process_methods] entry called on the
 ## shell each frame as [code]method(delta, ...process_args)[/code] (e.g. [method _rotate]).[br]
 ## - [code]process_args[/code] ([code]ARRAY[VARIANT][/code]): extra arguments bound after
@@ -115,6 +117,12 @@ const _SUN_DISC_BRIGHTNESS := 3.0 # nonphysical disc level; physical light deriv
 ## [code]method(shells_model, delta, ...process_args)[/code]. Register entries in
 ## [method _static_init] or from project code to add a process method without subclassing.
 static var process_methods: Dictionary[StringName, Callable] = {}
+## Meshes that overlay shells draw in place of the shared sphere, keyed by the shells.tsv
+## [code]shader[/code] that needs one, as keys into [member IVGlobal.resources]. A shader
+## listed here places its own vertices, so the two travel together: a copy of it under a new
+## key needs its own entry, and its shells must not cast shadows (a shadow pass would place
+## the mesh for the light). Register entries in [method _static_init] or from project code.
+static var shader_meshes: Dictionary[StringName, StringName] = {}
 
 # Debug-only caches for the per-shell override asserts in _build_material; built
 # lazily and kept for the session. Unused unless OS.is_debug_build().
@@ -149,6 +157,7 @@ var _times := IVGlobal.times
 
 static func _static_init() -> void:
 	process_methods[&"_rotate"] = _rotate
+	shader_meshes[&"atmosphere_limb_shader"] = &"limb_annulus_mesh"
 
 
 ## Named by a shells.tsv 'process' field. Rotates [param shells_model]
@@ -168,7 +177,8 @@ func _init(body_name: StringName, mean_radius: float, model_basis: Basis,
 	_shell = shell
 	name = &"ShellsModel" if shell == 0 else StringName("Shell_%d" % shell)
 	transform.basis = model_basis
-	# shell 0 may replace the shared sphere with the body's own mesh, or its surface class's
+	# shell 0 may replace the shared sphere with the body's own mesh, or its surface class's;
+	# an overlay, with the mesh its shader places itself (shader_meshes)
 	mesh = mesh_override if mesh_override else IVGlobal.resources[&"sphere_mesh"] as Mesh
 
 
@@ -523,8 +533,9 @@ func _is_local_shadow_caster() -> bool:
 
 
 func _build_child_shells(shell_specs: Array) -> void:
-	# Each extra shell is a translucent child reusing the shared sphere mesh at a
-	# larger (or smaller) radius, inheriting the body's oblateness, orientation and spin.
+	# Each extra shell is a translucent child reusing the shared sphere mesh, or the mesh its
+	# shader places itself (shader_meshes), at a larger (or smaller) radius, inheriting the
+	# body's oblateness, orientation and spin.
 	# Every table scale is measured against the body, but a child's transform composes with
 	# this one's — so divide out the surface's own scale to keep the two frames the same.
 	var surface_scale: float = shell_specs[0][&"scale"]
@@ -539,9 +550,18 @@ func _build_child_shells(shell_specs: Array) -> void:
 			push_warning("Body %s shell %d has no texture, material override or shader; skipping"
 					% [_body_name, shell_index])
 			continue
+		var mesh_override: Mesh = null
+		var mesh_key: StringName = shader_meshes.get(shader, &"")
+		if mesh_key:
+			mesh_override = IVGlobal.resources.get(mesh_key)
+			if !mesh_override:
+				push_warning("Body %s shell %d: no mesh '%s' for shader '%s'; skipping"
+						% [_body_name, shell_index, mesh_key, shader])
+				continue
 		var shell_scale: float = spec[&"scale"]
 		var child_basis := Basis().scaled(Vector3.ONE * shell_scale / surface_scale)
-		add_child(IVShellsModel.new(_body_name, _mean_radius, child_basis, shell_index))
+		add_child(IVShellsModel.new(_body_name, _mean_radius, child_basis, shell_index,
+				mesh_override))
 
 
 func _apply_shell_geometry_uniforms(spec: Dictionary, shell_specs: Array) -> void:

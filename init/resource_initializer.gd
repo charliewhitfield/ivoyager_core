@@ -63,6 +63,8 @@ var preloads: Dictionary[StringName, Resource] = {
 var constructors: Dictionary[StringName, Callable]= {
 	&"sphere_mesh" : _make_sphere_mesh.bind(IVCoreSettings.sphere_radial_segments,
 			IVCoreSettings.sphere_rings),
+	&"limb_annulus_mesh" : _make_limb_annulus_mesh.bind(IVCoreSettings.sphere_radial_segments,
+			IVCoreSettings.sphere_rings, IVCoreSettings.limb_annulus_rows),
 	&"plane_mesh" : _make_plane_mesh.bind(IVCoreSettings.plane_mesh_subdivisions),
 	&"circle_mesh" : _make_circle_mesh.bind(IVCoreSettings.vertecies_per_conic_mesh),
 	&"circle_mesh_low_res" : _make_circle_mesh.bind(IVCoreSettings.vertecies_per_orbit_low_res),
@@ -111,6 +113,54 @@ func _make_sphere_mesh(radial_segments := 64, rings := 32) -> SphereMesh:
 	sphere_mesh.radius = 1.0
 	sphere_mesh.height = 2.0
 	return sphere_mesh
+
+
+# Shared annulus for an atmosphere limb shell (see [member IVShellsModel.shader_meshes]). Its
+# vertices hold (azimuth, row) parameters rather than positions -- atmosphere_limb.gdshader
+# places them each frame -- encoded so its computed AABB is the shared sphere's to float
+# rounding, since [IVBody2DCapturer] frames a staged body by that AABB.
+func _make_limb_annulus_mesh(segments := 64, sphere_rings := 32, rows := 8) -> ArrayMesh:
+	# The sphere's widest ring rather than 1: SphereMesh spaces sphere_rings + 1 bands pole to
+	# pole, so an even ring count leaves no ring on the equator.
+	var extent := sin(PI * floori((sphere_rings + 1) / 2.0) / (sphere_rings + 1))
+	var columns := rows + 1
+	var vertices := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	for segment in segments:
+		var azimuth := TAU * segment / segments
+		for row in columns:
+			vertices.append(Vector3(extent * sin(azimuth), 2.0 * row / rows - 1.0,
+					extent * cos(azimuth)))
+			uvs.append(Vector2(float(segment) / segments, float(row) / rows))
+	# Clockwise on screen, Godot's front face: the shader turns azimuth counterclockwise as the
+	# camera sees it, and rows run outward.
+	var indices := PackedInt32Array()
+	for segment in segments:
+		var inner := segment * columns
+		var next_inner := (segment + 1) % segments * columns
+		for row in rows:
+			indices.append_array(PackedInt32Array([inner + row, next_inner + row, inner + row + 1,
+					next_inner + row, next_inner + row + 1, inner + row + 1]))
+	# Unused by the shader, but a Forward+ pipeline is keyed by vertex format: carrying the
+	# sphere's attributes lets the shader warm-up's quad compile this surface's pipeline.
+	var normals := PackedVector3Array()
+	normals.resize(vertices.size())
+	normals.fill(Vector3.UP)
+	var tangents := PackedFloat32Array()
+	tangents.resize(vertices.size() * 4)
+	for vertex_index in vertices.size():
+		tangents[vertex_index * 4] = 1.0
+		tangents[vertex_index * 4 + 3] = 1.0
+	var mesh_arrays := []
+	mesh_arrays.resize(ArrayMesh.ARRAY_MAX)
+	mesh_arrays[ArrayMesh.ARRAY_VERTEX] = vertices
+	mesh_arrays[ArrayMesh.ARRAY_NORMAL] = normals
+	mesh_arrays[ArrayMesh.ARRAY_TANGENT] = tangents
+	mesh_arrays[ArrayMesh.ARRAY_TEX_UV] = uvs
+	mesh_arrays[ArrayMesh.ARRAY_INDEX] = indices
+	var annulus_mesh := ArrayMesh.new()
+	annulus_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, mesh_arrays)
+	return annulus_mesh
 
 
 # Shared subdivided [PlaneMesh] for [IVRings]. Kept at the default 2x2

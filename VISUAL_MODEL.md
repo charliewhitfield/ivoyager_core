@@ -212,7 +212,10 @@ Three obligations fall on every farwarp consumer:
 - **Keep enough vertices to follow the curve.** A surface far beyond T is compressed
   near-uniformly, but geometry that *spans* decades of distance bends along g(). The
   shared ring `PlaneMesh` is subdivided (`plane_mesh_subdivisions` = 64) for exactly
-  this; line meshes carry hundreds of vertices per orbit anyway.
+  this; line meshes carry hundreds of vertices per orbit anyway. The atmosphere's limb
+  annulus is cut into rows (`limb_annulus_rows`) for a variant of the same problem: its
+  fragment stage reads the view ray from an interpolated true position, which drifts off
+  the pixel's ray across a triangle whose corners are compressed by different factors.
 
 What deliberately does **not** ride farwarp: anything that computes from true positions.
 Occlusion (below), exposure metering, and mouse targeting all read true geometry — which

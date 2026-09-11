@@ -760,6 +760,27 @@ How it lands in the renderer:
   with `blend_premul_alpha` — the path radiance added, what lies behind kept by one minus
   the luma of the transmittance — which is sound there because behind a beyond-limb ray
   stand only the sky and the stars.
+- **Nor does it rasterize the rest of its shell, only a camera-facing annulus of it.** Every
+  ray meeting the disc farther inside its silhouette than the handoff band and the ring
+  filter's half-width, `b < min(R(1 − ATM_RIM_HANDOFF), R − 1.25 px)`, returns nothing and
+  discards — and on an integrated GPU a discarded fragment costs most of a drawn one: a limb
+  shader discarding at its first statement measured 249 ms at Earth-fill on an Intel UHD
+  under Compatibility, against 116 ms with the limb hidden. So `IVShellsModel.shader_meshes`
+  gives the limb row the shared `limb_annulus_mesh` in place of the sphere, a ring of
+  triangles whose vertices carry an azimuth and a row, and `limb_annulus_vertex()` places each
+  where the camera ray it names enters the shell, from two pixels inside that bound out to the
+  shell's own silhouette. On the shell rather than on a flat billboard, each fragment keeps the
+  depth the sphere gave it — a flat annulus through the silhouette stands behind the disc
+  across the handoff band, where the depth test would drop the fragments it exists to draw —
+  and reads the same ray, which is all the fragment stage uses. The rows
+  (`IVCoreSettings.limb_annulus_rows`) are spaced by arc on the shell for farwarp's sake (see
+  *Farwarp* in [VISUAL_MODEL.md](VISUAL_MODEL.md)). Against the whole sphere only single
+  pixels on the silhouette's rim move, and no more of them than rotating the sphere itself
+  about its pole moves, which changes nothing but where its facets fall: the rim is sensitive
+  to the last bits of the interpolated ray, whatever mesh supplies it. Measured on that Intel
+  UHD under Compatibility, Earth-fill fell from 481 to 304 ms (−37 %), Venus close by 54 % and
+  Titan and Mars close by 19–20 %, where the annulus's own fragments are most of what the limb
+  still costs; on a GTX 1650 Ti, 3–16 %.
 - **The air in front of the disc is composited by the disc's own shaders** (2026-08-30,
   `atm_disc_air()`): each surface, band and cloud fragment evaluates the veil, the
   twilight glow and the far half of an optical-limb ray for its own ray, adds the path
@@ -830,9 +851,10 @@ How it lands in the renderer:
   0.437 → 0.700, Earth 0.632 → 0.741, Venus 0.886 → 0.939, Titan 0.912 → 0.966 (green). This
   is what lets a dusty disc take a full veil at all — undscaled, Mars' would have darkened to
   0.52 of its brightness at μ = 0.5 and kept 6 % of its terrain contrast at μ = 0.2.
-- **The shell must outrun the profile.** The shader draws on the limb shell's front faces, so
-  a ray whose tangent altitude clears the shell gets no fragment: the atmosphere is cut off
-  there, and if it is still rendering at that altitude the cut is a hard edge against the sky.
+- **The shell must outrun the profile.** The shader draws only within the limb shell's own
+  silhouette, so a ray whose tangent altitude clears the shell gets no fragment: the atmosphere
+  is cut off there, and if it is still rendering at that altitude the cut is a hard edge
+  against the sky.
   The roll-off is about one e-fold of the scale height per step and spans ~8 of them from
   clipped white to invisible — 60 km on Earth, 500 km on Titan — and overexposure slides the
   whole band outward without narrowing it, so the shell has to clear the fade-out altitude at
