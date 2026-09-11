@@ -18,11 +18,11 @@ HINT_CAMERA_TRANSFER_TIME,Seconds the camera takes to fly to a new target or vie
 HINT_CENTAURS,Show Centaurs
 HINT_COLOR_PICKER,Color Picker
 HINT_DECREASE_FOCAL_LENGTH,Decrease camera focal length
-HINT_DIRECTIONAL_SHADOW_SIZE,"Resolution of shadows cast by spacecraft and other objects\nnear the camera. Higher is sharper, but uses more video\nmemory and GPU time (8192: 256 MB, 16384: 1 GB).\nEclipse and ring shadows are not affected"
+HINT_DIRECTIONAL_SHADOW_SIZE,"Resolution of shadows cast by spacecraft and other objects\nnear the camera. Higher is sharper, but uses more video\nmemory (8192: 256 MB). Eclipse and ring shadows are\nnot affected.\n\nGPU cost for desktop: LOW for modern GPU; HIGH for older\nor integrated GPU at 8192"
 HINT_EXPOSURE_ADJUSTMENT,Adjust exposure in 1/3 stops
 HINT_EXPOSURE_AUTO,Meter camera exposure automatically
 HINT_EXPOSURE_MANUAL,Set camera exposure in 1/3 stops
-HINT_FXAA,"Fast approximate antialiasing: a cheap screen filter that\nsmooths jagged edges but softens the whole image,\nmost noticeably at lower screen resolutions"
+HINT_FXAA,"Fast approximate antialiasing: a screen filter that smooths\njagged edges but softens the whole image, most noticeably\nat lower screen resolutions.\n\nGPU cost for desktop: LOW"
 HINT_GUI_SIZE,Size of text and controls in GUI panels;\nalso scales names and symbols in the 3D view
 HINT_HIDE_HUD_WHEN_CLOSE,"Hide a body's name, symbol and orbit when the camera is close to it"
 HINT_INCREASE_FOCAL_LENGTH,Increase camera focal length
@@ -33,7 +33,7 @@ HINT_LANGUAGE,Language for all text. Automatic follows your\nsystem language whe
 HINT_MAIN_BELT,Show Main Belt asteroids
 HINT_MARS_CROSSERS,Show Mars-crossing asteroids
 HINT_MOUSE_ONLY_GUI_NAV,"If checked, arrow keys move camera only;\notherwise, arrows navigate GUI controls"
-HINT_MSAA_3D,"Multisample antialiasing: smooths jagged edges on orbit lines,\nplanet limbs and spacecraft. Each step up costs more GPU time;\n4x is a good balance, and 8x is very demanding"
+HINT_MSAA_3D,"Multisample antialiasing: smooths jagged edges on orbit\nlines, ring edges and spacecraft.\n\nGPU cost for desktop: MODERATE at 2x or 4x; HIGH at 8x"
 HINT_NAMES,Show names
 HINT_NAMES_SYMBOLS_CKBXS,"Toggle to show names or symbols, or hide both"
 HINT_NEAR_EARTH,Show near-Earth asteroids
@@ -77,9 +77,11 @@ HINT_TROJANS,Show Jupiter Trojans
 HINT_UNPAUSE,Unpause
 HINT_UPDATE_W_CHANGES,Update with changes
 HINT_UP_LOCK,"Locks camera orientation with respect to reference frame: Ecliptic, Orbit or Ground"
-HINT_USE_TAA,Temporal antialiasing: reduces jagged edges and shimmer\nby blending recent frames. Experimental: orbit lines\ncan leave ghost trails
+HINT_USE_TAA,Temporal antialiasing: reduces jagged edges and shimmer\nby blending recent frames. Experimental: orbit lines\ncan leave ghost trails.\n\nGPU cost for desktop: MODERATE
 HINT_VIEW_45,View from 45\u00B0 above
 HINT_VIEW_OUTWARD,Look outward from current selection
 HINT_VIEW_TOP,View from top
 HINT_VIEW_ZOOM,View at close range
 HINT_VIS_ON_MO_CKBX,Uncheck for visibility\non mouse-over only
+HINT_WEB_DIRECTIONAL_SHADOW_SIZE,"Resolution of shadows cast by spacecraft and other objects\nnear the camera. Higher is sharper, but uses more video\nmemory (8192: 256 MB). Eclipse and ring shadows are\nnot affected.\n\nGPU cost for web: LOW"
+HINT_WEB_MSAA_3D,"Multisample antialiasing: smooths jagged edges on orbit\nlines, ring edges and spacecraft.\n\nGPU cost for web: MODERATE at 2x or 4x; HIGH at 8x"

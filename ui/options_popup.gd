@@ -33,7 +33,15 @@ extends PopupPanel
 ## Depending on value type, an option item can be a [CheckBox], [OptionButton],
 ## [SpinBox], [LineEdit] or [ColorPickerButton]. Individual option Controls
 ## can be modified by [member option_enumerations] and [member
-## option_control_properties], and given a tooltip by [member option_tooltips].
+## option_control_properties], and given a tooltip by [member option_tooltips].[br][br]
+##
+## A graphics option's tooltip states its GPU cost, which differs by renderer,
+## so tooltips come in two sets: [member option_tooltips] for desktop, and
+## [member option_web_tooltips] for web, whose entries replace the first set's
+## whenever [member IVGlobal.is_gl_compatibility] is true. Core's texts assume
+## that Compatibility means a web export and Forward+ means desktop, which holds
+## in nearly every deployment; a project deployed otherwise should substitute
+## its own texts.
 
 
 ## Stop the simulator while this popup is open. This setting will be overridden
@@ -82,6 +90,7 @@ extends PopupPanel
 		[&"LABEL_AUTOSAVE_TIME_MIN", &"autosave_time_min"],
 	],
 	LABEL_CAMERA = [
+		[&"LABEL_PHYSICAL_LIGHT", &"physical_light"],
 		[&"LABEL_TRANSFER_TIME", &"camera_transfer_time"],
 		[&"LABEL_MOUSE_INVERT_IN_OUT", &"camera_mouse_in_out_inverse"],
 		[&"LABEL_MOUSE_RATE_IN_OUT", &"camera_mouse_in_out_rate"],
@@ -108,7 +117,6 @@ extends PopupPanel
 		[&"LABEL_HIDE_HUDS_WHEN_CLOSE", &"hide_hud_when_close"],
 	],
 	LABEL_GRAPHICS_PERFORMANCE = [
-		[&"LABEL_PHYSICAL_LIGHT", &"physical_light"],
 		[&"LABEL_SHADOW_RESOLUTION", &"directional_shadow_size"],
 		[&"LABEL_MSAA", &"msaa_3d"],
 		[&"LABEL_FXAA", &"fxaa"],
@@ -149,6 +157,7 @@ extends PopupPanel
 	append_date_to_save = &"HINT_APPEND_DATE_TO_SAVE",
 	pause_on_load = &"HINT_PAUSE_ON_LOAD",
 	autosave_time_min = &"HINT_AUTOSAVE_TIME_MIN",
+	physical_light = &"HINT_PHYSICAL_LIGHT",
 	camera_transfer_time = &"HINT_CAMERA_TRANSFER_TIME",
 	camera_mouse_in_out_inverse = &"HINT_CAMERA_MOUSE_IN_OUT_INVERSE",
 	camera_mouse_in_out_rate = &"HINT_CAMERA_MOUSE_IN_OUT_RATE",
@@ -169,11 +178,18 @@ extends PopupPanel
 	small_bodies_symbol_size_percent = &"HINT_SMALL_BODIES_SYMBOL_SIZE_PERCENT",
 	small_bodies_point_size = &"HINT_SMALL_BODIES_POINT_SIZE",
 	hide_hud_when_close = &"HINT_HIDE_HUD_WHEN_CLOSE",
-	physical_light = &"HINT_PHYSICAL_LIGHT",
 	directional_shadow_size = &"HINT_DIRECTIONAL_SHADOW_SIZE",
 	msaa_3d = &"HINT_MSAA_3D",
 	fxaa = &"HINT_FXAA",
 	use_taa = &"HINT_USE_TAA",
+}
+
+## Tooltips that replace [member option_tooltips] entries while the Compatibility
+## renderer runs, keyed the same way. See the class description for what Core's
+## texts assume.
+@export var option_web_tooltips: Dictionary[StringName, StringName] = {
+	directional_shadow_size = &"HINT_WEB_DIRECTIONAL_SHADOW_SIZE",
+	msaa_3d = &"HINT_WEB_MSAA_3D",
 }
 
 var _enumerations: Dictionary[StringName, Dictionary] = {}
@@ -266,27 +282,23 @@ func _configure_after_core_inited() -> void:
 	if autoremove_for_na_settings and !IVCoreSettings.enable_physical_light:
 		# The physical_light setting only acts through IVExposureManager, which exists
 		# only when the core setting enables the system.
-		var enabled_graphics_options: Array = []
-		for option_array: Array in section_content[&"LABEL_GRAPHICS_PERFORMANCE"]:
-			var setting: StringName = option_array[1]
-			if setting == &"physical_light":
-				continue
-			enabled_graphics_options.append(option_array)
-		section_content[&"LABEL_GRAPHICS_PERFORMANCE"] = enabled_graphics_options
+		_remove_option(&"physical_light")
 	if IVGlobal.is_gl_compatibility:
 		# FXAA and TAA are unsupported in the Compatibility renderer (incl. web);
 		# the shadow-size option applies only when Compatibility shadows are on
 		# (see IVCoreSettings.apply_gl_compatibility_shadows).
-		var graphics_section: Array = section_content[&"LABEL_GRAPHICS_PERFORMANCE"]
-		var supported_options: Array = []
-		for option_array: Array in graphics_section:
-			var setting: StringName = option_array[1]
-			if setting == &"fxaa" or setting == &"use_taa":
-				continue
-			if setting == &"directional_shadow_size" and not IVCoreSettings.apply_gl_compatibility_shadows:
-				continue
-			supported_options.append(option_array)
-		section_content[&"LABEL_GRAPHICS_PERFORMANCE"] = supported_options
+		_remove_option(&"fxaa")
+		_remove_option(&"use_taa")
+		if not IVCoreSettings.apply_gl_compatibility_shadows:
+			_remove_option(&"directional_shadow_size")
+
+
+func _remove_option(setting: StringName) -> void:
+	for section: Array in section_content.values():
+		for i in range(section.size() - 1, -1, -1):
+			var option_array: Array = section[i]
+			if option_array[1] == setting:
+				section.remove_at(i)
 
 
 func _build_content() -> void:
@@ -323,6 +335,8 @@ func _build_item(option_text: StringName, setting: StringName) -> HBoxContainer:
 	# Labels ignore the mouse and value Controls stop the tooltip search at themselves,
 	# so both the row and its value Control need the tooltip.
 	var tooltip: StringName = option_tooltips.get(setting, &"")
+	if IVGlobal.is_gl_compatibility:
+		tooltip = option_web_tooltips.get(setting, tooltip)
 	var setting_hbox := HBoxContainer.new()
 	setting_hbox.tooltip_text = tooltip
 	var label := Label.new()
@@ -360,7 +374,9 @@ func _build_item(option_text: StringName, setting: StringName) -> HBoxContainer:
 					option_button.add_item(key)
 				option_button.tooltip_text = tooltip
 				_set_overrides(option_button, setting)
-				option_button.selected = value
+				# A value cached before its enumeration lost entries shows as the last entry.
+				var index: int = value
+				option_button.selected = mini(index, keys.size() - 1)
 				option_button.item_selected.connect(_on_change.bind(setting, default_button))
 			else: # non-option int or float
 				# SpinBox

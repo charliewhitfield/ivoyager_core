@@ -63,7 +63,6 @@ var shadow_size_settings: Dictionary[StringName, int] = {
 	SHADOW_2048 = 0,
 	SHADOW_4096 = 1,
 	SHADOW_8192 = 2,
-	SHADOW_16384 = 3,
 }
 
 @onready var _window := get_tree().get_root()
@@ -112,14 +111,12 @@ func _apply_shadow_size() -> void:
 	if IVGlobal.is_gl_compatibility and not IVCoreSettings.apply_gl_compatibility_shadows:
 		return # single unshadowed light on Compatibility; no shadow map to size
 	var setting: int = IVSettingsManager.get_setting(&"directional_shadow_size")
-	var size := 4096
+	var size := 8192 # also the size for a stale cached index past the end
 	match setting:
 		0:
 			size = 2048
-		2:
-			size = 8192
-		3:
-			size = 16384
+		1:
+			size = 4096
 	RenderingServer.directional_shadow_atlas_set_size(size, false)
 
 

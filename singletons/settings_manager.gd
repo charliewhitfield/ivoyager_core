@@ -55,6 +55,7 @@ var _defaults: Dictionary[StringName, Variant] = {
 	&"autosave_time_min" : 10,
 
 	# camera
+	&"physical_light" : true, # row appears only if IVCoreSettings.enable_physical_light
 	&"camera_transfer_time" : 1.0,
 	&"camera_mouse_in_out_inverse" : false,
 	&"camera_mouse_in_out_rate" : 1.0,
@@ -84,8 +85,7 @@ var _defaults: Dictionary[StringName, Variant] = {
 	&"msaa_3d" : 1, # 0,1,2,3 = disabled,2x,4x,8x (== Viewport.MSAA_*)
 	&"fxaa" : false, # not available in Compatibility renderer (incl. web)
 	&"use_taa" : false, # Forward+ only; ghosts vertex-shader-positioned orbit lines
-	&"directional_shadow_size" : 2, # 0,1,2,3 = 2048,4096,8192,16384 (2 = 8192)
-	&"physical_light" : true, # row appears only if IVCoreSettings.enable_physical_light
+	&"directional_shadow_size" : 2, # 0,1,2 = 2048,4096,8192
 }
 
 var _settings: Dictionary[StringName, Variant] = {}
