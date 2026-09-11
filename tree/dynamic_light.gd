@@ -137,8 +137,13 @@ func _process(_delta: float) -> void:
 			var source_dist_au := source_vector.length() / AU
 			energy = _energy_at_1_au / (source_dist_au ** _attenuation_exponent)
 		# parent light sets for all
-		if !position.is_equal_approx(source_vector): # edge case observed once
-			look_at(source_vector)
+		if !source_vector.is_zero_approx(): # camera at the source; edge case observed once
+			# The light's roll is arbitrary, but its up must not lie along it. Godot's
+			# default, +y, lies in the ecliptic, which most views share with their star.
+			var up := Vector3.BACK # ecliptic north
+			if absf(source_vector.normalized().dot(Vector3.BACK)) > 0.99:
+				up = Vector3.UP
+			look_at(camera_global_position, up)
 		_shared[0] = energy
 		
 		if _process_shadow_distances:
