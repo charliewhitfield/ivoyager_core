@@ -57,6 +57,8 @@ body's disc, sometimes a few percent of a frame that is otherwise empty sky. Our
 acts more like an astrophotographer: it has knowledge of subject and understands (based on
 custom settings) when to compensate and when to let objects blowout.
 
+The same three answer a project that wants to bring them; see *A project's own lighting*.
+
 ## The calibration chain: one anchor
 
 Astronomers measure the brightness of extended objects in **magnitudes per square
@@ -192,7 +194,59 @@ shapes the zoom-out experience: how gradually a body overexposes versus how quic
 stars then arrive.
 
 Unshaded HUD content (orbit lines, labels, small-body points) reads none of this and is
-identical at every exposure.
+identical at every exposure. Nor does anything outside the candidate set above meter at all:
+the set is bodies and the two asserted shell ceilings, so a project's own local scene is
+invisible to the meter however much of the frame it fills (*A project's own lighting*).
+
+## A project's own lighting
+
+A project that hangs a scene of its own inside the simulation
+([VISUAL_MODEL.md](VISUAL_MODEL.md) *The render frame anchor and local scenes*) brings its own
+lights, its own materials and possibly its own ideas about exposure. There are three ways that
+can go, and only the middle one needs anything from this document.
+
+**1. Nonphysical, and the default.** With `enable_physical_light` false every global here is
+neutral — 1.0 where one multiplies an authored value, 0.0 where one gates a channel — and every
+shader renders the authored look at the fixed exposure `iv_exposure` names. The project lights
+its scene however it likes and hand-tunes our items to taste (the `nonphysical_*` settings, the
+shell `energy_multiplier` columns). Integration cost is zero, and for a game whose subject is
+the local scene this is usually the right answer.
+
+**2. Our physical light, with the project joining the scale.** Everything the project adds must
+then speak the same units, and every join already exists:
+
+- *Which light reaches it.* `IVCoreSettings.size_layers` sorts content into the far / middle /
+  near domains by radius, and a project's local scene is near-domain content — lit by the near
+  light, which carries shadow maps and scales its energy by `camera_sun_visible_fraction`, so a
+  base goes dark in an eclipse with nothing written for it
+  ([VISUAL_MODEL.md](VISUAL_MODEL.md) *Local shadow maps*).
+- *The project's own lights.* Convert as `IVDynamicLight` does:
+  `light_energy = illuminance × IVExposureManager.gain / π × exposure`, with `IVPhotometry`
+  holding the conversions and `gain` a public static. A lamp stated in lux then sits on the same
+  scale as sunlight at Saturn and stays right as the camera adapts.
+- *Emission.* Anything authored in cd/m² multiplies `iv_emission_luminance_scale`; the by-eye
+  channel is `iv_emission_energy_scale`, and the two are never both nonzero.
+- *Custom shaders.* `_display.gdshaderinc`, without exception. A project shader that does colour
+  arithmetic on a sampled value and writes the result raw is correct under Forward+ and wrong
+  under Compatibility by the whole transfer curve (*Renderer parity*).
+
+The gap is **metering.** Candidates are bodies and shell ceilings, so a project's scene
+contributes none and a lit interior filling the frame meters at the dark-adapted rest and blows
+out. Two existing outs: hold the metered value (`auto = false`, `manual_exposure_ev`) or offset
+it (`exposure_adjustment_ev`). One designed extension — a local-scene ceiling candidate on the
+`exposure_ceiling` pattern — is TODO.
+
+**3. Godot's own physical light and auto exposure: one exposure authority, and it cannot be
+both.** *Overview* gives three reasons we do not use `CameraAttributesPhysical`, and none of
+them changes when it is the project asking. Ours folds exposure into `light_energy` and the
+emission globals, all of it before tonemapping; the engine's applies after, to the finished
+image, and takes the HUD and every overlay with it. Run both and the scene is exposed twice. Two
+smaller couplings follow from the same place: `Light3D.light_intensity_lumens` / `_lux` take
+effect only while a `CameraAttributesPhysical` is present, so photometric units for a project's
+own lamps are not separable from that camera — convert through `gain` instead, which is the same
+physics against our anchor rather than the engine's; and `CameraAttributesPhysical` sets FOV
+from focal length, which the star field's own FOV and resolution compensation assumes it owns.
+So the choice is tier 2 or tier 1, made once per project rather than per scene.
 
 ## Body surfaces and albedo
 
@@ -2060,6 +2114,16 @@ lever a capped pass cannot offer is one the shader does not need.
   planets, and the correct Milky Way sheen on deep-space craft is likewise missing when
   the bake happened dark. Fix: retrigger the bake when exposure has moved more than
   ~half an EV since the last one.
+- **A project's local scene does not meter** (*A project's own lighting*, tier 2). The
+  candidate set is bodies plus the two asserted shell ceilings, so a lit interior filling the
+  frame leaves the camera at its dark-adapted rest and blows out; a project's only recourse
+  today is to take exposure manually (`auto = false`) or offset it
+  (`exposure_adjustment_ev`). The shape of the fix is already in the model: a ceiling
+  candidate the scene asserts, weighted by its screen area on a ramp of its own, exactly as
+  `exposure_ceiling` works for a shell — what a project's own room *should* cost the rest of
+  the frame is a taste question, not a photometric one, which is the same reason that cell is
+  asserted rather than derived. Wants an owner for the assertion (the frame anchor is the
+  obvious place) and a decision on whether a project may register more than one.
 - **Earthshine / planetshine.** There is no light in the renderer from a planet onto
   its satellites or spacecraft — Godot has no runtime global illumination, and emission
   maps illuminate nothing but themselves. A craft's planet-facing side in orbital night

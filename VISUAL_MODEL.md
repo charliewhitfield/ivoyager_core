@@ -45,6 +45,12 @@ Four mechanisms bridge the gap, and the rest of this document is mostly their co
   position — the orbit line under a zoomed camera — the CPU computes the residual in
   doubles each frame and the shader applies it (the render-frame pin, the rebased line).
 
+The first two of those four are patches on a frame the scene tree was never able to build, and
+v0.3 replaces both: every body goes `top_level` and places itself from f64 against a **frame
+anchor**, which is the origin by definition rather than by subtraction. That is also what lets
+a project hang a scene of its own — with Godot physics and `position` as truth — inside the
+simulation; see *The render frame anchor and local scenes*.
+
 One consequence is worth stating as a principle, because it decides what a second camera
 may do: **the whole per-frame render state is conditioned for exactly one viewpoint.**
 The origin shift, the `iv_farwarp_start` global, every farwarp-remapped vertex, the HUD
@@ -109,7 +115,79 @@ shadow maps*, and the TODO entry). Two things follow for anyone re-opening it. T
 way out by changing sim scale, and a scale-sensitivity hunt is the wrong investigation. And
 the general form of the finding is that the render frame is anchored to the Universe root, so
 a body sweeps through it at its **absolute** speed rather than its speed relative to the
-camera; anything reading world-space *position* rather than a difference sees that sweep.
+camera; anything reading world-space *position* rather than a difference sees that sweep. The
+designed answer is to stop anchoring the frame at the Universe root at all — the next section.
+
+## The render frame anchor and local scenes
+
+*Planned for v0.3, not shipped in v0.2. The mechanism is
+[IVBody_REDESIGN_v0.3.md](IVBody_REDESIGN_v0.3.md) §2.4; this section is the contract it
+establishes and what it means for a project that is not a planetarium.*
+
+I, Voyager is an addon, and the projects it serves are not all planetaria. A first-person game
+set in a base on the Moon, a lander sim, a ship whose interior you walk around: each has complex
+local scenes, its own camera, Godot collision shapes and Godot physics, and wants all of it to
+sit inside a real solar system under a real sky.
+
+**The two-number-systems split is about astronomical scale and about nothing else.** A body's
+rendered `position` is derived and disposable because at 1e11 units an f32 coordinate quantizes
+at kilometres; at 1e2 units it quantizes below a micron, and inside a local scene `position` is
+the truth and Godot's physics is the motion model, unchanged. The two regimes and what each
+owns are tabulated in [PHYSICAL_MODEL.md](PHYSICAL_MODEL.md) *A game whose action is local*.
+What falls to this document is the frame they meet in.
+
+**The seam is one node: the frame anchor.** Under §2.4 every `IVBody` is `top_level` and places
+itself at `f64(absolute − anchor_absolute)`. The anchor is placed by that same rule, so it lands
+at exactly zero, and whatever hangs below it is therefore at ordinary local coordinates in a
+world frame that does not move — which is the condition Godot physics, Godot collision and
+Godot's directional-shadow lattice all want, and the condition *Smallness, not stationarity*
+says v0.2 cannot deliver. **What I, Voyager needs from a project's scene is its root.** We place
+that node; everything under it is the project's and is never touched.
+
+The anchor must be **the thing the camera stays near**, and that is the whole of the contract:
+the f32 rounding of `body − anchor` is proportional to distance from the *anchor*, so it reads
+as a constant ~1.2e-7 rad of angular error only while the camera sits close to it. The
+Planetarium meets that by anchoring on its own `IVCamera` (distance zero, and the degenerate
+case of the same formula); a project meets it because a viewer inside a level cannot leave it.
+
+Four consequences worth stating, because each is a thing a project would otherwise have to
+discover:
+
+- **Local content needs no farwarp work.** A local scene lives at distances far under T, where
+  `g(d)` is the exact identity (*Farwarp*), so ordinary Godot materials render correctly with no
+  shader changes and none of the three farwarp obligations apply to them. Only content that can
+  be astronomically distant needs the always-pass `custom_aabb` and the rest. This holds as long
+  as T is set from the camera's own near scale, which `IVCamera` gets from its parent distance;
+  a foreign camera has no parent in our sense and would have to supply it (TODO).
+- **Local content is near-domain for lighting.** `IVCoreSettings.size_layers` sorts by radius
+  into far / middle / near, and a project's scene belongs with the near light (*Local shadow
+  maps*), which carries shadow maps and scales its energy by the camera-point occlusion
+  fraction — so a lunar base goes dark in an eclipse with nothing written for it.
+- **Picking coexists.** Ours targets astronomical content: bodies by CPU screen-space
+  unprojection, lines and points by fragment id (*Mouse picking*). A project picks its own local
+  objects with ordinary physics raycasting, which works because local content is at true
+  positions in a stationary frame. What is *not* settled is how mouse input is shared between
+  `IVWorldController` and a project's own controls (TODO).
+- **One anchor is live at a time.** The whole per-frame render state is conditioned for exactly
+  one viewpoint (*Overview*), so a second live frame does not exist. Other anchors — a second
+  base, a ship the viewer is not in — are placed by the same rule as any body and render at
+  astronomical distance with the same angular error as anything else out there. Moving between
+  them re-places everything by one constant vector, including the departing scene and the camera
+  riding in it, so nothing moves on screen; it is the same class of event as the camera's parent
+  handoff mid-transfer, which *Farwarp* already tolerates for the same reason.
+
+Orientation is not the anchor's job: `IVBody` is never rotated, so a surface scene's root is a
+child carrying the body's ground basis — the same relationship `IVBody` has with `IVBodyVisual`,
+with the project's scene standing where the visual would.
+
+**What v0.2 offers today.** Under our `IVCamera`, a scene parented to an `IVBody` does ride the
+origin shift, and its f32 error is largely shared with the camera's and cancels, so it renders.
+But it is exactly the case *Smallness, not stationarity* describes: its world position is
+composed in f32 from astronomical terms, and it sweeps through the world frame at its body's
+**absolute** speed — which is what makes craft self-shadowing boil, and it would do the same to
+a base's. Under a project's own camera there is no origin shift at all, since `IVCamera` is what
+performs it, and the scene sits at raw astronomical world coordinates rounding at kilometres.
+Neither is a frame to build a game in. The anchor is, and it arrives with §2.4.
 
 ## The depth range
 
@@ -344,6 +422,8 @@ snapping the ortho bounds to a texel lattice anchored in **absolute world space*
 world geometry on the same texels every frame. Our near scene is not static in world space —
 see *Smallness, not stationarity* — so its sub-texel phase re-randomises every frame and craft
 self-shadowing boils. Reach and atlas size set the amplitude of that boil, not its existence.
+An anchored frame makes the near scene stationary by construction, which is the fix and is also
+the condition a project's own level needs (*The render frame anchor and local scenes*).
 
 Two rules keep the maps honest across the warp boundary:
 
@@ -677,6 +757,11 @@ id per instance (`instance_id.gdshader`, `INSTANCE_CUSTOM`); an SBG point carrie
 vertex (`VERTEX` *is* the id). The id overlay pattern keeps identification orthogonal to
 appearance — the base material knows nothing about picking.
 
+Both halves serve *astronomical* content. A project's own local objects are picked with
+ordinary physics raycasting against their true positions, which coexists with this and needs
+nothing from it (*The render frame anchor and local scenes*); how the two share mouse input is
+not settled (TODO).
+
 The system requires a `RenderingDevice`: on the Compatibility renderer the identifier
 removes itself and every producer's `if _fragment_identifier:` guard falls back to the
 plain materials — no line/point mouse-over on the web export, while body picking (pure
@@ -785,12 +870,24 @@ this is the spatial one.
   re-translate the camera's ancestor chain from f64 each frame (fixes it, and the depth of
   the walk decides where the residual parallax lands — one node puts it between craft and
   planet at ~1.5 px, two nodes puts it between planet and star where it is invisible);
-  make every body `top_level` and place it camera-relatively from f64, which subsumes
-  origin shifting entirely and gives a constant ~1.2e-7 rad angular error at every
-  distance (planned for v0.3, §2.4 of
+  make every body `top_level` and place it from f64 against a frame anchor, which subsumes
+  origin shifting entirely, gives a constant ~1.2e-7 rad angular error at every distance, and
+  holds the near scene still under camera motion as well as under the target's orbital motion
+  (planned for v0.3, §§2.4–2.5 of
   [IVBody_REDESIGN_v0.3.md](IVBody_REDESIGN_v0.3.md));
   or a `precision=double` engine build, which would let the existing shift resolve to
   millimetres, at the cost of custom builds for every export target including web.
+- **A project's own scene: the anchor exists, the plumbing around it does not.** *The render
+  frame anchor and local scenes* states the contract v0.3's placement rule establishes; three
+  things it needs are unbuilt and undesigned. A project cannot **announce its own camera** —
+  `IVGlobal.current_camera_changed(camera: Camera3D)` and `camera_tree_changed(camera:
+  Camera3D, parent: Node3D, …)` are already typed to the engine's classes and their consumers
+  (farwarp, occlusion, exposure, body picking) would take a foreign camera today, but nothing
+  lets a project emit them or supply the tree context the second one carries. Nothing **owns
+  the active anchor** or sequences a handoff between two of them. And **mouse input is not
+  shared**: `IVWorldController` assumes the pointer is its own, which an FPS controller also
+  assumes. None of the three is hard; all three are unspecified, and a project hitting them
+  would each solve them differently.
 - **Bodies outside the PSF quad's scope still vanish at the cull.** The quad covers the
   sun and the 26 planetary-mass objects; the other ~150 named moons, the named
   asteroids, and every spacecraft still take the 4000-radii cull, at which they are

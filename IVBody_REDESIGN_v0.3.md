@@ -40,7 +40,8 @@ is supplied by an optional *positioner*; its orientation over time by an optiona
 its physical figure by an optional *geometry*; its 3D representation by an optional *visual*.
 What kind of thing a body *is* falls out of which parts it carries — not out of a subclass.
 The parent defines the *frame*, which is a physical fact; it no longer composes the body's
-*transform*, which is a rendering job the tree cannot do at astronomical magnitudes (§§2.3–2.4).
+*transform*, which is a rendering job the tree cannot do at astronomical magnitudes
+(§§2.3–2.5).
 
 Invariants that carry over unchanged:
 
@@ -72,6 +73,7 @@ Invariants that carry over unchanged:
 | **Rover (Curiosity)** | `IVSurfaceAnchor` (optionally moving) | grounded | mesh | packed model | no |
 | **Space elevator** | `IVSurfaceAnchor` | grounded | tall mesh | packed model | no |
 | **Gravity-ignoring object** | `IVFixedPositioner` or project subclass | any | any | any | no |
+| **Project scene anchor** | `IVSurfaceAnchor` / `IVOrbit` / `IVTrajectory` / `IVFixedPositioner` | grounded or any | **null** | the project's own scene (§2.5) | no |
 
 Notes:
 
@@ -80,6 +82,9 @@ Notes:
 - A launch becomes a *component swap*: at ignition, replace `IVSurfaceAnchor` with an
   `IVOrbit`/`IVTrajectory` and the grounded rotator with a pointing rotator. No class change,
   no reparent gymnastics beyond what trajectory handoff already does.
+- A **project scene anchor** is what a game hangs its own local scene from, and under §2.4 it is
+  also the node the render frame is built around. It is an ordinary body with nothing in the
+  geometry slot; what would be its visual is the project's scene. §2.5 is the whole of it.
 - The extension point for exotic motion is **subclassing `IVPositioner`**, not subclassing
   `IVBody`. (`IVBody.replacement_subclass` remains for projects that need a fatter body, but
   the positioner strategy should make that rare.)
@@ -94,7 +99,9 @@ units and scale, the persisted state. [VISUAL_MODEL.md](VISUAL_MODEL.md) is how 
 reaches a float32 pipeline for one camera — parenting, origin shifting, farwarp, shadows,
 culling, lines, picking. [PHOTOMETRIC_MODEL.md](PHOTOMETRIC_MODEL.md) is how bright each pixel
 is. They draw one division between them, and this redesign is that division drawn through a
-single class.
+single class. §2.5 draws the same line the other way, at the other end of the scale: what a
+project's own scene owns, what we owe it, and why "derived, disposable `position`" was never
+a rule about Godot.
 
 ### 2.1 The one-way rule
 
@@ -194,6 +201,11 @@ an ordinary game violates both every frame and nothing suffers. What neither may
    must stay small is the part of the travel that is *not* real motion relative to what is
    being drawn.
 
+Both say "camera" because in the Planetarium the camera is the only thing in the near scene.
+The general subject of both is the **near scene** — whatever is being drawn at close range,
+which in a project is a whole level with the camera inside it. §2.4 names that subject and
+§2.5 is what it is for; nothing in the diagnosis below changes.
+
 Neither is a requirement of the simulation; both are artifacts of rendering it, which is why
 they sit on the visual side of §2.1 — and why they are hard to meet while the body's `position`
 is carrying physical state. Where v0.2 stands on each:
@@ -290,39 +302,69 @@ not a light-rig defect, not `IVUnits.METER` sensitivity, and not a failure of or
 which delivers the requirement it was built for. The shift simply has no bearing on the other
 one, and could not acquire it: subtracting an f32 number at 1 au magnitude cannot make the
 result hold still. Residual velocity is the direct signature of a render frame anchored
-somewhere other than the camera.
+somewhere other than the scene being drawn.
 
-### 2.4 The change: camera-relative placement
+### 2.4 The change: anchor-relative placement
 
 §2.3 is the case that something has to change. This is what changes: **the body becomes
-`top_level` and places itself relative to the camera, from f64.**
+`top_level` and places itself relative to a frame anchor, from f64.**
 
 ```gdscript
-	# top_level == true; position = absolute_f64(time) - camera_anchor_f64
+	# top_level == true; position = absolute_f64(time) - anchor_absolute_f64(time)
 ```
+
+The **frame anchor** is the one node whose absolute position the render frame is built around.
+It is placed by the same rule as every body, so it lands at exactly zero and costs the formula
+no special case. All it must supply is an f64 absolute translation valid at any `time` — which
+is a positioner and a parent chain (§6), so an anchor is an ordinary `IVBody` carrying no
+geometry, no visual and no GM. The Planetarium's anchor is its `IVCamera`; a project's is the
+root of whatever local scene the viewer is standing in, and §2.5 is that case.
 
 The scene tree stays the *logical* hierarchy — orbital math, lifecycle, selection, satellite
 indexing, visual children — and stops being the *transform* hierarchy for bodies. `position`
 becomes what it should always have been: a render coordinate in the visual model, derived from
 the physical state each frame, with no physical relationship riding on it.
 
-**Both requirements are then met by construction rather than approximated.** The camera anchor
-*defines* the origin, so the camera is at zero exactly (requirement 1, with no residual to
-drift), and the frame is the camera's own, so nothing translates through it except by real
-motion relative to the viewer (requirement 2, which no patch was reaching). The two
-requirements stop being things the code achieves and become things the frame
-*is* — which is why this is worth more than the sum of the patches it deletes.
+**Both requirements are then met by construction rather than approximated.** The anchor
+*defines* the origin, so whatever stands with it is at zero exactly with no residual to drift
+(requirement 1), and the frame is the anchor's own, so nothing translates through it except by
+real motion relative to the anchor (requirement 2, which no patch was reaching). The two
+requirements stop being things the code achieves and become things the frame *is* — which is
+why this is worth more than the sum of the patches it deletes.
 
-*What it buys.* Rounding `f64(body − camera)` to f32 leaves an absolute error proportional to
-distance *from the camera* — a constant angular error of ~1.2e-7 rad (0.025") for every object
-at every distance, about 1/6500 of a pixel at the reference view. That is what the
-parenting/shared-error scheme achieves locally, made global, automatic, and local to reason
-about. Note what this does to the apparent conflict with parenting: shared error only matters
-because there *is* large error to share, and here there is not, so the mechanism this seems to
-violate is the one it makes unnecessary. Both standing defects in
-[VISUAL_MODEL.md](VISUAL_MODEL.md)'s TODO share this root: a single f64 subtraction rounded once
-has no chain to churn and no lattice to sit on, so it plausibly subsumes both — worth testing
-against high-speed registration before claiming it.
+*Why an anchor and not the camera itself.* Subtracting the camera writes `position = B − C`,
+which a viewer at world coordinate `C` sees at `(B − C) − C` — correct only where `C` is zero.
+The Planetarium can pin its camera at the origin because nothing else is in its scene, and for
+one draft that made the two formulations look like the same change. They are not. With the
+anchor at `A` and the camera at its true offset `C = camera − A`, a body draws at `(B − A) − C`,
+which is `B − (A + C)`: the camera's true offset from the body, at any camera position and
+without the camera having to be anywhere in particular. That is what lets a viewpoint move
+inside a scene of its own, and §2.5 is what the freedom is for.
+
+Requirement 1 then survives as one contract on the anchor rather than as a property of the
+whole scene: **the camera stays near its anchor**, "near" meaning small against what it is
+looking at. The Planetarium meets it identically (distance zero); a project meets it because a
+viewer inside a scene cannot leave it. A camera that does leave — walking out of a base and
+flying away — hands the anchor off, which is continuous on screen (§2.5).
+
+*What it buys.* Rounding `f64(body − anchor)` to f32 leaves an absolute error proportional to
+distance *from the anchor* — a constant angular error of ~1.2e-7 rad (0.025") for every object
+at every distance, about 1/6500 of a pixel at the reference view, so long as the camera sits
+near the anchor. That is what the parenting/shared-error scheme achieves locally, made global,
+automatic, and local to reason about. Note what this does to the apparent conflict with
+parenting: shared error only matters because there *is* large error to share, and here there is
+not, so the mechanism this seems to violate is the one it makes unnecessary. Both standing
+defects in [VISUAL_MODEL.md](VISUAL_MODEL.md)'s TODO share this root: a single f64 subtraction
+rounded once has no chain to churn and no lattice to sit on, so it plausibly subsumes both —
+worth testing against high-speed registration before claiming it.
+
+*And the anchor form is the better fix for the defect that motivated it.* Anchored at the
+camera, orbiting the camera around the ISS drags the station through Godot's world-anchored
+shadow lattice at the camera's own rate, and the boil returns whenever the viewer moves;
+anchored at the station, the station is stationary in world space by construction and only the
+camera moves, which is the case the lattice was built for. Camera-anchoring fixes the reported
+symptom (a camera at rest beside a craft whose shadows boil anyway) and leaves ordinary shadow
+crawl; anchoring on the thing being drawn makes even that unrepresentable.
 
 *The change surface is one line.* v0.2 `IVBody` writes its own transform in exactly one place
 and never writes its own basis — every rotation goes to `body_visual.basis`. A body is already a
@@ -331,9 +373,10 @@ inherits orientation through it, and visual children keep inheriting normally.
 
 *It is mostly a deletion.* Origin shifting is subsumed — `Universe.position` stays zero and
 `IVCamera.origin_shifting` with its `-=` line is removed. Farwarp improves with it: since
-`position` *is* the camera-relative vector, farwarp reduces to scaling it by `g(d)/d` and the
-hazard its assembly rule guards against becomes unrepresentable. The added cost is one top-down
-f64 pass per frame, keeping the sum that is currently discarded at the f32 write.
+`position` *is* the anchor-relative vector and the camera sits at a local-scene offset from the
+anchor, farwarp reduces to scaling the camera-to-body vector by `g(d)/d` and the hazard its
+assembly rule guards against becomes unrepresentable. The added cost is one top-down f64 pass
+per frame, keeping the sum that is currently discarded at the f32 write.
 
 *`IVPositioner` does not change.* It stays parent-relative (§6) — that is the physical
 abstraction and must not absorb a rendering concern. Only what the body does with the result
@@ -342,24 +385,25 @@ enters, and it enters nowhere else.
 
 *It sits inside the ground rules, not against them.* "This design must not bake camera-parenting
 assumptions into `IVBody`" was written for the sleep rebuild, and is about *parenting* — the
-v0.2 mechanism by which camera tree position stands in for proximity. Camera-relative
+v0.2 mechanism by which camera tree position stands in for proximity. Anchor-relative
 *placement* is a different coupling: it reads one anchor vector per frame and assumes nothing
-about what the camera is attached to, which is exactly what the sleep rebuild needs to be free
-to change (§9.4).
+about what the camera is attached to — or, under §2.5, whether the camera is one of ours at
+all — which is exactly what the sleep rebuild needs to be free to change (§9.4).
 
 #### To settle during implementation
 
 - **Sleep.** A sleeping body's stale placement stays valid today because the tree carries it;
-  camera-relative, stale means visibly lagging a moving camera. Placement is cheap (one
-  subtraction from a positioner query valid at any time), so the likely answer is that sleep
-  stops gating placement and gates only the expensive work. Ties to the proximity rebuild (§15).
-- **Anchor ordering.** `camera_anchor_f64` must exist before any body is placed. §6's "valid at
-  any `time`" positioner contract makes that a query at the top of the frame rather than a
+  anchor-relative, stale means visibly lagging whenever the anchor moves. Placement is cheap
+  (one subtraction from a positioner query valid at any time), so the likely answer is that
+  sleep stops gating placement and gates only the expensive work. Ties to the proximity rebuild
+  (§15). An anchor itself must never sleep: it is the frame.
+- **Anchor ordering.** `anchor_absolute_f64` must exist before any body is placed. §6's "valid
+  at any `time`" positioner contract makes that a query at the top of the frame rather than a
   one-frame lag — one more consumer of *Any time is as cheap as now*.
 - **Small-body groups.** GPU-placed by their own scheme
   ([PHYSICAL_MODEL.md](PHYSICAL_MODEL.md) *Small-body groups*); they would need the anchor as a
   uniform. Unexamined, and the one item here that could turn out to be real work.
-- **`global_position` changes meaning** to camera-relative for every consumer (§11). Most
+- **`global_position` changes meaning** to anchor-relative for every consumer (§11). Most
   already want that — farwarp, sun occlusion, mouse picking, HUD placement — and several
   simplify; a consumer wanting absolute ecliptic coordinates queries the f64 state, which is the
   correct source anyway. This is the change's main review surface.
@@ -378,8 +422,81 @@ to ~8 km between craft and planet, ~1.5 px of parallax, and fixes only the camer
 two nodes makes craft↔planet exact and pushes the error out to planet↔star, where 16 km is
 1e-7 rad and farwarp is remapping anyway. It is a patch and should be judged as one: it writes
 body positions from outside the positioner, helps only the camera's own chain, and leaves the
-frame barycentre-anchored, so high-speed registration is untouched. Its virtue is that it is
-small and testable against the same acceptance check.
+frame barycentre-anchored, so high-speed registration is untouched. It also offers §2.5 nothing
+at all, having no anchor to hand a project. Its virtue is that it is small and testable against
+the same acceptance check.
+
+### 2.5 Where a project's own scene fits
+
+I, Voyager is an addon, and the projects it is for are not all planetaria. A first-person game
+whose action happens in a base on the Moon, a lander sim, a colony builder, a ship whose
+interior you walk around — each has complex local scenes, its own camera, Godot collision shapes
+and Godot physics, and wants all of it to sit inside a real solar system under a real sky. That
+is not a concession the architecture has to make room for. It is what the architecture is
+already shaped for, and §2.4 is the piece that finishes it.
+
+**The physical/visual split is about *astronomical* scale, and about nothing else.** §2.1's
+one-way rule makes a body's rendered `position` derived and disposable because at 1e11 m an f32
+coordinate quantizes at kilometres and an integrator would accumulate. Neither is true at 1e2 m.
+Inside a local scene, `position` **is** the truth, exactly as in any other Godot game: a
+`CharacterBody3D` moves by it, collision resolves against it, a project's own gravity integrates
+it, and f32 at metre magnitudes rounds below a micron. Nothing in this document forbids that or
+ever meant to. What the two states separate is the astronomical domain from its rendering — not
+Godot from itself.
+
+So there are two regimes, and the frame anchor is the seam between them.
+[PHYSICAL_MODEL.md](PHYSICAL_MODEL.md) *A game whose action is local* tabulates what each owns;
+what follows is the `IVBody` side of the seam.
+
+**What I, Voyager needs from the project's scene is its root.** One `Node3D`, which becomes the
+frame anchor: we place it, and everything below it is the project's business and is never
+touched. Because §2.4 places it by the same rule as everything else it sits at world zero, so
+the project's scene is at ordinary local coordinates in a stationary world frame — the condition
+Godot physics, Godot collision and Godot's shadow lattice all want, and the one v0.2 could not
+offer at all.
+
+**The anchor is an `IVBody`, and the redesign already builds every part of it.** Its positioner
+says where the scene is: `IVSurfaceAnchor` for a base or a pad (§6.2), `IVOrbit` or
+`IVTrajectory` for a station or a craft in flight, `IVFixedPositioner` for something
+station-kept. It carries no geometry, no visual and GM 0, which the §1 capability matrix already
+admits as a row. Being a body, it is selectable, camera-targetable, indexed among its primary's
+satellites, and swappable: **a launch is the component swap §1 already describes**, and the
+local scene never learns that anything happened.
+
+**Orientation comes from a rotated child, exactly as a body's visual does.** `IVBody` is never
+rotated (§1), so the project's scene root is a child whose basis is `rotator.get_basis(time)` —
+`IVGroundedRotator` (§7) for a surface scene, so "up" is the local vertical and the sky turns
+overhead at the body's true rate. This is the same relationship `IVBody` already has with
+`IVBodyVisual`; the invariant survives untouched, and the project's scene is simply the visual
+that a project authored instead of us.
+
+**More than one world, and moving between them.** One anchor is active at a time — the render
+state is conditioned for exactly one viewpoint ([VISUAL_MODEL.md](VISUAL_MODEL.md) *Overview*),
+so a second live frame is not a thing that exists. Every *other* anchor is placed by the same
+rule as every body, `A′ − A`, so its scene renders at astronomical distance carrying the same
+~1.2e-7 rad angular error as anything else out there. Handoff — the viewer boards the ship and
+the ship leaves — re-places everything by one constant vector, including the departing scene and
+the camera riding inside it, so nothing moves on screen. It is the same class of event as the
+camera's parent handoff mid-transfer, which farwarp already tolerates for the same reason
+([VISUAL_MODEL.md](VISUAL_MODEL.md) *Farwarp*).
+
+**What a project must not do:**
+
+- Write an `IVBody`'s `position`, or read `global_position` as an ecliptic coordinate. It is
+  anchor-relative and it is a render value; the f64 state queries are the source (§5.2).
+- Run Godot physics on `IVBody` nodes, or at astronomical magnitudes at all.
+- Put local content outside the anchor's subtree, where it inherits no frame.
+- Add a second `IVCamera` ([VISUAL_MODEL.md](VISUAL_MODEL.md) *Overview*).
+
+**What already works, and what is still a seam.** `IVGlobal.current_camera_changed(camera:
+Camera3D)` and `camera_tree_changed(camera: Camera3D, parent: Node3D, …)` are typed to the
+engine's classes rather than to `IVCamera` and `IVBody`, so farwarp, sun occlusion, exposure
+metering and body picking will already take a project's own camera. What a project cannot do yet
+is *announce* one, or supply the tree context those signals carry. That, the choice of active
+anchor, and how mouse input is shared between `IVWorldController` and a project's own controls
+are open work, named in §14 and §15 rather than designed here. The photometric half of the
+story — what a project's own lights and its own exposure may and may not do alongside ours — is
+[PHOTOMETRIC_MODEL.md](PHOTOMETRIC_MODEL.md) *A project's own lighting*.
 
 
 ## 3. The bloat audit — where every current responsibility goes
@@ -428,7 +545,7 @@ consumers, traversal boilerplate collapsed).
 ## 4. Architecture overview
 
 ```
-IVBody (Node3D, never rotated/scaled; top_level, placed camera-relatively — §2.4)
+IVBody (Node3D, never rotated/scaled; top_level, placed anchor-relatively — §2.4)
  ├── positioner: IVPositioner        # translation vs parent over time (nullable)
  │     IVOrbit | IVTrajectory | IVSurfaceAnchor | IVFixedPositioner | project subclass
  ├── rotator: IVRotator              # orientation over time (nullable)
@@ -518,7 +635,7 @@ var within_lifespan := true
 var body_visual: IVBodyVisual        # null until built (lazy)
 var display_nodes: Array[Node3D] = [] # filled by IVBodyFinisher; body never reads or iterates it
 
-# top_level is set true at build; `position` is a camera-relative render coordinate (§2.4)
+# top_level is set true at build; `position` is an anchor-relative render coordinate (§2.4)
 ```
 
 Dropped vs v0.2: `mean_radius` (→ geometry), all four rotation vars (→ rotator), `_orbit`,
@@ -587,7 +704,7 @@ func _process(_delta: float) -> void:
 	# 1. lifespan gate (unchanged behavior; emits within_lifespan_changed,
 	#    IVGlobal.selection_invalidated)
 	# 2. top_level == true; _absolute = parent._absolute + positioner.get_translation(time)
-	#    position = _absolute - camera_anchor            # both f64, one f32 round (§2.4)
+	#    position = _absolute - _anchor_absolute         # both f64, one f32 round (§2.4)
 	# 3. if positioner and positioner.has_pending_transition(): _apply_transition()  # §6.3
 ```
 
@@ -599,7 +716,7 @@ with processing disabled entirely.
 Step 2 is the one line that changes meaning in this redesign rather than merely moving. v0.2
 writes `position = _orbit.update(time)` — a parent-relative f32 translation that the scene tree
 then composes into the render frame. v0.3 sums the same parent-relative answers in f64 and
-writes a camera-relative render coordinate, rounded once; the tree stops carrying body
+writes an anchor-relative render coordinate, rounded once; the tree stops carrying body
 transforms at all. §2.3 is why. Two notes on the sketch:
 
 - **The f64 sum replaces the tree's f32 composition, so it must run in the same top-down
@@ -685,7 +802,7 @@ extension point: a developer with exotic motion subclasses `IVPositioner`, not `
 The "valid at any `time`" clause is the base class inheriting a property the model already
 has and depends on — [PHYSICAL_MODEL.md](PHYSICAL_MODEL.md) *Overview* → "Any time is as cheap
 as now". It is what makes a sleeping body's position queryable, orbit-line sampling and the
-trajectory joins ordinary calls, and §2.4's camera-relative placement a same-frame query
+trajectory joins ordinary calls, and §2.4's anchor-relative placement a same-frame query
 rather than a one-frame lag. A subclass that can only answer "now" breaks all four.
 
 ### 6.2 The concrete family
@@ -933,9 +1050,10 @@ the camera global position, and the static `IVFarwarpManager.get_farwarp_factor(
 Two things simplify under §2.4 and should land together. The +100/+101 priority ladder exists
 because a `top_level` node cannot ride the origin shift and must be placed after it settles
 ([VISUAL_MODEL.md](VISUAL_MODEL.md) *Origin shifting and the frame order*); with no origin
-shift there is nothing to wait for. And `body.position` *is* the camera-relative vector, so the
-farwarp position reduces to scaling it by `g(d)/d` — the "never derive this by offsetting
-true-scale positions" hazard becomes unrepresentable rather than merely documented.
+shift there is nothing to wait for. And `body.position` *is* the anchor-relative vector, so the
+farwarp position reduces to scaling the camera-to-body difference of two such vectors by
+`g(d)/d` — the "never derive this by offsetting true-scale positions" hazard becomes
+unrepresentable rather than merely documented.
 
 ### 9.4 Mouse targets and the camera-distance service
 
@@ -1025,6 +1143,9 @@ delegates; the camera continues to accept any `Node3D` and probe with `has_metho
 - `IVGlobal.camera_tree_changed(camera, body, star_orbiter, star)` remains the hub signal (its
   consumers — sleep, lazy models, exposure, occlusion, dynamic light, path visual — are
   edited, not broken; the proximity rebuild may later replace some uses).
+- `global_position` is **anchor-relative**, not ecliptic (§2.4). Every consumer inside Core wants
+  that; a project reading it must know it, and read the f64 state instead when it wants an
+  ecliptic coordinate (§2.5).
 - Identity `BodyFlags` bit values frozen (scene-baked ints, §5.5).
 - Mouse-over label duck-reads `object.name` on world targets and duck-calls
   `get_fragment_text()` on fragment sources (now `IVPathVisual`).
@@ -1077,7 +1198,7 @@ static func create(
 | `IVPathVisual` | reads `body.positioner` (typed) for frames/paths; owns fragment identity; picks display meshes itself; own HUD visibility. §2.4 retires its rebased tier's reason for existing (separate effort; Hermite tier and pin stay) |
 | `IVBodyFinisher` | same role; appends to `display_nodes`; `has_orbit()` → positioner check |
 | `IVSelectionManager` | unchanged (its duck protocol is the contract; body keeps the entry points) |
-| `IVCamera` | probes unchanged; `origin_shifting` and its `-=` line are deleted by §2.4, and it publishes the per-frame f64 anchor instead |
+| `IVCamera` | probes unchanged; `origin_shifting` and its `-=` line are deleted by §2.4; it serves as the Planetarium's frame anchor, publishing its own per-frame f64 absolute translation (§2.5: a project supplies one instead) |
 | `IVSleepManager` | replaced by proximity monitor (separate effort, §9.4); interim: works via `top_bodies`/`satellites`/`set_sleeping` unchanged |
 | `IVLazyModelInitializer` | unchanged short-term; trigger revisited with proximity rebuild |
 | `IVFarwarpManager` | stops per-body pushes; keeps globals/shader params + factor statics; §2.4 drops the +100/+101 ordering it exists to anchor |
@@ -1087,7 +1208,7 @@ static func create(
 | `IVTableSystemBuilder` | unchanged in shape |
 | `IVTimekeeper` | `get_rotation_rate/at_epoch` → `body.rotator`; `get_orbit_mean_*` → `body.get_orbit()` |
 | `IVSunOcclusionManager` / `IVExposureManager` | per-frame reads move to `body.geometry` / `body.rotator` / `attributes` |
-| `IVSmallBodiesGroup` / `IVSBGPositionsVisual` | `secondary_body.get_orbit_semi_major_axis()` etc. → `secondary_body.get_orbit().…`; GPU placement needs the §2.4 camera anchor as a uniform (unexamined) |
+| `IVSmallBodiesGroup` / `IVSBGPositionsVisual` | `secondary_body.get_orbit_semi_major_axis()` etc. → `secondary_body.get_orbit().…`; GPU placement needs the §2.4 frame anchor as a uniform (unexamined) |
 | `IVShellsModel` (sun mode) / `IVDynamicLight` / `IVRings` | `characteristics` → `attributes` key reads; otherwise unchanged |
 | `selection_data.gd` (+ Planetarium info panel) | path data updated (§10); periapsis/apoapsis label logic moves here |
 | `nav_button.gd` / `nav_buttons_system.gd` | texture methods; `get_mean_radius()` unchanged (facade) |
@@ -1106,7 +1227,9 @@ v0.3 per the ground rules.
   slots are also informally "components"? And on the de-`hud`-ing (§9): `display_nodes` vs
   `attached_visuals` for the passive container ("elements" is spoken for by orbital elements
   and should not be reused); `get_display_name()` + table column `display_name` for v0.2's
-  `get_hud_name()` + `hud_name`, which touches five body tables.
+  `get_hud_name()` + `hud_name`, which touches five body tables. And §2.5's role: "frame
+  anchor" reads well in prose but sits one letter from `IVSurfaceAnchor`, which is a
+  positioner and a different thing.
 - **Q2 — Slot granularity.** Is geometry a strategy family (base + `IVMeshGeometry`) as
   proposed, or one class with an optional mesh sampler? Proposed: family, for symmetry.
 - **Q3 — Flags pruning.** Retire `BODYFLAGS_TIDALLY_LOCKED`/`AXIS_LOCKED`/tumbler bits in
@@ -1129,6 +1252,19 @@ v0.3 per the ground rules.
   into attributes?
 - **Q10 — system_radius / hill_sphere.** Keep as body-cached derived values (proposed) or
   recompute on demand?
+- **Q11 — Who owns the frame anchor (§§2.4–2.5).** A flag bit and a static on `IVBody`, a
+  property on a new program node, or the camera's own business as today? Whatever holds it
+  must be queryable before the first body is placed each frame, must survive a handoff
+  without a frame of lag, and must let a project name a node we did not create. Related: does
+  an anchor body appear in selection traversal and in the nav GUI (a reserved
+  `BODYFLAGS_` bit would exclude it), and does it need `gravitational_parameter` semantics
+  at all.
+- **Q12 — Should the Planetarium anchor at the camera or at the camera's target?** Target-
+  anchoring would hold a craft stationary in world space under camera motion too (§2.4), but
+  `max_camera_distance` lets the camera sit 5e3 au from its target, where requirement 1 fails
+  badly. A distance-gated hybrid is the obvious third answer and the obvious new complexity.
+  Camera-anchoring is proposed for v0.3; §2.5 is unaffected either way, since a project
+  anchors at its own scene.
 
 ## 15. Deferred / out of scope for v0.3
 
@@ -1148,8 +1284,14 @@ v0.3 per the ground rules.
   verified against the two [VISUAL_MODEL.md](VISUAL_MODEL.md) TODO defects. The deletions are
   the payoff, but they are separate work with their own acceptance checks, and nothing in this
   redesign requires them to happen first.
-- Collisions (still out of scope for ivoyager_core; geometry's surface queries are a
-  prerequisite a project could build on).
+- Collisions at astronomical scale (still out of scope for ivoyager_core; geometry's surface
+  queries are a prerequisite a project could build on). A project's *local* collisions are
+  Godot's own and need nothing from us — §2.5.
+- The rest of §2.5's project-scene seam: a way for a project to announce its own camera and
+  supply the tree context `camera_tree_changed` carries; selection of the active anchor and
+  the handoff between anchors; sharing mouse input between `IVWorldController` and a project's
+  own controls. §2.4's placement rule is what makes all three expressible; none of them is
+  designed, and none blocks v0.3.
 
 
 ## Appendix A — Required API surface, GUI consumers (evidence)
@@ -1236,3 +1378,15 @@ Compiled from exhaustive sweep of `ui_widgets/`, `ui_components/`, `ui/`,
   HUD and GUI change, but the doc stops pretending not to know who its consumers are —
   `hud_elements` → `display_nodes`, `get_hud_name()` → `get_display_name()` (Q1), §9 rewritten
   around the GUI-widget analogy.
+- 2026-09-12 — **§2.4 amended from camera-relative to anchor-relative placement, and §2.5
+  added**, on the owner's ruling that what the render frame needs at the origin is not the
+  camera but a non-astronomical anchor the camera shares — which is what an ordinary game
+  scene's root already is. The amendment is a generalization, not a retreat: camera-anchoring
+  is its degenerate case (a scene of one node), and subtracting the camera is only correct
+  where the camera's world position is zero, which a project with a scene of its own can
+  never arrange. §2.5 states the two regimes the split actually separates — astronomical
+  (ours, derived `position`) and local (the project's, `position` as truth, Godot physics and
+  collisions unchanged) — and the anchor as the seam; the capability matrix gains the anchor
+  row, and Q11/Q12 carry what is undecided. The three model documents were edited in the
+  same pass (PHYSICAL_MODEL *Three kinds of project*, VISUAL_MODEL *The render frame anchor
+  and local scenes*, PHOTOMETRIC_MODEL *A project's own lighting*).
