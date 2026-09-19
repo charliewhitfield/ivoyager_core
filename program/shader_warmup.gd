@@ -54,7 +54,7 @@ extends Node
 ## draw that may stall, so the text a handler sets is the text that stays on
 ## screen through the stall.[br][br]
 ##
-## See [code]SHADER_COMPILE_COST.md[/code] for what a compile costs, what drives
+## See [code]SHADER_COMPILE_PROFILING.md[/code] for what a compile costs, what drives
 ## it, and what a cold start measures.
 
 ## Emitted one frame before shader [param index] (0-based, of [param count]) is

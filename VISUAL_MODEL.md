@@ -452,7 +452,7 @@ astronomical shadows are independent of all of this and work either way.
 The fallback is also much the cheaper configuration to compile, taking a lit shader from four
 GL programs to one — a large part of a Compatibility cold start, and the only configuration
 the shader warm-up covers completely at its default radii
-([SHADER_COMPILE_COST.md](SHADER_COMPILE_COST.md), *The light configuration*). The
+([SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md), *The light configuration*). The
 [Planetarium](https://github.com/ivoyager/planetarium) ships with it off, trading spacecraft
 self-shadowing for that.
 
@@ -827,7 +827,7 @@ this is the spatial one.
 | | `farwarp_start_ratio` | T as a multiple of camera-to-parent distance (1e4). Must stay well under `FAR_MULTIPLIER`; 1e4 leaves 100× headroom while the compressed universe spans < ~29× T. |
 | | `apply_body_psf` | Enables the per-body PSF quad ([IVBodyPSF]). Off, those bodies take the fixed distance cull like any other and their discs do not fade. |
 | | `apply_analytic_shadows` | Enables the analytic shadow terms and the camera-fraction light dimming. Off, astronomical shadows are absent entirely (maps don't serve them); the ambient feed continues regardless. |
-| | `apply_gl_compatibility_shadows` | Shadowed multi-light stack on the Compatibility renderer (vs. one unshadowed light). Off, a lit shader compiles one GL program instead of four; see [SHADER_COMPILE_COST.md](SHADER_COMPILE_COST.md). |
+| | `apply_gl_compatibility_shadows` | Shadowed multi-light stack on the Compatibility renderer (vs. one unshadowed light). Off, a lit shader compiles one GL program instead of four; see [SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md). |
 | | `apply_size_layers` / `size_layers` | Layer bits by body radius — the lighting size domains ([100 km, 0.1 km] → three domains). |
 | | `local_shadow_caster_ceiling` | Dynamic `LOCAL_SHADOW_CASTER` grant range (1e5 km; must cover the largest shadowed `shadow_max_ceiling` in `dynamic_lights.tsv`). |
 | | `radius_multiplier_visibility_range_end` | Distance cull in body radii (4000 ≈ 0.6 px angular diameter). |
@@ -987,7 +987,7 @@ this is the spatial one.
     the top `MAX_STARS` (6) above a floor — most bodies get one or two, which keeps
     per-fragment cost linear in the *fed* count rather than the cap — as arrays of direction,
     angular radius, energy, colour and `MAX_STARS × MAX_OCCLUDERS` occluders with a count per
-    star. Loop bounds must be uniforms ([SHADER_COMPILE_COST.md](SHADER_COMPILE_COST.md)): a
+    star. Loop bounds must be uniforms ([SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md)): a
     constant six-way loop around the atmosphere quadrature is exactly the unrolling that cost
     24 s. Candidate lists stay star-independent but the sunward filter and ranking run per
     star, so CPU cost goes as stars × receivers × candidates; stars must be admitted as

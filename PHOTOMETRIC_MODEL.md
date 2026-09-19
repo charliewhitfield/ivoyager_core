@@ -1119,8 +1119,8 @@ so a mean-density estimate would clear a bin for culling while its band was stil
 The model reproduces the measured cut without being fitted to it: at Saturn's metered
 exposure of 2.8e-5 it puts the boundary between the `11.5` bin (wing peak 1.58e-4, above the
 half-code line) and the `12.0` bin (1.39e-4, below), which is where the running app puts it,
-and which is the V 11 cut that GRAPHICS_BUDGET.md certified as changing zero pixels in
-lit-body views.
+and which is the V 11 cut that [GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md) certified as
+changing zero pixels in lit-body views.
 
 ### Resolution, and the one place it is a correctness question
 

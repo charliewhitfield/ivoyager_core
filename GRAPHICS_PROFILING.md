@@ -1,0 +1,620 @@
+# Graphics Profiling
+
+What each candidate graphics option would buy back on a weak GPU, and what it would cost on
+screen.
+
+Every figure here is **per-frame** GPU time.
+[SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md) is its one-time counterpart: what these
+same shaders cost the driver to compile at first draw. That is the sharper constraint on the web
+— it decides whether a weak machine starts at all, where this document decides how it then runs.
+
+**Every figure here was measured in the [Planetarium](https://github.com/ivoyager/planetarium)**
+(v0.2.1.dev) against Godot 4.7.2, on 2026-09-10 unless an addendum gives its own date, on the
+Intel UHD integrated graphics that stands in for the web app's least capable visitors, with a GTX
+1650 Ti alongside. That project's configuration is what the figures describe — its scale, its
+eight camera views, its HUD defaults, and the lights its renderers ship with, Compatibility taking
+one unshadowed light (`apply_gl_compatibility_shadows` off) except where an addendum says it turned
+that on — so a project configured otherwise should re-measure before it trusts a row. *Caveats*
+bounds them further.
+
+This is the Markdown copy of an illustrated report. The illustrated version adds a frame-time
+chart and the screenshot comparisons that the figure notes below summarize.
+
+**Relief** is the GPU time saved, as a share of that scene's frame. **Visual cost** is the change
+in the rendered image, measured in 8-bit display codes on screenshots taken before and after.
+
+
+## The short version
+
+1. On the Intel iGPU with the **Compatibility** renderer, which is the web app's renderer,
+   ordinary views run at 20-35 fps. **Any view with an atmosphere runs at 1-2 fps.** The limb
+   shell alone is 75-95% of those frames: Earth close up takes ~490 ms and Titan ~900 ms.
+2. The four big levers, in order:
+   - **Atmosphere quality.** A reduced tier saves 22-38% with no visible change; off saves
+     76-95%.
+   - **3D render scale.** 75% saves 17-28%; 50% saves 30-66%.
+   - **The renderer itself, on desktop.** Compatibility is 1.4-8x faster than Forward+ on the
+     iGPU.
+   - **Star-catalogue depth.** V 11 saves 29-31% in dark-sky views; V 9.5 saves 43-52%.
+3. Of the existing options:
+   - **Shadow Resolution** matters on Forward+. 16384 adds up to 49 ms a frame even on the GTX,
+     and 2048 in place of the default 8192 saves 27-39% of an iGPU frame.
+   - **MSAA** is a modest lever: off saves 5-13% on the iGPU against 2x, and 5-23% on the GTX.
+   - **FXAA and TAA** cost rather than save.
+   - **Physical Light** saves nothing, and turning it off costs up to 35%.
+4. **The web may not load at all on these machines.** Through ANGLE on the iGPU, which is
+   Chrome's path on Windows, the limb shader's compile runs far past Chrome's roughly 10-second
+   GPU watchdog. This is a first-load hazard rather than a frame-rate one, and it outranks
+   everything above; see *The web export* in
+   [SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md).
+5. Several costs buy nothing visible and can go with no option at all: the Milky Way and most of
+   the star field in any lit-body view, the limb shell's disc-interior fragments, and sphere
+   detail beyond 128x64. Together they are worth 10-30% in most views and far more at Earth and
+   Titan. The limb's interior has since gone, for 19-54% of an iGPU atmosphere frame (see
+   *Addendum: the limb annulus, measured*).
+
+
+## Where the frame goes today
+
+GPU time per frame, in ms, at 1920x1080. The budgets are 16.7 ms for 60 fps and 33.3 ms for 30 fps.
+
+| View | Intel UHD, Compatibility | Intel UHD, Forward+ | GTX 1650 Ti, Compatibility | GTX 1650 Ti, Forward+ |
+|---|---:|---:|---:|---:|
+| Earth fills the screen | 490 | 4112 | 26.2 | 18.0 |
+| Earth at 3 radii | 689 ✱ | 1802 | 13.9 | 9.8 |
+| Titan at 3 radii | 900 | 1251 | 19.3 | 29.2 |
+| Saturn at 45° | 41.2 | 263 | 5.1 | 5.2 |
+| Jupiter's moons | 28.6 | 65.7 | 2.6 | 4.0 |
+| Sun close-up | 44.0 | 73.3 | 4.8 | 12.6 |
+| Whole system, dark sky | 30.8 | 64.2 | 13.7 | 20.0 |
+| Asteroid belt | 33.2 ✱ | 61.2 | 17.0 | 23.7 † |
+
+✱ That run hit the driver slow state described under *Caveats*, so the value reads high.
+† That scene's baseline drifted during its run.
+
+
+## How this was measured
+
+**Machine and setup.**
+
+- Dell XPS 15 9500: i7-10875H, Intel UHD Graphics (Comet Lake GT2, 24 EU) and GTX 1650 Ti,
+  driver 581.95.
+- Godot 4.7.2, window at 1920x1080, sim paused, v-sync off, frame rate uncapped.
+
+**Timing.** GPU time is the main viewport's timestamp-query interval: GL timestamps on
+Compatibility, Vulkan on Forward+. Each figure is the median of at least five frames, taken after
+a warm-up that absorbs any shader compile.
+
+**Toggling options.** Each option was toggled in the running app by a scratch Assistant probe
+suite, and reverted before the next. Toggles were settings, Environment and Viewport properties,
+node visibility, shader uniforms, runtime shader swaps and star-mesh rebuilds.
+
+**Reaching the Intel iGPU.** Godot exports `NvOptimusEnablement = 1`, so the Intel runs used a
+copy of the executable with that export cleared. Windows' default then puts OpenGL on the iGPU.
+Vulkan used `--gpu-index 0`.
+
+**The eight views.**
+
+- Earth filling the screen, day side, 1.6 radii
+- Earth at 3 radii
+- Titan at 3 radii, with its haze ring
+- Saturn at 45°, with rings and about 40 moon orbits
+- Jupiter's moon system from above
+- The Sun at 3 radii
+- The whole system in the dark-adapted sky (`VIEW_SYSTEM`)
+- The asteroid belt with its 70k points (`VIEW_ASTEROIDS`)
+
+HUDs were left at their defaults and the 2D GUI was hidden.
+
+**Screenshot comparisons.** The same pose is captured before and after each change. Reported as
+the mean and 99th-percentile absolute difference per pixel, and the share of pixels that move by
+more than 2 or 8 codes.
+
+
+## All options, ranked
+
+The ranking is by how much a weak GPU gets back for how little it gives up on screen. Relief is
+given for the Intel iGPU on Compatibility (the web's case) and for the GTX 1650 Ti. Ranges span
+the views where an option acts; views where it does nothing are left out rather than averaged in.
+Intel figures for the atmosphere views come from runs in the driver's normal state.
+
+### High relief
+
+| # | Option | Relief, Intel iGPU | Relief, GTX 1650 Ti | Visual cost | Verdict |
+|---|---|---|---|---|---|
+| 1 | **Atmosphere quality**: Full / Reduced / Off. Runtime shader swap, or restart. | Reduced -22 to -38%; Off -76 to -95% (atmosphere views) | The shell is 15-39% of the frame | Reduced: none visible. Up to 15 codes on 1-2% of pixels, confined to the limb band. Off: no air at all, and Titan loses its identity. | Add. Default to Reduced on integrated GPUs and the web. |
+| 2 | **3D render scale**: 100 / 85 / 75 / 50%. Runtime. FSR 1 on Forward+. | 75%: -17 to -28%; 50%: -30 to -66% | 75%: -13 to -36%; 50%: -25 to -64% | Soft lines and HUD text. At 50%, orbit lines turn chunky, and the star field coarsens because star size follows render height. | Add. On a 2x hi-DPI web canvas, 50% simply restores 1x cost. |
+| 3 | **Renderer** (desktop): Auto / Forward+ / Compatibility. Restart. | Compatibility 1.4-8x faster than Forward+ | Mixed: Compatibility faster in 5 of 8 views | Compatibility loses mouse-over identification of orbit lines and asteroids, FXAA and TAA, and local shadow maps. The picture itself matches. | Add, with Auto choosing Compatibility on integrated GPUs. |
+| 4 | **Star catalogue depth**: all (V 15) / V 11 / V 9.5. Restart, or a 0.3-1.1 s rebuild. | V 11: -17 to -29%; V 9.5: -26 to -43% (star-heavy views) | V 11: -28 to -31%; V 9.5: -44 to -52% | None in lit-body views, where exposure hides faint stars. In dark-sky views, V 11 dims the diffuse star glow (about 7 codes over a third of the sky) and V 9.5 is visibly sparser. | Add as a restart option. It also saves memory and load time. |
+| 5 | **Shadow resolution** (existing; Forward+ only in the Planetarium) | vs 8192 on Forward+: 2048 -27 to -39%; 16384 +18 to +88% | 2048: -1 to -10%; 16384: +28 to +387% | Spacecraft-scale self-shadowing only. Eclipses and ring shadows are analytic and unaffected. | Keep. Drop 16384, add Off, and default to 4096. |
+
+### Moderate relief
+
+| # | Option | Relief, Intel iGPU | Relief, GTX 1650 Ti | Visual cost | Verdict |
+|---|---|---|---|---|---|
+| 6 | **MSAA** (existing): off / 2x / 4x / 8x, default 2x | Off: -5 to -13%; 4x: +9 to +11% | Off: -5 to -23%; 4x: +3 to +15% | Stair-stepped orbit lines; the dense ring-plane orbits shimmer. Planet rims are already anti-aliased by the shaders' own PSF. | Keep. Consider Off as the web default. |
+| 7 | **Glow**: on / off. Runtime. | -12 to -16% in light views; ~0 in atmosphere views | -1 to -16%; Forward+ -5 to -29% | Small. No bloom on blown extended sources (up to 58 codes beside a bright limb). On Compatibility, off also restores the dimmest codes. | Add. |
+| 8 | **Star glare wing**: full / off. Runtime. | -11 to -25% (star-heavy views) | -15 to -16%; Forward+ -24% | No change in lit-body views. In dark-sky views half the sky moves (mean 10.5 codes): halos go, and the faint end moves about 3 mag brighter. | Fold into a "Star field" setting with catalogue depth. |
+| 9 | **Milky Way background**: on / off. Runtime. | -10 to -17% | -5 to -13% | None in any lit-body view, where exposure already puts it below one code. In dark-sky views the Milky Way goes (8 codes on 62% of pixels). | Now skipped automatically below half a code (see the addendum). A user toggle is optional. |
+| 10 | **Cloud decks**: on / off. Runtime. | -6 to -7% (Earth views) | -22 to -26%; Forward+ -22 to -38% | Large: Earth and Neptune lose their clouds (19% of pixels in an Earth view). | Lowest tier only. |
+| 11 | **Frame-rate cap**: 30 / 60 / uncapped. Runtime. | Up to -50% energy when a frame beats the cap | Same | Motion smoothness only. No help when a frame already misses the cap. | Add for laptops and batteries. It's a one-liner. |
+
+### Low relief, or better made automatic
+
+| # | Option | Relief, Intel iGPU | Relief, GTX 1650 Ti | Visual cost | Verdict |
+|---|---|---|---|---|---|
+| 12 | **Sphere mesh detail**: 256x128 today. Restart, or runtime. | 128x64: -13 to -27%; 64x32: -17 to -38% | 128x64: -10 to -27%; 64x32: -16 to -34% | 128x64 is indistinguishable, with 0.16 px of silhouette error on a screen-filling disc. 64x32 shows rim artefacts. | Not an option: make 128x64 the default, or add distance LOD. |
+| 13 | **Sun surface detail** (sunspot cells). Runtime uniform. | -36% (Sun close-up only) | Not measured | No sunspots. | Automatic LOD by disc size. |
+| 14 | **FXAA** (existing; Forward+ only) | +0 to +6% | +1 to +16% | A benefit: smoother lines, at a slight blur. | Keep. |
+| 15 | **TAA** (existing; Forward+ only, experimental) | +10 to +27% | +4 to +39% | Ghosts orbit lines, which are positioned in the vertex shader. | Remove, or keep it hidden. |
+| 16 | **Physical light** (existing) | Off: -5 to +26% | Off: +0 to +35% | Changes the whole look. Off keeps the unmetered exposure, so every star draws at full size, which is why it costs. | Not a performance setting. Move it to another section. |
+| 17 | **HUD layers and body PSF quads**: orbits, labels, symbols, asteroid points | 0 to -5% | 0 to -5%; asteroid points -16% at the belt | Content, not quality. | No option needed; already user-controlled. |
+
+
+## Atmospheres
+
+On the iGPU the limb shell dominates the frame. Hiding it takes Earth-fill from ~490 to 116 ms
+and Titan from ~900 to 60 ms. Zeroing the optical depths as well, so the surface and cloud shaders
+stop compositing air, brings Earth to 97 ms and Titan to 40 ms. What's left is the surfaces, the
+clouds, and a 22-24 ms floor of stars, sky and HUD. On the GTX the shell is a much smaller share
+(15-22% at Earth, 39% at Titan on Forward+), so this is overwhelmingly an integrated-GPU problem.
+
+Three knobs already in `_atmosphere.gdshaderinc` reduce the cost:
+
+- **A lower-order along-ray quadrature.** A padded 4- or 3-node Gauss-Legendre table is a valid
+  rule for both GL6 loops.
+- **A lower cap on the beyond-limb ring taps.** `atm_ring_max_taps` accepts any value.
+- **Dropping the detached layer.** `atm_layer_tau` = 0.
+
+Each was measured on the iGPU, with the screenshots diffed against the shipped render:
+
+| Variant | Earth fill | Titan | Visual difference vs shipped |
+|---|---:|---:|---|
+| 4-node quadrature | -19% | -16% | Max 2 codes (Earth), 15 (Titan); 0.4% of Titan's pixels differ by more than 2 |
+| 3-node quadrature | -23% | -26% | Max 3 / 21 codes |
+| **4-node + 2 ring taps** | **-25%** | **-38%** | 1.2% / 1.8% of pixels differ by more than 2 codes, max 12 / 15, all in the limb band |
+| ... plus early interior discard | -22 to -37% | -35 to -39% | Identical to the row above (the discard is exact) |
+| Detached layer off | -9% | -33% | Titan's outer haze shell disappears |
+| 1 ring tap (diagnostic) | -19% | -52% | Not assessed |
+| Limb shell off | -76% | -94% | No limb, no haze ring |
+| All air off | -80% | -95% | 87% of Earth's pixels change |
+
+*Figure notes (illustrated version).* At 2x on Titan's limb, the shipped shader, 4-node, 4-node + 2
+taps and 3-node are indistinguishable. Layer-off loses the outer haze band, and all-air-off loses
+everything. Seen whole, Titan in this app is its haze. That is why Off is a real loss there, and
+why Reduced is the tier to default to.
+
+### Why the shell costs so much on Intel, and the exact fix
+
+Most of the shell's fragments lie over the disc interior. There they return nothing: they
+discard, and the surface and cloud shaders composite that air themselves. On the Intel driver,
+those fragments are not cheap.
+
+- **Discard first.** A limb shader that discards at its very first statement still costs 249 ms
+  at Earth-fill, against 116 ms for a shader whose body is dead code.
+- **Branch around the body.** An explicit `if` around the whole body recovers only 3-6%.
+- **Early discard.** An exact interior discard before any setup recovers only 0-10%.
+- **Unrolling doesn't help.** Making the loop bounds constants again, so the loops unroll, is
+  12-22% slower.
+
+The driver evidently runs much of this large program for pixels that contribute nothing.
+
+What does work is not generating those fragments at all. Draw the limb shell as a camera-facing
+annulus around the silhouette instead of a full sphere. `atm_limb()` needs only the view ray,
+which a ring on the shell's near side supplies; a flat billboard would stand behind the disc
+across the handoff band and lose it to the depth test. The dead-code shader bounds what that
+buys: at Earth-fill the shell's interior cost falls from ~370 ms toward the floor, leaving only
+the rim's real work. Built and measured since, the rim's work proved the larger part of what was
+left (see *Addendum: the limb annulus, measured*).
+
+
+## 3D render scale
+
+Rendering the 3D scene at a fraction of the window and upscaling is the one lever that works
+everywhere, in proportion to pixel count. It costs 12-30% less than its pixel share because some
+work doesn't scale: vertex work, and glow at fixed sizes. Compatibility upscales bilinearly.
+Forward+ can use FSR 1, which measured the same as bilinear at 75% (-9 to -39%) and is sharper.
+
+Two things make it matter more than the table suggests:
+
+- **The web canvas renders at physical pixels.** `display/window/dpi/allow_hidpi` defaults to
+  true, so a laptop at 2x devicePixelRatio renders four times the pixels of a 1080p window. At that
+  density 50% is not a sacrifice; it is the 1x cost.
+- **The HUD is in the 3D pass.** Orbit lines, names and symbols scale with it, and the star field
+  changes because its PSF is sized in render pixels.
+
+*Figure notes (illustrated version).* At 100%, 75% and 50%, orbit lines thicken and the planet
+edge softens, and 50% is clearly coarse; on the GTX this saves 22% and 35% of the Saturn frame.
+Each star is drawn as a render-pixel PSF and then magnified, so lower scales give fewer, fatter
+stars: detected peaks fall from 24k to 12k to 5.6k.
+
+
+## The renderer, on desktop
+
+The Windows build runs Forward+. On the iGPU that is the wrong default by a wide margin: Earth-fill
+takes 4.1 s instead of ~490 ms, Saturn 263 ms instead of 54 ms, the whole-system view 64 ms instead
+of 34 ms. On the GTX the two trade places by view. Forward+ wins at Earth-fill (18 vs 26 ms) and
+Compatibility wins everywhere else measured.
+
+A restart-time Renderer option is cheap to build. Point
+`application/config/project_settings_override` at a `user://` file and write
+`rendering/renderer/rendering_method` there; Godot reads it before the renderer starts. "Auto"
+would pick Compatibility when the adapter is integrated.
+
+What Compatibility gives up on desktop:
+
+- Mouse-over identification of orbit lines and asteroid points (`IVFragmentIdentifier` removes
+  itself there)
+- FXAA and TAA
+- Local shadow maps (already off for Compatibility in the Planetarium)
+
+
+## The star field
+
+2.55 million point sprites are 0.38 G vertex operations a frame, plus a few million fragments,
+whatever is on screen. In the dark-sky views they are the frame: removing the field saves 46-50%
+of an iGPU frame and 53-67% of a GTX frame there.
+
+**Catalogue depth.** The magnitude cutoff earns a restart option. The bins are already separate
+files, so a restart can load fewer.
+
+| Catalogue depth | Stars | Vertex data | Build time | Dark-sky views |
+|---|---:|---:|---:|---:|
+| All (to V 15.4) | 2,551,210 | ~51 MB | 0.7-1.1 s | -- |
+| V 11 | 942,063 | ~19 MB | 0.26-0.40 s | -25 to -31% |
+| V 9.5 | 216,622 | ~4 MB | 0.07-0.10 s | -40 to -52% |
+
+Build times are single-threaded GDScript decode on this CPU, and the web's WASM build will take
+longer. In lit-body views the cut is invisible, because exposure already buries those stars. In
+dark-adapted wide views V 11 thins the faint glow and V 9.5 visibly empties the sky.
+
+**The glare wing.** `glare_scale` = 0 saves up to a quarter of a dark-sky frame. It is a bigger
+visual change than the catalogue cut, because the wing is what draws the faint end. Two shader
+variants that keep bright halos land in between:
+
+- **Untapered wing:** -18%.
+- **Wing gated to bright stars:** -21%.
+
+Both still move the sky by 7-9 codes on average.
+
+*Figure notes (illustrated version).* The whole-system view, dark-adapted: shipped, V 11 and V 9.5
+across the top; glare off, untapered wing and gated wing below.
+
+
+## The existing options
+
+### MSAA
+
+Off saves 5-13% of an iGPU frame, the low end in atmosphere views where fragment shading dwarfs
+everything else, and 5-23% on the GTX. 4x costs 9-11% more than 2x on the iGPU and 3-15% on the
+GTX. 8x, measured later, adds 12-52% to a 2x frame (see *Addendum: more shadow and MSAA
+measurements*). The planet rims don't need it, because the surface shaders already image each rim
+pixel through the camera's PSF. What does need it is lines: orbit lines, ring edges and spacecraft.
+
+*Figure notes (illustrated version).* At 2x and off, only the lines change, and the dense
+ring-plane orbits break into steps.
+
+### Shadow resolution
+
+Only Forward+ in the Planetarium draws shadow maps, and they serve only spacecraft-scale local
+shadows. Their cost is not small.
+
+- **Default 8192 on the iGPU:** about 20-25 ms a frame in views with no spacecraft anywhere near.
+  2048 saves 27-39% there.
+- **16384:** a 1 GiB depth atlas at 32 bits. It costs +28% to +387% on the GTX, up to 49 ms a
+  frame at the Sun view, and +18% to +88% on the iGPU.
+
+Drop 16384. Add Off, which disables the shadowed lights. Default to 4096. The atlas sizes are 16,
+64, 256 and 1024 MiB. Later runs back 4096 as the default, and find resolution cheap at any size on
+the web renderer (see *Addendum: more shadow and MSAA measurements*).
+
+### FXAA, TAA and Physical Light
+
+**FXAA** is cheap line smoothing (+1 to +16%) and worth keeping.
+
+**TAA** costs 4-39% and ghosts the orbit lines. It earns its "experimental" label, and is better
+hidden.
+
+**Physical Light** is not a performance option at all. Turning it off makes several views slower,
+up to 35%, because the unmetered exposure keeps every star at full size. It belongs beside the
+look settings, not under Graphics/Performance.
+
+
+## Smaller levers
+
+**Glow.** Glow saves 12-16% of an iGPU frame in light views and nothing in atmosphere views. On
+the GTX it saves 1-16%, and 5-29% on Forward+. What goes is bloom around blown extended sources:
+spacecraft, small moons, a bright limb. On Compatibility, turning glow off also returns the
+dimmest codes that the RGB10A2 glow feed crushes.
+
+**Cloud decks.** Clouds are cheap on the iGPU (-6 to -7%) but 22-26% of a GTX frame at Earth, 38%
+on Forward+. Taking them off is a large visual loss, so this belongs in the lowest tier only.
+
+*Figure notes (illustrated version).* At Saturn, glow off moves 8% of pixels by 5 codes or less.
+The Milky Way changes nothing there, because metering on Saturn puts it below one code, yet on the
+iGPU it still costs 10% of that frame. At Earth's limb, a 128x64 sphere is indistinguishable from
+256x128, which is why it should simply become the default; 64x32 flecks the rim.
+
+
+## Free wins: relief with no visual change
+
+These need no option. Each removes work whose result never reaches the screen.
+
+| Change | Measured basis | Expected relief |
+|---|---|---|
+| **Limb shell as a camera-facing annulus**, not a full sphere (done; see addendum) | A dead-code limb body costs the same as a hidden shell. A discarding one costs about 1/3 of the full shader. | Measured on the iGPU: Earth-fill -37%, Venus close -54%, Titan and Mars close -19 to -20% |
+| **Skip the sky pass** when the panorama x exposure is below half a display code (done; see addendum) | Milky Way off changes zero pixels in every lit-body view | -10 to -17% (iGPU), -5 to -13% (GTX) in those views |
+| **Skip star bins** the current exposure renders below half a code; split the star mesh by bin (done; see addendum) | Cutting to V 11 changes zero pixels in lit-body views, yet stars cost 13-28% there | -13 to -28% in lit-body views |
+| **Sphere 128x64**, or distance LOD | 128x64 measured indistinguishable | -10 to -27% |
+| **Forward+: skip shadow passes** when no local caster is in range | An empty 8192 atlas costs ~20-25 ms per iGPU frame | -27 to -39% (iGPU Forward+) |
+| **Sunspot LOD** by disc size | Sunspots are 36% of a Sun close-up | Near the Sun only |
+
+**Small edits don't reliably pay on Intel.** Several of the shader-anatomy review's "exact"
+micro-optimizations landed anywhere from -10% to +15% on the iGPU, depending on the view. Examples
+are gating airless bodies out of the atmosphere functions, and two Newton steps in place of three
+in the Compatibility colour write. Intel's code generation for shaders this large is erratic.
+Structural changes are what paid every time: fewer nodes and taps, fewer fragments, fewer
+vertices, less sky.
+
+The same review found a likely bug: `atm_ring_pixel()` doesn't normalize `path` by `weight_sum`,
+and its midpoint tent weights sum to 2 at one tap and 10/9 at three. That lets a close-range ring
+read up to about 11% bright.
+
+
+## First load on the web
+
+Frame time is only half of the web story. The other half is shader compilation, which the web pays
+on every first visit because WebGL has no program-binary cache, and on a weak part it is the more
+serious half: through Chrome's ANGLE and D3D11 path the limb shader's compile runs far past
+Chrome's roughly ten-second GPU watchdog. **A first visit on a machine like this one probably
+cannot finish compiling it at all** — a hazard rather than a delay, and it outranks every
+frame-time finding in this report.
+
+The per-shader figures, both compilers, and what they mean for how a shader is written are in
+*The web export* in [SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md). Two consequences
+land on the option set, and this is where they come from:
+
+- **An Off tier that omits the limb shader entirely is the only one sure to load** on such a
+  machine. A reduced tier does not help here: what compiles is code volume, not iteration count.
+- **Atmosphere quality therefore earns a restart option rather than a runtime one.** A session
+  then compiles only the tier it uses, and the warm-up covers it.
+
+
+## A possible option set
+
+**Graphics**
+
+- 3D render scale: 100 / 85 / 75 / 50%
+- Star field: Full / Reduced (no wing) / Minimal (no wing, no Milky Way)
+- Glow: on / off
+- MSAA: off / 2x / 4x
+- FXAA (Forward+)
+- Shadow resolution (Forward+): off / 2048 / 4096 / 8192
+- Frame-rate cap: 30 / 60 / uncapped
+
+**Graphics (requires restart)**
+
+- Renderer (desktop): Auto / Forward+ / Compatibility
+- Atmosphere quality: Full / Reduced / Off
+- Star catalogue: V 15 / V 11 / V 9.5
+- Cloud decks: on / off
+
+A first-run preset, chosen from the adapter, could set all of these at once. On an integrated GPU
+or the web it would pick Compatibility, Reduced atmospheres, 75% scale on hi-DPI and MSAA off.
+
+
+## Caveats
+
+- **One machine.** Treat ratios and rankings as the finding, and absolute milliseconds as this
+  laptop's. A newer iGPU (Iris Xe, Radeon 680M) is several times faster, but shares the same
+  fragment-bound shape.
+- **An Intel driver slow state.** In one of seven Intel Compatibility runs, MSAA 2x with glow's
+  float buffer settled into a state about 2.3x slower in the atmosphere views. Toggling MSAA or
+  glow cleared it. Repeat runs (three baselines, A/B interleaved) put the normal state at ~490 ms
+  (Earth) and ~900 ms (Titan). Where a scene's baseline drifted mid-run, rows after the drift are
+  excluded.
+- **Estimates, not measurements.** The exposure skips are now built and verified for correctness,
+  but their relief has so far been measured only on the GTX; the iGPU figures in *Free wins*
+  remain bounds from proxies (see the addendum). The annulus's were too, and have since been
+  measured below their bound. The Mobile renderer was not tested, and no browser was
+  ([SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md), *The web export*).
+
+
+## Addendum: the limb ring and surface twilight
+
+Added after the report was published, in answer to two questions: would a ring-shaped limb shell
+need the four atmosphere worlds' surfaces rebaked, and would it change twilight colour on the
+surfaces and on Earth's clouds?
+
+**Neither.** Nothing is baked. The surface, cloud and band shaders compute the air in front of
+themselves every frame, from the same `atm_*` values that `IVShellsModel` copies to them from the
+limb row:
+
+- the veil and twilight glow: `atm_disc_air()`;
+- the sunset-reddened sunlight on the ground and on Earth's cloud deck: `atm_sun_transmittance()`;
+- the colour shift from looking through the air: `atm_view_tint()`.
+
+The limb shell contributes nothing over the disc interior. Any fragment whose ray meets the disc is
+discarded (`atm_limb()` in `_atmosphere.gdshaderinc`, and the `discard` in
+`atmosphere_limb.gdshader`'s fragment). Its whole job is the rays that miss the disc, plus the
+outer 1% of the disc's radius (`ATM_RIM_HANDOFF`), where it and the disc shaders each draw part
+of the edge haze. A ring only stops generating fragments that already contribute nothing. Two
+variants that discard those interior fragments up front gave screenshots identical to the shipped
+render at Earth and Titan, with zero pixels changed. The one constraint is that the ring's inner
+edge must reach inside the `ATM_RIM_HANDOFF` band, plus about two pixels for the ring filter.
+
+**What does change surface and cloud twilight is the quality tiers.**
+
+- **Reduced:** the 4-node quadrature is also what the surface and cloud shaders use for the air in
+  front of them. The change measured at most 2 display codes on Earth and up to 15 codes on 0.4% of
+  Titan's pixels.
+- **Off, as measured above ("All air off"):** zeroing the optical depths removes the twilight, the
+  veil and the reddened sunlight entirely. Venus, Titan and Mars ship surface-reflectance maps
+  that assume the air is added on top, so a no-air tier would render them wrong without
+  re-levelled assets.
+- **A better Off tier:** hide only the limb shell and keep the air on the disc. On the iGPU that
+  saves nearly as much, 76% at Earth close-up and 94% at Titan against 80% and 95%. Surfaces and
+  clouds keep their twilight. What goes is the band beyond the limb, a backlit crescent's glowing
+  cusps and Titan's haze ring. The outermost 1% of the disc also loses the shell's part of the edge
+  haze. This variant was measured but not screenshotted.
+
+
+## Addendum: more shadow and MSAA measurements
+
+Measured on 2026-09-11, after the report was published, to fill three gaps before the graphics
+Options tooltips were given GPU-cost levels: shadow resolution on the web renderer, the 4096
+setting, and 8x MSAA. The machine and method are the same. The views were five of the eight above
+(Earth at 3 radii, Saturn at 45°, Jupiter's moons, the Sun close-up and the whole system), plus
+close-ups of Juno and New Horizons (`VIEW_ZOOM`), which give the shadow maps something to cast.
+Deep-space craft were chosen because they are always sunlit. The Planetarium ships with
+Compatibility shadows off, so `IVCoreSettings.apply_gl_compatibility_shadows` was turned on for
+the Compatibility runs.
+
+Each figure is the change in GPU time against the mean of the scene's repeated baselines, leaving
+out Juno's first, which was taken before its model had loaded. Repeated baselines within a scene
+drifted by up to 16%, so a change of a few percent is noise; the large Forward+ iGPU changes are
+well clear of it.
+
+### Shadow resolution
+
+Change on leaving the default 8192. The light views are Jupiter's moons, the Sun close-up and the
+whole system; Saturn and Earth, where other work dominates the frame, moved less.
+
+| Renderer, GPU | 4096, light views | 2048, light views | 4096, spacecraft | 2048, spacecraft |
+|---|---:|---:|---:|---:|
+| Forward+, Intel iGPU | -23 to -28% | -29 to -35% | -33% | -40 to -42% |
+| Forward+, GTX 1650 Ti | 0 to -3% | -2 to -4% | -2% † | -2% † |
+| Compatibility, Intel iGPU | 0 to -2% | -1 to -6% | -4 to -5% | -5 to -7% |
+| Compatibility, GTX 1650 Ti | -2 to -3% | -4 to +3% | -2 to -6% | -1 to -3% |
+
+† New Horizons only. Juno's GTX baselines drifted 16%, more than any setting moved it.
+
+- **Forward+ on the iGPU is where resolution costs.** 4096 recovers about four-fifths of 2048's
+  saving, with or without a craft in view. That backs 4096 as the default.
+- **The GTX hardly notices** the difference between the three sizes.
+- **Compatibility pays little at any size,** on either GPU, even with a craft casting. The iGPU's
+  Forward+ cost does not carry over to the web renderer. What turning Compatibility shadows on
+  costs in the first place was not measured.
+
+### MSAA
+
+Change against the default 2x, over the five views:
+
+| Renderer, GPU | Disabled | 8x |
+|---|---:|---:|
+| Forward+, Intel iGPU | -10 to -19% | +12 to +52% |
+| Forward+, GTX 1650 Ti | -5 to -13% | +15 to +36% |
+| Compatibility, Intel iGPU | -10 to -19% ‡ | +17 to +49% |
+| Compatibility, GTX 1650 Ti | -8 to -21% | +13 to +27% |
+
+‡ Leaving out the Sun close-up, which read 11% slower with MSAA off.
+
+8x adds 12-52% to a 2x frame in every combination. The Compatibility runs had Compatibility
+shadows on, which the Planetarium's web setup does not, so the report's own Disabled figures for
+that setup (-5 to -13% on the iGPU) stand.
+
+
+## Addendum: the limb annulus, measured
+
+Measured on 2026-09-11, after the annulus was built into this plugin (v0.2.1.dev): the limb
+shell now draws a camera-facing ring of its own sphere, from two pixels inside the disc's handoff
+band out to the shell's silhouette (`limb_annulus_mesh`; *Atmospheres* in
+[PHOTOMETRIC_MODEL.md](PHOTOMETRIC_MODEL.md)). Same machine and method, except that the shipped
+sphere and the annulus were swapped within one process and interleaved A/B/A/B, each figure the
+median of 15 frames.
+The poses are close to, not identical with, the eight views above.
+
+| View | Intel UHD, Compatibility | GTX 1650 Ti, Compatibility | GTX 1650 Ti, Forward+ |
+|---|---:|---:|---:|
+| Earth fills the screen (1.6 radii, day side) | 481 → 304 ms (-37%) | 24.2 → 21.7 ms (-10%) | 18.2 → 17.4 ms (-5%) |
+| Earth at 3 radii | 225 → 129 ms (-43%) | 12.3 → 10.8 ms (-12%) | 10.1 → 9.3 ms (-8%) |
+| Titan at 4.2 radii | 505 → 408 ms (-19%) | 16.1 → 13.7 ms (-15%) | 17.6 → 15.5 ms (-12%) |
+| Venus at 1.5 radii | 300 → 139 ms (-54%) | 16.1 → 13.5 ms (-16%) | 11.5 → 11.0 ms (-4%) |
+| Mars at 1.5 radii | 715 → 569 ms (-20%) | 31.1 → 27.7 ms (-11%) | 23.6 → 22.8 ms (-3%) |
+| Jupiter's moons (no atmosphere) | 27.0 → 27.1 ms (0%) | 2.75 → 2.72 ms (-1%) | 4.10 → 4.15 ms (+1%) |
+
+- **Below the bound, and why.** The interior did go; what the dead-code proxy could not see is
+  how much the rim itself costs. At Earth-fill about 190 ms of the limb remains, all of it the
+  annulus's own fragments, each running the ring's taps over both halves of its ray or the
+  handoff band's disc quadrature. By an estimate a tenth of the shell's fragments, the annulus is
+  now most of its cost, and that is exactly the work the Reduced tier (4 nodes, 2 taps) cuts, so
+  the two stack.
+- **No visible change.** Against the shipped sphere, a handful of single pixels on the disc's rim
+  move per view, one by up to 110 codes, and nothing else does. Rotating the shipped sphere 0.7°
+  about its pole, which moves nothing but its facets, moves as many rim pixels by as much: the rim
+  is sensitive to the last bits of the interpolated ray, whatever mesh supplies it. Body icons
+  match to 7 codes. At the ISS, 90 m from the station with farwarp compressing the limb, nothing
+  moves by more than 2 codes at any row count from 6 to 16.
+- **No compile or pipeline cost.** The annulus carries the sphere's vertex attributes, so
+  Forward+ reuses the shader warm-up's pipeline: the surface-compile counter matches the sphere
+  build's, and a position-only annulus, the negative control, adds one. The fragment stage is
+  unchanged, and the Compatibility compile time with it: 7.3 s against 7.7 s.
+
+
+## Addendum: the exposure skips, built and verified
+
+Built into this plugin on 2026-09-19: under physical light the background panorama stops
+being drawn, and each star magnitude bin stops being submitted, once the compensating camera
+has metered it below **half** a display code. The star field is split into one mesh per
+magnitude bin to make the second possible. The model, its derivation and its constants are
+in *Skipping what the camera has metered away* in
+[PHOTOMETRIC_MODEL.md](PHOTOMETRIC_MODEL.md); what follows is only what was measured.
+
+**Half a code, not one.** Half is the 8-bit rounding boundary, and it is what turns the
+promise from a measured one into a proved one: in the sRGB toe the encode is linear, so
+removing a contribution under half a code moves the rounded result by at most one code at
+any pose. Exact bit-identity is not available at any positive threshold — removing added
+light can always carry some pixel across a boundary.
+
+### Correctness
+
+Captured at a frozen exposure with HUDs hidden, each mechanism forced off and then on within
+one app run, 1920x1080, Forward+ on the GTX 1650 Ti.
+
+| View | Metered exposure | What was skipped | Pixels changed |
+|---|---:|---|---|
+| Earth at 3 radii | 5.2e-7 | sky, and 13 of 24 bins | **0** of 2.07 M |
+| Saturn at 45° | 2.8e-5 | sky, and 4 of 24 bins | **0** of 2.07 M |
+| Saturn at 45°, star cull only | 2.8e-5 | 4 of 24 bins | **0** of 2.07 M |
+| Jupiter's moons | 3.5e-4 | sky only (no bin qualified) | 337 (0.016 %), all by exactly 1 code |
+
+Jupiter's is the marginal case and the one worth understanding: the sky sat at 0.099 of a
+code, just under the threshold, and where faint stars already lit a pixel the removed sky had
+been tipping it over a rounding boundary. It is the predicted worst case, not a defect, and
+it is bounded at one code.
+
+### Where each mechanism engages
+
+An EV sweep at a fixed pose, reading the decision back from the app rather than inferring it:
+
+| Exposure EV | Sky | Bins drawn |
+|---:|---|---:|
+| +1.0 (dark-adapted rest) | drawn | 24 / 24 |
+| −9.0 | drawn | 24 / 24 |
+| −10.0 | skipped | 24 / 24 |
+| −14.0 | skipped | 21 / 24 |
+| −16.0 | skipped | 18 / 24 |
+| −20.0 | skipped | 12 / 24 |
+
+The sky crosses at exposure 1.75e-3, which is where the shipped anchor puts it to the stop.
+Nothing is skipped at rest, so the dark-adapted sky is untouched — and with physical light
+off, where exposure is pinned at rest, neither predicate can fire at all.
+
+At Earth the cull leaves 11 of 24 bins, which is about 44,000 of 2,551,210 stars still
+submitted: 98 % of the field's vertex work gone in the view that needs it most.
+
+### Relief, so far
+
+| View | Renderer / GPU | Off | On | Change |
+|---|---|---:|---:|---:|
+| Jupiter's moons (sky only) | Forward+, GTX 1650 Ti | 4.76 ms | 4.59 / 4.44 ms | −3 to −7 % |
+| Earth at 3 radii | Forward+, GTX 1650 Ti | 10.0 / 10.4 ms | 9.9 / 10.7 ms | within noise |
+
+Medians of 15 frames, A/B interleaved, sim paused. Earth is atmosphere-bound on this GPU, so
+neither skip shows there even though both fire — which is the expected shape, not a
+disappointment: the star field and the sky are a small share of a frame the limb dominates.
+
+**The figures this change exists for are not measured yet.** The −10 to −17 % (sky) and
+−13 to −28 % (stars) in the *Free wins* table are for the Intel iGPU under Compatibility, the
+web app's case, and reaching that GPU needs the `NvOptimusEnablement`-cleared executable copy
+described under *How this was measured*. That run is outstanding.

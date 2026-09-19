@@ -1,15 +1,23 @@
-# Shader Compile Cost
+# Shader Compile Profiling
 
 How long this plugin's shaders take the GPU driver to compile and link, which renderer that
 hurts on, what drives it, what was done about it, and what an edit to a given file costs. It is
 here because the answer is counter-intuitive in both directions: the cost does not track how
 long a shader is, and the file you would guess is expensive is not.
 
+This is the **one-time** cost, paid at first draw.
+[GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md) is its per-frame counterpart: what the same
+shaders cost every frame once they are running, and which graphics options buy that back. A
+reader asking whether a weak machine can run this at all needs both -- this document says
+whether it can start, that one says how it then runs.
+
 Measured 2026-09-02 and 2026-09-03 in the [Planetarium](https://github.com/ivoyager/planetarium)
 against Godot 4.7.2 on an AMD RX 7900 XTX (driver 32.0.12033). Numbers are one machine's -- treat
 the *ordering* and the *ratios* as the finding, not the absolute seconds -- and even the ordering
-is this vendor's. See *A slower machine*, where a weaker NVIDIA part multiplies the totals by
-about five and puts the shell shaders four times above the atmosphere shader that leads here.
+is this vendor's. Two later sections carry other parts: *A slower machine*, where a weaker
+NVIDIA part multiplies the totals by about five and puts the shell shaders four times above the
+atmosphere shader that leads here, and *The web export*, whose Intel and ANGLE figures were taken
+on 2026-09-10.
 
 Every figure here was taken under the shadowed multi-light stack, `apply_gl_compatibility_shadows`
 at its default `true`. That setting is the largest remaining lever in this document, and the
@@ -338,7 +346,8 @@ That figure is five programs rather than one (*Specializations*), and the harnes
 program directly in its second column: **about 5 s** for each of those five shaders, against
 1.4-1.6 s on the fast GPU. One program is therefore inside the ten-second Chrome GPU watchdog on
 this part, but by a factor of two rather than a margin -- and this is a discrete GPU. The browser
-remains unmeasured (*The web export*), where ANGLE's D3D11 path is a third compiler again.
+remains unmeasured, and ANGLE's D3D11 path is a third compiler again -- on an Intel iGPU it
+multiplies the limb shader about 17x (*The web export*).
 
 Two consequences worth carrying:
 
@@ -399,15 +408,51 @@ update" the boot screen speaks of. Firefox may not; measure before promising.
 Chrome's GPU process has a watchdog that kills the process, and with it the WebGL context, when
 a single GPU operation runs on the order of ten seconds. The 16-26 s limb compiles of the old
 code sat inside that range, which is what could make a first web visit fatal rather than slow;
-the current worst single compile is under 4 s on this GPU. What it is on a weak one is now
-unmeasured: the in-app method can no longer isolate one program (*A slower machine*), so the
-harness is what has to answer it.
+the current worst single compile is under 4 s on this GPU. But this GPU is a fast discrete part,
+and the in-app method can no longer isolate one program (*A slower machine*), so the harness is
+what has to answer a weak one.
 
-**The browser has not been measured.** The harness exports to web (see below); in the Claude
-desktop app's embedded Chromium the opaque-bound limb shader had not finished compiling after
-14 minutes, against 1.8 s for a trivial shader, with no watchdog and an unidentifiable GL
-backend. Real Chrome and Firefox on Windows go through ANGLE's D3D11 path and are a different
-compiler again. Measure an actual load in each before trusting any number here for the web.
+**A weak part, through both compilers.** Measured 2026-09-10 on the Intel UHD iGPU of the laptop
+[GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md) uses, one shader per process, both caches
+bypassed. Chrome on Windows compiles through ANGLE and D3D11, so the app was run through Godot's
+own ANGLE build as well as native GL. Through ANGLE it had not drawn its first frame after 8.5
+minutes of CPU spent compiling.
+
+| Shader | Intel GL, first draw | +1 variant | Intel ANGLE / D3D11, first draw | +1 variant |
+|---|---:|---:|---:|---:|
+| `stars` | 0.4 s | 0.1 s | 0.5 s | 0.1 s |
+| `body_psf` | 0.8 s | 0.2 s | 1.1 s | 0.2 s |
+| `rings` | 1.3 s | 0.3 s | 4.6 s | 0.5 s |
+| `surface.cube` | 9.5 s | 2.0 s | 69.1 s | 13.4 s |
+| `atmosphere_limb` | 16.5 s | 3.7 s | 282.5 s | 50.2 s |
+| `atmosphere_limb`, 4-node variant | 17.4 s | 4.0 s | 313.9 s | 82.3 s |
+
+"First draw" includes the engine's four default variants plus the one drawn; "+1 variant" is one
+more specialization. Reproduce either column with `--driver`; see *How to measure it again*,
+which also covers reaching the iGPU rather than the discrete part.
+
+**Through ANGLE the limb shader is a first-visit hazard, not a delay.** It takes 283 s to reach
+its first draw and 50 s for every further variant, about 17x its native-GL time, and
+`surface.cube` takes 69 s. Both are far past the ten-second watchdog, so a first visit in Chrome,
+on Windows, on an iGPU like this one probably cannot finish compiling them at all. The tier that
+leaves the limb shader out entirely is then the only one sure to load, which is why atmosphere
+quality earns a restart option rather than a runtime one (*A possible option set* in
+[GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md)).
+
+**Code volume is what compiles, not iteration count.** The 4-node atmosphere variant compiles no
+faster than the shipped shader, and by this measurement slightly slower, because its loop bounds
+are already opaque uniforms -- the node count never reaches the compiler (*Don't hand-unroll, and
+don't fear a `while`*). A tier that has to pay less at first load must therefore leave code out,
+not run fewer iterations of it.
+
+**The browser itself has still not been measured.** Nothing in this toolchain runs in one.
+`--driver opengl3_angle` gets as close as a desktop run can -- the same ANGLE and D3D11 path, out
+of the libraries Godot ships -- but Godot's ANGLE build is not Chrome's and its compile flags may
+differ; Firefox is a third path again. The one browser-shaped data point is a bad one --
+in the Claude desktop app's embedded Chromium the opaque-bound limb shader had not finished
+compiling after 14 minutes, against 1.8 s for a trivial shader, with no watchdog and an
+unidentifiable GL backend. Measure an actual load in real Chrome and Firefox, on a weak machine,
+before trusting any number here for the web -- and before releasing on the strength of one.
 
 
 ## How to measure it again
@@ -420,6 +465,14 @@ python addons/tools/time_shader_compiles.py                  # every shader
 python addons/tools/time_shader_compiles.py surface atmosphere_limb
 python addons/tools/time_shader_compiles.py --renderer forward_plus
 ```
+
+**To reproduce the ANGLE column**, add `--driver opengl3_angle`, which runs the Compatibility
+renderer through the ANGLE and D3D11 libraries Godot ships instead of native GL. The run header
+names the driver, because the driver is half of what a figure means. Reaching a *weak* GPU is the
+separate step: Godot exports `NvOptimusEnablement`, so on a hybrid laptop every run lands on the
+discrete part until you use an executable copy with that export cleared -- see *How this was
+measured* in [GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md). Running the flag alone gets you ANGLE
+on the wrong GPU.
 
 It generates a throwaway Godot project holding a copy of this directory, the hosting project's
 `[shader_globals]` block, and a scene that draws one shader on a quad and reports the frame time

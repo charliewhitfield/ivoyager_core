@@ -204,7 +204,7 @@ var apply_analytic_shadows := true
 ## shadows (godotengine/godot#90259). Set false to restore the single-light
 ## fallback if those resurface (notably on some web export targets), or for the
 ## compile time: false takes a lit shader from four GL programs to one, a large
-## part of a Compatibility cold start (see [code]SHADER_COMPILE_COST.md[/code]).
+## part of a Compatibility cold start (see [code]SHADER_COMPILE_PROFILING.md[/code]).
 ## The analytic astronomical shadows ([member apply_analytic_shadows]) are
 ## independent of this and work either way.
 var apply_gl_compatibility_shadows := true
