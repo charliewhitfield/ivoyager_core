@@ -125,12 +125,20 @@ neighbouring fragments. It has never argued for longhand.
 ## What was done
 
 The trip counts in `_atmosphere.gdshaderinc` and `photosphere.gdshader` are now
-`uniform int`s -- `atm_gl6_nodes`, `atm_shell_nodes`, `atm_ring_max_taps`, `spot_cell_reach` --
-carrying exactly the values the constants had. Nothing sets them and nothing should: they
-restate the lengths of the node tables the loops index, so any other value is wrong. What a
-uniform buys is a bound the compiler cannot see, and a loop it cannot unroll. Every Godot 4 GL
-target is GLSL ES 3.0 or WebGL 2, where a dynamic trip count is ordinary; the "constant bound
-so every target copes" caution the ring loop used to carry was a WebGL 1 concern.
+`uniform int`s -- `iv_atm_gl_first`, `iv_atm_gl_nodes`, `atm_shell_nodes`,
+`iv_atm_ring_max_taps`, `spot_cell_reach` -- carrying exactly the values the constants had.
+What a uniform buys is a bound the compiler cannot see, and a loop it cannot unroll. Every
+Godot 4 GL target is GLSL ES 3.0 or WebGL 2, where a dynamic trip count is ordinary; the
+"constant bound so every target copes" caution the ring loop used to carry was a WebGL 1
+concern.
+
+`atm_shell_nodes` and `spot_cell_reach` restate the lengths of node tables their loops index,
+so any other value is wrong and nothing sets them. The three `iv_atm_*` globals are the
+exception, and they are why the atmosphere's are globals at all: they carry the user's
+Atmosphere Quality (*Atmospheres* in [PHOTOMETRIC_MODEL.md](PHOTOMETRIC_MODEL.md)), whose
+Reduced tier runs a shorter rule out of the same packed table. **That is a tier change no
+shader pays a compile for** -- the source is one program either way, which is what let the
+setting be a live one rather than a restart.
 
 Verified 2026-09-03 by screenshot A/B on both renderers over 17 staged views -- Earth (zoom,
 45 deg, top, backlit crescent), Venus (zoom, 45 deg, backlit), Titan, Mars, the Sun, Jupiter,

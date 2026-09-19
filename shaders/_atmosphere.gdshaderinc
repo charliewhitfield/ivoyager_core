@@ -44,7 +44,8 @@
 // transcription of this file, verified against a numeric single-scatter integral for
 // Earth, Venus, Mars and Titan at every phase (within 11 % worst case, usually under 3 %).
 // Change nothing here without changing it there and re-running --verify: keep the two
-// identical, constant for constant.
+// identical, constant for constant. What it binds is the NORMAL quality tier; Reduced is a
+// declared approximation of that rule, not a second model, and carries no transcription.
 //
 // TWO FLOAT32 TRAPS, both found as a black curve across Venus' night side. A float literal
 // below about 1e-14 compiles to ZERO in the shader language (1.0e-20 reads as 0.0; 1e-12 is
@@ -170,19 +171,27 @@ const float ATM_INF = 1.0e30;
 // downward flux through a scattering column, direct plus diffuse, where exp(-tau) is the
 // direct beam alone. See atm_sun_transmittance().
 const float ATM_TWO_STREAM_K = 0.75;
-// Gauss-Legendre nodes and weights on (0, 1): six along a ray, three across a thin layer.
-const float ATM_GL6_T[6] = {0.0337652, 0.1693953, 0.3806904, 0.6193096, 0.8306047, 0.9662348};
-const float ATM_GL6_W[6] = {0.0856622, 0.1803808, 0.2339570, 0.2339570, 0.1803808, 0.0856622};
+// Gauss-Legendre nodes and weights on (0, 1), three across a thin layer and, along a ray,
+// both rules of the quality tier in one table: the 6-node rule at 0..5 and the 4-node rule
+// at 6..9, selected by iv_atm_gl_first / iv_atm_gl_nodes below.
+const float ATM_GL_T[10] = {0.0337652, 0.1693953, 0.3806904, 0.6193096, 0.8306047, 0.9662348,
+		0.0694318, 0.3300095, 0.6699905, 0.9305682};
+const float ATM_GL_W[10] = {0.0856622, 0.1803808, 0.2339570, 0.2339570, 0.1803808, 0.0856622,
+		0.1739274, 0.3260726, 0.3260726, 0.1739274};
 const float ATM_SHELL_P[3] = {0.1127017, 0.5, 0.8872983};
 const float ATM_SHELL_W[3] = {0.2777778, 0.4444444, 0.2777778};
-// THE TRIP COUNTS ARE UNIFORMS, AND NEVER SET. They restate the table lengths above, which
-// every loop indexes, so any other value is wrong; what a uniform buys is a bound the GL
-// compiler cannot see. Handed a constant, it unrolls every quadrature and layer loop, inlines
-// the columns each node draws and then optimizes a body some hundred times this source:
-// 26 s to compile the limb shader on the Compatibility renderer, 4 s with the bounds opaque,
-// and the surface and cloud shaders 12 s to 4 s. Every Godot 4 GL target is GLSL ES 3.0 or
-// WebGL 2, where a dynamic trip count is ordinary.
-uniform int atm_gl6_nodes = 6;
+// THE TRIP COUNTS ARE UNIFORMS, AND A CONSTANT IS WHAT THEY MUST NEVER BE. Handed one, the GL
+// compiler unrolls every quadrature and layer loop, inlines the columns each node draws and
+// then optimizes a body some hundred times this source: 26 s to compile the limb shader on
+// the Compatibility renderer, 4 s with the bounds opaque, and the surface and cloud shaders
+// 12 s to 4 s. Every Godot 4 GL target is GLSL ES 3.0 or WebGL 2, where a dynamic trip count
+// is ordinary. atm_shell_nodes restates ATM_SHELL_P's length, so any other value is wrong and
+// nothing sets it. The two globals carry the user's Atmosphere Quality, which picks one of
+// the packed rules above and, with iv_atm_ring_max_taps, is the whole of the setting - one
+// program either way, so a tier change costs no compile. See *Atmospheres* in
+// PHOTOMETRIC_MODEL.md.
+global uniform int iv_atm_gl_first;
+global uniform int iv_atm_gl_nodes;
 uniform int atm_shell_nodes = 3;
 // F(delta) = int_0^inf u^-1/2 exp(-(u + delta)^2 / 2) du / sqrt(2 pi), the Abel transform of a
 // unit Gaussian, on delta = -6 .. 3 by 0.25 (a parabolic cylinder function; no closed form).
@@ -587,12 +596,13 @@ vec3 atm_ray_half(AtmLayers L, float R, float h, float z_floor, float a, float p
 	float tau_hi = open ? 1.0 : atm_erf(min(v_hi, 6.0));
 	float span = tau_hi - tau_lo;
 	if (span > 0.0) {
-		for (int k = 0; k < atm_gl6_nodes; k++) {
-			float v = atm_erfinv(tau_lo + span * ATM_GL6_T[k]);
+		int gl_last = iv_atm_gl_first + iv_atm_gl_nodes;
+		for (int k = iv_atm_gl_first; k < gl_last; k++) {
+			float v = atm_erfinv(tau_lo + span * ATM_GL_T[k]);
 			float z = h + L.H_ref * v * v;
 			float u = atm_chord(R, z, h);
 			float du_dv = u > 0.0 ? 2.0 * L.H_ref * v * (R + z) / u : sqrt(2.0 * r_t * L.H_ref);
-			float weight = 0.88622693 * ATM_GL6_W[k] * span * exp(v * v) * du_dv;
+			float weight = 0.88622693 * ATM_GL_W[k] * span * exp(v * v) * du_dv;
 			float mu_v = u / (R + z);
 			vec3 near_exp = atm_exp_column(L, R, z, mu_v);
 			vec3 view = sign_s > 0.0 ? near_exp : exp_total - near_exp;
@@ -699,9 +709,10 @@ void atm_ring(AtmLayers L, float R, float h, float qs, float sz, float sun_ang,
 // One sample per scale height across the window, capped. The count is what keeps the cost
 // where the need is, and the two move opposite ways: a close camera spreads the annulus over
 // many fragments but resolves the profile, so it takes one or two samples each; a distant one
-// needs the full set but has a rim of a few hundred fragments to pay it on. A uniform, never
-// set, for the reason atm_gl6_nodes gives: the loop it bounds wraps both ray halves.
-uniform int atm_ring_max_taps = 8;
+// needs the full set but has a rim of a few hundred fragments to pay it on. The cap is the
+// third value the user's Atmosphere Quality sets, and a uniform for the reason
+// iv_atm_gl_nodes gives: the loop it bounds wraps both ray halves.
+global uniform int iv_atm_ring_max_taps;
 // The reconstruction filter's width in pixels. A box one pixel wide is the pixel's own MEAN,
 // which is correct and still leaves the arc a one-pixel line — and a one-pixel line following a
 // shallow curve is a staircase, in runs as long as the curve stays within a row. Reconstructing
@@ -743,7 +754,7 @@ bool atm_ring_pixel(AtmLayers L, float R, float h, float footprint, float qs, fl
 	// One tap per scale height, and never coarser than one per pixel: close in, where the
 	// annulus spreads over many fragments, the profile is resolved and a couple of taps carry
 	// the filter; far out it takes the full set, on a rim of a few hundred fragments.
-	int taps = int(clamp(ceil(span / min(L.H_ref, footprint)), 1.0, float(atm_ring_max_taps)));
+	int taps = int(clamp(ceil(span / min(L.H_ref, footprint)), 1.0, float(iv_atm_ring_max_taps)));
 	float step = span / float(taps);
 	vec3 transmittance_sum = vec3(0.0);
 	float weight_sum = 0.0;
@@ -800,12 +811,13 @@ void atm_disc(AtmLayers L, float R, float mu, float mu0, float sz, float sun_ang
 		float t_lo = exp(-z_lit / L.H_ref);
 		float t_hi = open ? 0.0 : exp(-z_cap / L.H_ref);
 		float span = t_lo - t_hi;
-		for (int k = 0; k < atm_gl6_nodes; k++) {
-			float t = t_hi + span * ATM_GL6_T[k];
+		int gl_last = iv_atm_gl_first + iv_atm_gl_nodes;
+		for (int k = iv_atm_gl_first; k < gl_last; k++) {
+			float t = t_hi + span * ATM_GL_T[k];
 			float z = -L.H_ref * log(t);
 			float chord = atm_chord(R, z, h_v);
 			float u = chord - R * mu;
-			float weight = ATM_GL6_W[k] * span * (L.H_ref / t) * (R + z) / chord;
+			float weight = ATM_GL_W[k] * span * (L.H_ref / t) * (R + z) / chord;
 			float mu_v = (R * mu + u) / (R + z);
 			float mu_s = (R * mu0 + u * sz) / (R + z);
 			vec3 view = atm_exp_column(L, R, z, mu_v);

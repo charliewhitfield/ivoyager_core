@@ -82,6 +82,7 @@ var _defaults: Dictionary[StringName, Variant] = {
 	&"hide_hud_when_close" : true, # restart or load required
 	
 	# graphics/performance
+	&"atmosphere_quality" : 0, # 0,1 = normal,reduced; see IVGraphicsManager
 	&"msaa_3d" : 1, # 0,1,2,3 = disabled,2x,4x,8x (== Viewport.MSAA_*)
 	&"fxaa" : false, # not available in Compatibility renderer (incl. web)
 	&"use_taa" : false, # Forward+ only; ghosts vertex-shader-positioned orbit lines

@@ -235,7 +235,7 @@ float lunar_lambert_isotropic_response(vec3 macro_normal, vec3 view_dir, float e
 // limb_sky_side_incidence() fixes, so any other value is wrong; what a uniform buys is a bound
 // the GL compiler cannot see, and a loop it cannot unroll into sixteen inlined copies of
 // limb_cell_light() and its trig, inside shaders that are already large. Same reasoning and
-// same hazard as atm_gl6_nodes in _atmosphere.gdshaderinc, where the saving was measured;
+// same hazard as iv_atm_gl_nodes in _atmosphere.gdshaderinc, where the saving was measured;
 // here it is not.
 uniform int limb_kernel_cells = 16;
 // Half-width of the kernel in px. Three sigma would be 1.5 px; this is set by the size law

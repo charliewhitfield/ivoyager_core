@@ -977,6 +977,31 @@ Two float32 traps the include documents, both found as a black curve across Venu
 side: a literal below about 1e-14 compiles to zero in the shader language, and a valid but
 tiny float passes `> 0.0` yet comes out of the GPU's `log()` as −∞.
 
+#### Atmosphere quality, and what Reduced gives up
+
+The limb shell is 75–95 % of an integrated-GPU frame in any view with air
+([GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md)), which is why the user setting
+`atmosphere_quality` exists. Its two tiers are the same shader:
+
+- **Normal** — the six-node along-ray quadrature and up to eight ring taps described above.
+  This is the rule `limb_model.py` verifies, and the contract in the include binds it.
+- **Reduced** — a four-node rule and two ring taps. The quadrature is a valid
+  Gauss–Legendre rule of its own, packed into the same table, so it is a coarser evaluation
+  of the same model rather than a different one.
+
+What moves on screen is small and confined to the limb: at most 2 display codes on Earth and
+up to 15 on 0.4 % of Titan's pixels, 1.2–1.8 % of pixels past 2 codes. The surface and cloud
+shaders take the air in front of themselves through the same quadrature, so twilight and the
+sunset-reddened beam shift with it — that is where Earth's 2 codes are.
+
+`IVGraphicsManager` writes the tier as three shader globals, `iv_atm_gl_first`,
+`iv_atm_gl_nodes` and `iv_atm_ring_max_taps`. **Only their values differ between tiers, not
+the shader source**, so no program is recompiled and the change lands on the next frame —
+which is what lets this be a live setting on a renderer where a compile costs seconds
+([SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md)). A project whose
+`IVGraphicsManager` never writes them renders at Normal, those being the defaults the Core
+editor plugin puts in `project.godot`.
+
 ## The Sun
 
 The sun disc's surface brightness is derived from its absolute magnitude and radius
@@ -2048,6 +2073,7 @@ lever a capped pass cannot offer is one the shader does not need.
 |---|---|---|
 | `IVCoreSettings` | `enable_physical_light` | Instantiates the system (default false; zero cost off). Requires `dynamic_lights`. |
 | user options | `physical_light` | Runtime toggle (cached setting; Options row appears when enabled). |
+| | `atmosphere_quality` | Normal or Reduced, applied by `IVGraphicsManager` as the `iv_atm_*` globals. Reduced runs a 4-node along-ray quadrature and 2 ring taps; see *Atmospheres*. |
 | `IVExposureManager` | `background_peak_magnitude_per_arcsec2` | The absolute anchor (mag/arcsec² of a full-white panorama texel). |
 | | `metering_key` | Rendered value a fully metered surface lands at (mid-exposure target). |
 | | `meter_fraction_start` / `meter_fraction_full` | Screen-fraction ramp: when a body begins to influence metering / fully drives it. |

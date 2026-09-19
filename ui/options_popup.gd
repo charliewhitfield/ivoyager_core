@@ -117,6 +117,7 @@ extends PopupPanel
 		[&"LABEL_HIDE_HUDS_WHEN_CLOSE", &"hide_hud_when_close"],
 	],
 	LABEL_GRAPHICS_PERFORMANCE = [
+		[&"LABEL_ATMOSPHERE_QUALITY", &"atmosphere_quality"],
 		[&"LABEL_SHADOW_RESOLUTION", &"directional_shadow_size"],
 		[&"LABEL_MSAA", &"msaa_3d"],
 		[&"LABEL_FXAA", &"fxaa"],
@@ -132,6 +133,7 @@ extends PopupPanel
 @export var option_enumerations: Dictionary[StringName, Array] = {
 	language = [&"LanguageManager", &"language_settings"],
 	gui_size = [&"CoreSettings", &"gui_size_settings"],
+	atmosphere_quality = [&"GraphicsManager", &"atmosphere_quality_settings"],
 	msaa_3d = [&"GraphicsManager", &"msaa_settings"],
 	directional_shadow_size = [&"GraphicsManager", &"shadow_size_settings"],
 	screenshot_aspect = [&"ScreenshotManager", &"aspects"],
@@ -178,6 +180,7 @@ extends PopupPanel
 	small_bodies_symbol_size_percent = &"HINT_SMALL_BODIES_SYMBOL_SIZE_PERCENT",
 	small_bodies_point_size = &"HINT_SMALL_BODIES_POINT_SIZE",
 	hide_hud_when_close = &"HINT_HIDE_HUD_WHEN_CLOSE",
+	atmosphere_quality = &"HINT_ATMOSPHERE_QUALITY",
 	directional_shadow_size = &"HINT_DIRECTIONAL_SHADOW_SIZE",
 	msaa_3d = &"HINT_MSAA_3D",
 	fxaa = &"HINT_FXAA",
@@ -188,6 +191,7 @@ extends PopupPanel
 ## renderer runs, keyed the same way. See the class description for what Core's
 ## texts assume.
 @export var option_web_tooltips: Dictionary[StringName, StringName] = {
+	atmosphere_quality = &"HINT_WEB_ATMOSPHERE_QUALITY",
 	directional_shadow_size = &"HINT_WEB_DIRECTIONAL_SHADOW_SIZE",
 	msaa_3d = &"HINT_WEB_MSAA_3D",
 }

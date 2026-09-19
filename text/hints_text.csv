@@ -2,6 +2,7 @@ id,en
 HINT_ADD_HOTKEY,Add hotkey
 HINT_ALL_ASTEROIDS,Show all asteroids
 HINT_APPEND_DATE_TO_SAVE,Add the simulated date to new save file names
+HINT_ATMOSPHERE_QUALITY,"Detail of the scattering calculation that renders air on Earth,\nVenus, Mars and Titan. Reduced integrates each view ray at\nfewer points: no visible change beyond a slight shift in the\nthin band at the limb.\n\nGPU cost for desktop: MODERATE at Normal, close to a body with air"
 HINT_AUTOSAVE_TIME_MIN,"Minutes between autosaves, not counting time paused.\nSet to 0 to turn autosave off"
 HINT_BODY_SYMBOL_SIZE_PERCENT,"Size of body symbols in the 3D view, relative to GUI Size"
 HINT_CAMERA_KEY_IN_OUT_RATE,Speed of the keys that move the camera toward or away from its target
@@ -83,5 +84,6 @@ HINT_VIEW_OUTWARD,Look outward from current selection
 HINT_VIEW_TOP,View from top
 HINT_VIEW_ZOOM,View at close range
 HINT_VIS_ON_MO_CKBX,Uncheck for visibility\non mouse-over only
+HINT_WEB_ATMOSPHERE_QUALITY,"Detail of the scattering calculation that renders air on Earth,\nVenus, Mars and Titan. Reduced integrates each view ray at\nfewer points: no visible change beyond a slight shift in the\nthin band at the limb.\n\nGPU cost for web: HIGH at Normal, close to a body with air"
 HINT_WEB_DIRECTIONAL_SHADOW_SIZE,"Resolution of shadows cast by spacecraft and other objects\nnear the camera. Higher is sharper, but uses more video\nmemory (8192: 256 MB). Eclipse and ring shadows are\nnot affected.\n\nGPU cost for web: LOW"
 HINT_WEB_MSAA_3D,"Multisample antialiasing: smooths jagged edges on orbit\nlines, ring edges and spacecraft.\n\nGPU cost for web: MODERATE at 2x or 4x; HIGH at 8x"

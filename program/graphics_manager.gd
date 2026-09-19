@@ -20,22 +20,29 @@
 class_name IVGraphicsManager
 extends Node
 
-## Applies user graphics settings (antialiasing and directional shadow
-## resolution) to the rendering server and main window viewport, and publishes
-## the renderer's colour-space convention to shaders.
+## Applies user graphics settings (antialiasing, directional shadow resolution
+## and atmosphere quality) to the rendering server and main window viewport, and
+## publishes the renderer's colour-space convention to shaders.
 ##
-## Added by [IVCoreInitializer]. Settings [code]msaa_3d[/code], [code]fxaa[/code],
-## [code]use_taa[/code] and [code]directional_shadow_size[/code] are defined in
-## [IVSettingsManager] and exposed in [IVOptionsPopup]; this node applies them at
-## startup and re-applies them live on change. [member msaa_settings] and [member
-## shadow_size_settings] are the enumerations backing the MSAA and shadow dropdowns.
-## [br][br]
+## Added by [IVCoreInitializer]. Settings [code]atmosphere_quality[/code],
+## [code]msaa_3d[/code], [code]fxaa[/code], [code]use_taa[/code] and
+## [code]directional_shadow_size[/code] are defined in [IVSettingsManager] and
+## exposed in [IVOptionsPopup]; this node applies them at startup and re-applies
+## them live on change. [member atmosphere_quality_settings], [member
+## msaa_settings] and [member shadow_size_settings] are the enumerations backing
+## the three dropdowns.[br][br]
 ##
-## Renderer support differs: MSAA works in all renderers; FXAA is unavailable in
-## the Compatibility renderer (including web exports); TAA is Forward+ only; and
-## directional shadows on Compatibility depend on
+## Renderer support differs: MSAA and atmosphere quality work in all renderers;
+## FXAA is unavailable in the Compatibility renderer (including web exports); TAA
+## is Forward+ only; and directional shadows on Compatibility depend on
 ## [member IVCoreSettings.apply_gl_compatibility_shadows] (see [IVDynamicLight]).
 ## Unsupported settings are skipped here and hidden by [IVOptionsPopup].[br][br]
+##
+## Atmosphere quality writes the [code]iv_atm_*[/code] shader globals that
+## [code]shaders/_atmosphere.gdshaderinc[/code] reads. Both tiers are one shader
+## program, so the change costs no compile and takes effect on the next frame; see
+## [i]Atmospheres[/i] in [code]PHOTOMETRIC_MODEL.md[/code] for what Reduced gives
+## up and [code]GRAPHICS_PROFILING.md[/code] for what it buys back.[br][br]
 ##
 ## It also writes the [code]iv_display_encode[/code] shader global once at startup:
 ## the Compatibility renderer is display-referred at both ends of a shader — a
@@ -44,6 +51,15 @@ extends Node
 ## arithmetic in linear, and encode what it writes. Every colour-handling shader
 ## does so through [code]shaders/_display.gdshaderinc[/code]; see that file for
 ## what the global means and what it does not cover.
+
+## Enumeration backing the [code]atmosphere_quality[/code] dropdown in
+## [IVOptionsPopup]. Mapped to the quadrature rule and ring tap cap in [method
+## _apply_atmosphere_quality]. Insertion order must equal value order (the popup
+## uses the setting value as the dropdown item index).
+var atmosphere_quality_settings: Dictionary[StringName, int] = {
+	ATMOSPHERE_NORMAL = 0,
+	ATMOSPHERE_REDUCED = 1,
+}
 
 ## Enumeration backing the [code]msaa_3d[/code] dropdown in [IVOptionsPopup].
 ## Values match [enum Viewport.MSAA]. Insertion order must equal value order
@@ -73,10 +89,28 @@ func _ready() -> void:
 	# The renderer cannot change without a restart, so this is written once and never again.
 	RenderingServer.global_shader_parameter_set(&"iv_display_encode",
 			1.0 if IVGlobal.is_gl_compatibility else 0.0)
+	_apply_atmosphere_quality()
 	_apply_msaa()
 	_apply_fxaa()
 	_apply_taa()
 	_apply_shadow_size()
+
+
+func _apply_atmosphere_quality() -> void:
+	var setting: int = IVSettingsManager.get_setting(&"atmosphere_quality")
+	# The packed table in _atmosphere.gdshaderinc holds the 6-node rule at 0 and the 4-node
+	# rule at 6. Normal below is also where a stale cached index past the end lands.
+	var gl_first := 0
+	var gl_nodes := 6
+	var ring_max_taps := 8
+	match setting:
+		1:
+			gl_first = 6
+			gl_nodes = 4
+			ring_max_taps = 2
+	RenderingServer.global_shader_parameter_set(&"iv_atm_gl_first", gl_first)
+	RenderingServer.global_shader_parameter_set(&"iv_atm_gl_nodes", gl_nodes)
+	RenderingServer.global_shader_parameter_set(&"iv_atm_ring_max_taps", ring_max_taps)
 
 
 func _apply_msaa() -> void:
@@ -122,6 +156,8 @@ func _apply_shadow_size() -> void:
 
 func _settings_listener(setting: StringName, _value: Variant) -> void:
 	match setting:
+		&"atmosphere_quality":
+			_apply_atmosphere_quality()
 		&"msaa_3d":
 			_apply_msaa()
 		&"fxaa":

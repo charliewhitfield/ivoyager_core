@@ -123,7 +123,7 @@ Intel figures for the atmosphere views come from runs in the driver's normal sta
 
 | # | Option | Relief, Intel iGPU | Relief, GTX 1650 Ti | Visual cost | Verdict |
 |---|---|---|---|---|---|
-| 1 | **Atmosphere quality**: Full / Reduced / Off. Runtime shader swap, or restart. | Reduced -22 to -38%; Off -76 to -95% (atmosphere views) | The shell is 15-39% of the frame | Reduced: none visible. Up to 15 codes on 1-2% of pixels, confined to the limb band. Off: no air at all, and Titan loses its identity. | Add. Default to Reduced on integrated GPUs and the web. |
+| 1 | **Atmosphere quality**: Full / Reduced / Off. Runtime shader swap, or restart. | Reduced -22 to -38%; Off -76 to -95% (atmosphere views) | The shell is 15-39% of the frame | Reduced: none visible. Up to 15 codes on 1-2% of pixels, confined to the limb band. Off: no air at all, and Titan loses its identity. | Built as Normal / Reduced, and a runtime setting rather than a restart one (see *Addendum: the quality tiers, built*). Off is not built. |
 | 2 | **3D render scale**: 100 / 85 / 75 / 50%. Runtime. FSR 1 on Forward+. | 75%: -17 to -28%; 50%: -30 to -66% | 75%: -13 to -36%; 50%: -25 to -64% | Soft lines and HUD text. At 50%, orbit lines turn chunky, and the star field coarsens because star size follows render height. | Add. On a 2x hi-DPI web canvas, 50% simply restores 1x cost. |
 | 3 | **Renderer** (desktop): Auto / Forward+ / Compatibility. Restart. | Compatibility 1.4-8x faster than Forward+ | Mixed: Compatibility faster in 5 of 8 views | Compatibility loses mouse-over identification of orbit lines and asteroids, FXAA and TAA, and local shadow maps. The picture itself matches. | Add, with Auto choosing Compatibility on integrated GPUs. |
 | 4 | **Star catalogue depth**: all (V 15) / V 11 / V 9.5. Restart, or a 0.3-1.1 s rebuild. | V 11: -17 to -29%; V 9.5: -26 to -43% (star-heavy views) | V 11: -28 to -31%; V 9.5: -44 to -52% | None in lit-body views, where exposure hides faint stars. In dark-sky views, V 11 dims the diffuse star glow (about 7 codes over a third of the sky) and V 9.5 is visibly sparser. | Add as a restart option. It also saves memory and load time. |
@@ -163,9 +163,12 @@ clouds, and a 22-24 ms floor of stars, sky and HUD. On the GTX the shell is a mu
 Three knobs already in `_atmosphere.gdshaderinc` reduce the cost:
 
 - **A lower-order along-ray quadrature.** A padded 4- or 3-node Gauss-Legendre table is a valid
-  rule for both GL6 loops.
-- **A lower cap on the beyond-limb ring taps.** `atm_ring_max_taps` accepts any value.
+  rule for both GL loops.
+- **A lower cap on the beyond-limb ring taps.** `iv_atm_ring_max_taps` accepts any value.
 - **Dropping the detached layer.** `atm_layer_tau` = 0.
+
+The first two are what the built Reduced tier is; the third is not built (see *Addendum: the
+quality tiers, built*).
 
 Each was measured on the iGPU, with the screenshots diffed against the shipped render:
 
@@ -383,11 +386,16 @@ land on the option set, and this is where they come from:
 - **Atmosphere quality therefore earns a restart option rather than a runtime one.** A session
   then compiles only the tier it uses, and the warm-up covers it.
 
+**That second consequence applies only to an Off tier, and the built setting has none**, so it
+is a runtime one — see *Addendum: the quality tiers, built*. The first stands untouched: nothing
+in the built setting helps a machine that cannot compile the limb shader at all.
+
 
 ## A possible option set
 
 **Graphics**
 
+- Atmosphere quality: Normal / Reduced (built)
 - 3D render scale: 100 / 85 / 75 / 50%
 - Star field: Full / Reduced (no wing) / Minimal (no wing, no Milky Way)
 - Glow: on / off
@@ -399,7 +407,7 @@ land on the option set, and this is where they come from:
 **Graphics (requires restart)**
 
 - Renderer (desktop): Auto / Forward+ / Compatibility
-- Atmosphere quality: Full / Reduced / Off
+- Atmosphere Off (the tier that omits the limb shader, and the only one needing a restart)
 - Star catalogue: V 15 / V 11 / V 9.5
 - Cloud decks: on / off
 
@@ -742,3 +750,55 @@ configuration the app actually runs.
 **Not measured:** the flip's own cost, and whether Godot frees the depth atlas when the count
 returns to zero — which decides whether a re-enable is paid once per session or once per flip.
 Both belong in [SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md) when taken.
+
+
+## Addendum: the quality tiers, built
+
+Built into this plugin on 2026-09-19 as the user setting `atmosphere_quality`, with the report's
+first two knobs and **two tiers, not three**: Normal is the shipped rule, Reduced is the
+4-node quadrature and 2 ring taps of the row above. Off is not built — it is the tier that needs
+Venus, Titan and Mars re-levelled (*Addendum: the limb ring and surface twilight*), and the only
+one a restart would buy anything for.
+
+**It is a runtime setting, which this report did not expect.** *First load on the web* argues
+that atmosphere quality earns a restart option, and that argument is about Off alone: what an
+omitted tier saves is a compile, and a compile is what a session cannot pay twice. Normal and
+Reduced are the **same shader source** — one packed node table, and three `int` globals
+(`iv_atm_gl_first`, `iv_atm_gl_nodes`, `iv_atm_ring_max_taps`) selecting a rule out of it — so
+no program is compiled, no pipeline added and no specialization reached when the tier changes.
+Confirmed by A/B/A/B flips at Earth-fill with a forced draw and readback on each: 533, 590, 579
+and 594 ms, flat, where a limb-shader compile is seconds.
+
+**Normal is bit-identical to the shader it replaces.** Six poses at 1920x1080 with HUDs hidden,
+sim time and exposure frozen, diffed against the same poses built from the pre-change shader in
+the same session: **0 of 2,073,600 pixels** at Earth-fill, Earth at 3 radii, Venus, Mars and
+Titan, and 1 pixel by 1 code at backlit Titan.
+
+**What Reduced moves, and where.** Same poses, the tier flipped within one run:
+
+| View | Mean | p99 | Max | Pixels > 2 codes | > 8 codes | Radius of the change |
+|---|---:|---:|---:|---:|---:|---|
+| Earth fills the screen (1.6 radii) | 0.07 | 2 | 23 | 1.13 % | 0.36 % | 889-903 px of a 900 px disc |
+| Earth at 3 radii | 0.01 | 0 | 17 | 0.28 % | 0.02 % | 392-397 px |
+| Venus at 1.5 radii | 0.01 | 0 | 6 | 0.16 % | 0 | — |
+| Mars at 1.5 radii | 0.10 | 4 | 7 | 1.50 % | 0 | 994-1033 px |
+| Titan at 4.2 radii | 0.02 | 1 | 4 | 0.12 % | 0 | 213-227 px |
+| Titan backlit, 4.2 radii | 0.04 | 1 | 8 | 0.52 % | 0 | 178-258 px (the haze ring) |
+
+Every pixel past 2 codes lies in a band a few pixels wide at the limb; the disc interior does
+not move at all, and neither does anything beyond the band. That is the report's own "confined
+to the limb band", measured on the poses above rather than the report's.
+
+**Relief is not re-measured.** The -22 to -38 % in the table above is the 2026-09-10 iGPU
+figure, taken before the limb annulus. The annulus addendum argues the two stack — the
+annulus's remaining cost is the rim's own fragments, running the taps and the quadrature that
+Reduced cuts — so the share should now be larger, not smaller. Confirming that needs the
+`NvOptimusEnablement`-cleared executable copy described under *How this was measured*, and is
+outstanding along with the sphere ladder's and the exposure skips'.
+
+**One thing this measurement found that is not about the tiers.** Earth, alone of the four,
+does not render identically across two *processes*: about 1 code over its lit disc, tracing
+cloud and terrain detail, with zero mean bias. It reproduces exactly within a run (six poses, 0
+pixels, twice) and it is present with the **pre-change shader** as well, so it is neither this
+setting's nor the shader edit's. It sets the floor for any future cross-run A/B at Earth, and
+it is worth finding.
