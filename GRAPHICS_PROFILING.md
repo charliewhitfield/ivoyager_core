@@ -301,7 +301,8 @@ Only Forward+ in the Planetarium draws shadow maps, and they serve only spacecra
 shadows. Their cost is not small.
 
 - **Default 8192 on the iGPU:** about 20-25 ms a frame in views with no spacecraft anywhere near.
-  2048 saves 27-39% there.
+  2048 saves 27-39% there. Those frames need no map at all, and a skip that removes the passes
+  rather than shrinking them beats that figure (see *Addendum: the empty shadow passes*).
 - **16384:** a 1 GiB depth atlas at 32 bits. It costs +28% to +387% on the GTX, up to 49 ms a
   frame at the Sun view, and +18% to +88% on the iGPU.
 
@@ -349,7 +350,7 @@ These need no option. Each removes work whose result never reaches the screen.
 | **Skip the sky pass** when the panorama x exposure is below half a display code (done; see addendum) | Milky Way off changes zero pixels in every lit-body view | -10 to -17% (iGPU), -5 to -13% (GTX) in those views |
 | **Skip star bins** the current exposure renders below half a code; split the star mesh by bin (done; see addendum) | Cutting to V 11 changes zero pixels in lit-body views, yet stars cost 13-28% there | -13 to -28% in lit-body views |
 | **Sphere distance LOD** (done; see addendum) | 128x64 measured indistinguishable at >= 1.6 radii, but not closer; a body drew 65,536 triangles down to a 2.5 px radius | -10 to -27% |
-| **Forward+: skip shadow passes** when no local caster is in range | An empty 8192 atlas costs ~20-25 ms per iGPU frame | -27 to -39% (iGPU Forward+) |
+| **Skip shadow passes** when no local caster **or receiver** is in range (done; opt-in, see addendum) | An empty 8192 atlas costs ~20-25 ms per iGPU frame | Measured on the iGPU under Forward+: -39 to -46%, 27-30 ms a frame |
 | **Sunspot LOD** by disc size | Sunspots are 36% of a Sun close-up | Near the Sun only |
 
 **Small edits don't reliably pay on Intel.** Several of the shader-anatomy review's "exact"
@@ -419,7 +420,8 @@ or the web it would pick Compatibility, Reduced atmospheres, 75% scale on hi-DPI
 - **Estimates, not measurements.** The exposure skips are now built and verified for correctness,
   but their relief has so far been measured only on the GTX; the iGPU figures in *Free wins*
   remain bounds from proxies (see the addendum). The annulus's were too, and have since been
-  measured below their bound. The Mobile renderer was not tested, and no browser was
+  measured below their bound, and the empty shadow passes above theirs. The sphere LOD ladder's
+  iGPU relief is still outstanding. The Mobile renderer was not tested, and no browser was
   ([SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md), *The web export*).
 
 
@@ -685,3 +687,58 @@ A/B from 2026-09-10, not a measurement of the ladder. What it actually returns o
 under Compatibility — the web app's case, and the one the change exists for — is outstanding,
 and needs the `NvOptimusEnablement`-cleared executable copy described under *How this was
 measured*.
+
+
+## Addendum: the empty shadow passes
+
+Built into this plugin on 2026-09-19 and measured the same day: a shadow-mapped
+`IVDynamicLight` now clears `shadow_enabled` while nothing within its reach would draw into
+its map or read it, under the opt-in `IVCoreSettings.apply_empty_shadow_pass_skip` (*Local
+shadow maps* in [VISUAL_MODEL.md](VISUAL_MODEL.md)). The Planetarium turns it on, where it
+acts on desktop Forward+ only — that project ships `apply_gl_compatibility_shadows` false,
+so its web renderer has no maps to skip.
+
+**Both halves of the predicate earn their place.** A caster in reach is not enough: the map
+also needs a receiver in the light's own `light_cull_mask`. At the ISS, 90 m off the
+station, the near light stays on for the station's self-shadowing while the middle light
+retires, because nothing in the 0.1-100 km size domain is anywhere near. A caster-only test
+would have kept it.
+
+**Relief.** Intel UHD, Forward+, 1920x1080, sim paused, HUDs hidden, exposure frozen; the
+mechanism forced off and on within one app run, A/B/A/B, each figure the median of 15
+frames.
+
+| View | Maps configured | Passes skipped | Change |
+|---|---:|---:|---:|
+| Jupiter's moons | 66.5 / 70.4 ms | 40.3 / 40.7 ms | **-39 to -42%** |
+| Whole system, dark sky | 64.1 / 61.7 ms | 34.8 / 34.5 ms | **-44 to -46%** |
+
+The baselines reproduce this report's own table for those views (65.7 and 64.2 ms) to
+within a percent. The saving is 27-30 ms — **above** the -27 to -39% the *Free wins* row
+carried, which came from the 8192→2048 A/B: shrinking an atlas is not removing it. On the
+GTX 1650 Ti the same A/B at Earth 3 radii sat inside a ±15% baseline drift, which is the
+expected shape — *Addendum: more shadow and MSAA measurements* already had that GPU
+noticing nothing between 2048 and 8192.
+
+**No visible change, exactly.** At Earth 3 radii with both maps skipped, forced-off against
+forced-on differ by **0 of 2,073,600 pixels**, maximum 0 codes. Unlike the exposure skips,
+which are bounded at one code by a threshold argument, this one is exact by construction: a
+map with no caster and no receiver in reach contributes nothing at all. At the ISS, where
+the near light stays on either way, the render is likewise bit-identical across 1.0 M lit
+pixels.
+
+**The cost is a compile risk, not a frame-time one, and it is why this is opt-in.** A frame's
+shadowed-directional-light count is a shader specialization input for every lit instance, so
+with the skip on it takes 2, 1 or 0 instead of a constant 2, and each distinct value compiles
+its own programs for every lit shader — synchronously on the main thread under Compatibility
+([SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md), *The light configuration*). Flips
+are therefore made rare rather than merely correct: on is immediate, off waits 120 frames, and
+the enable and disable thresholds sit at 1.25 and 2.0 times the reach. Measured at Earth, the
+middle light's idle counter climbs to 120 and flips once, with no chatter under ordinary
+camera motion. `IVShaderWarmup` declares its own quads through
+`IVDynamicLight.add_local_shadow_geometry()` so that the warm-up keeps compiling the
+configuration the app actually runs.
+
+**Not measured:** the flip's own cost, and whether Godot frees the depth atlas when the count
+returns to zero — which decides whether a re-enable is paid once per session or once per flip.
+Both belong in [SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md) when taken.

@@ -206,6 +206,22 @@ var apply_analytic_shadows := true
 ## The analytic astronomical shadows ([member apply_analytic_shadows]) are
 ## independent of this and work either way.
 var apply_gl_compatibility_shadows := true
+## Lets each shadow-mapped [IVDynamicLight] switch its directional shadow map off while
+## nothing local would draw into it or read it. True stops an atlas that renders nothing
+## from being set up and cleared every frame - about 20-25 ms on a weak integrated GPU
+## under Forward+ (see [code]GRAPHICS_PROFILING.md[/code]), which is every view with no
+## spacecraft or local scene near the camera. False keeps the maps configured at all
+## times, and that is the only configuration a shader warm-up can cover completely: the
+## number of shadowed directional lights in a frame is a shader specialization input for
+## every lit instance, so each distinct number a session reaches compiles its own
+## programs for every lit shader - synchronously, and on the main thread, under the
+## Compatibility renderer (see [code]SHADER_COMPILE_PROFILING.md[/code]). The relief is
+## a Forward+ effect and the risk is a Compatibility one, which is why this is opt-in.
+## A body joins the decision by holding [constant IVGlobal.LOCAL_SHADOW_CASTER]; geometry
+## that is not an [IVBody] - a project's own level scene - must declare itself through
+## [method IVDynamicLight.add_local_shadow_geometry]. Inert where the light stack carries
+## no shadow maps (see [member apply_gl_compatibility_shadows]).
+var apply_empty_shadow_pass_skip := false
 ## Directory used (created if needed) for cache files. See [IVCacheHandler].
 var cache_dir := "user://cache"
 ## Enables float precisions in [IVTableData]. This is used by Planetarium to
@@ -295,6 +311,15 @@ func assert_valid_settings() -> void:
 	assert(stroboscope_frames_per_second >= 0.0)
 	assert(farwarp_start_ratio > 0.0)
 	assert(symbol_atlas_columns > 0 and symbol_atlas_rows > 0)
+
+
+## Number of size domains [member size_layers] defines; 1 when
+## [member apply_size_layers] == false. Domain [code]i[/code] is layer bit
+## [code]1 << i[/code]. See [method get_visualinstance3d_layer_for_size].
+func get_size_domain_count() -> int:
+	if not apply_size_layers:
+		return 1
+	return size_layers.size() + 1
 
 
 ## Return is the appropriate layer mask for [param mean_radius] specified

@@ -83,6 +83,8 @@ func _init(body_name: StringName, mean_radius: float, triaxial_size: Vector3) ->
 
 func _ready() -> void:
 	add_child(_model)
+	if _local_shadow_caster: # the static grant; a dynamic one arrives via the setter below
+		_add_local_shadow_geometry()
 
 
 func is_local_shadow_caster() -> bool:
@@ -141,6 +143,18 @@ func set_local_shadow_caster(on: bool) -> void:
 		return
 	_local_shadow_caster = on
 	_set_local_shadow_caster_recursive(self, on)
+	# The grant is the one place this state changes, which is what lets IVDynamicLight keep
+	# a registry of local-scene participants instead of sweeping bodies for them.
+	if on:
+		_add_local_shadow_geometry()
+	else:
+		IVDynamicLight.remove_local_shadow_geometry(self)
+
+
+func _add_local_shadow_geometry() -> void:
+	var visual_layers := IVCoreSettings.get_visualinstance3d_layer_for_size(_m_radius)
+	IVDynamicLight.add_local_shadow_geometry(self,
+			visual_layers | IVGlobal.LOCAL_SHADOW_CASTER, _m_radius)
 
 
 func _set_local_shadow_caster_recursive(node3d: Node3D, on: bool) -> void:

@@ -473,11 +473,54 @@ Two rules keep the maps honest across the warp boundary:
   `IVGlobal.LOCAL_SHADOW_CASTER` layer bit (0b1_0000_0000, the near/middle rows'
   `shadow_caster_mask`). Craft-scale bodies hold it statically; larger bodies are granted
   it per frame only while closer than both `farwarp_start` and
-  `IVCoreSettings.local_shadow_caster_ceiling` (1e5 km — which must cover the largest
-  shadowed `shadow_max_ceiling` in the table; they are equal today, a coupling held by
-  convention). The ceiling keeps sunward planets at astronomical distances from being
-  extruded into the maps. A shell that builds after a dynamic grant adopts its ancestor
-  visual's current state, since the grant recursion is change-gated.
+  `IVCoreSettings.local_shadow_caster_ceiling` (1e5 km). The ceiling keeps sunward planets
+  at astronomical distances from being extruded into the maps. A shell that builds after a
+  dynamic grant adopts its ancestor visual's current state, since the grant recursion is
+  change-gated.
+
+The ceiling and the largest shadowed `shadow_max_ceiling` are equal today, and the
+guarantee that buys is that **anything a shadowed light can reach is already granted**:
+every reach is clamped by both its own ceiling and `farwarp_start`, and the grant by
+`local_shadow_caster_ceiling` and that same `farwarp_start`. The empty-pass skip below
+rests on it, so `IVDynamicLight` now asserts it at construction rather than leaving it to
+convention. What equality does not quite buy is exactness, because the grant compares a
+body's **centre** distance where a reach bounds a **view** distance; the residual is a
+receiver whose centre sits just past the grant while its surface is just inside reach,
+bounded by that body's own radius (≤ 100 km for the only domain it can happen in, against
+reaches of 1e3–1e5 km) and so landing inside the outer fifth that
+`directional_shadow_fade_start` has already faded away.
+
+**A map with no work is switched off.** Under
+`IVCoreSettings.apply_empty_shadow_pass_skip` (opt-in) a shadowed light clears
+`shadow_enabled` while, within its reach, either nothing holds `LOCAL_SHADOW_CASTER` — so
+nothing would be drawn into the map — or nothing sits in a size domain its
+`light_cull_mask` selects, so nothing would read it. Both halves are needed: at an Earth
+close-up the planet holds the caster bit, and only the receiver half retires the middle
+light. Eight atlas splits are otherwise set up and cleared every frame regardless; removing
+them is worth 27–30 ms of an integrated-GPU Forward+ frame
+([GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md), *Addendum: the empty shadow passes*).
+Four properties make it safe:
+
+- **What can take part is registered, not searched for.** An `IVBodyVisual` declares itself
+  to `IVDynamicLight` whenever it holds the caster bit and drops out when it loses it —
+  which the grant already change-gates, so the registry costs nothing per frame and a light
+  reads a set of at most a handful rather than sweeping every body. A project's own level
+  scene joins the same registry through `IVDynamicLight.add_local_shadow_geometry()`,
+  declaring the `layers` it carries so the receiver half is exact for it too. Nothing about
+  this lives outside the lighting classes.
+- **Distances are measured to the near surface**, not the centre. On the lunar surface the
+  Moon's centre is 1737 km away where the near light's whole reach is under a kilometre, so
+  a centre test would switch off the very map this section exists for.
+- **On is immediate, off waits** `IVDynamicLight.SHADOW_DISABLE_DELAY_FRAMES`: a missing
+  shadow is a defect where an idle pass is only a cost, and every flip changes the frame's
+  shadowed-light count, which is a shader specialization input for every lit instance
+  ([SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md), *The light configuration*) —
+  the reason this is opt-in rather than automatic. The transition itself is free, because
+  Godot's `directional_shadow_fade_start` (0.8) has already faded to nothing whatever is
+  crossing the boundary.
+- **A hidden participant is skipped.** A body the distance cull or `IVSleepManager` has
+  hidden draws into no map and reads none, and `is_visible_in_tree()` says so at the moment
+  the light asks — so a slept spacecraft cannot hold the near light open.
 
 Under the Compatibility renderer the stack degrades to a single unshadowed light unless
 `IVCoreSettings.apply_gl_compatibility_shadows` (default true) re-enables the multi-light
@@ -851,6 +894,7 @@ this is the spatial one.
 | Origin shift, farwarp, depth range | identical | identical |
 | Analytic occlusion | `AO` + `AO_LIGHT_AFFECT` on the engine's PBR path | `compat_albedo_shadow`: albedo multiply, √ into SPECULAR |
 | Local shadow maps | multi-light stack | same, iff `apply_gl_compatibility_shadows` (default true; re-test the historical defects on a new target) — else one unshadowed light |
+| Empty-pass skip | renderer-neutral: it keys on whether a light has a map, not on the renderer | same — but here the flip recompiles, which is why it is opt-in (*Local shadow maps*) |
 | Body mouse targeting | CPU, identical | identical |
 | Line/point picking | compute probe at `POST_TRANSPARENT` | **absent** (no RenderingDevice); producers fall back to plain materials |
 | GPU Kepler points | identical | identical (solver unrolled for old GL compilers) |
@@ -867,6 +911,8 @@ this is the spatial one.
 | | `apply_gl_compatibility_shadows` | Shadowed multi-light stack on the Compatibility renderer (vs. one unshadowed light). Off, a lit shader compiles one GL program instead of four; see [SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md). |
 | | `apply_size_layers` / `size_layers` | Layer bits by body radius — the lighting size domains ([100 km, 0.1 km] → three domains). |
 | | `local_shadow_caster_ceiling` | Dynamic `LOCAL_SHADOW_CASTER` grant range (1e5 km; must cover the largest shadowed `shadow_max_ceiling` in `dynamic_lights.tsv`). |
+| | `apply_empty_shadow_pass_skip` | Opt-in: a shadowed light clears `shadow_enabled` while nothing in reach would draw into its map or read it (*Local shadow maps*). |
+| `IVDynamicLight` | `SHADOW_ENABLE_REACH_RATIO` / `SHADOW_DISABLE_REACH_RATIO` / `SHADOW_DISABLE_DELAY_FRAMES` (constants, 1.25 / 2.0 / 120) | Flip suppression for the skip above. Asymmetric on purpose: on is immediate, off waits. |
 | | `radius_multiplier_visibility_range_end` | Distance cull in body radii (4000 ≈ 0.6 px angular diameter). |
 | | `max_camera_distance` | Camera range limit; also sizes every always-pass `custom_aabb`. |
 | | `plane_mesh_subdivisions` | Ring mesh subdivision, enough for per-vertex farwarp across the ring span. |

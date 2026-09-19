@@ -110,6 +110,7 @@ var warm_radii: Array[float] = [1e4 * IVUnits.KM, 0.01 * IVUnits.KM]
 var _running := false
 var _quads: Array[MeshInstance3D] = []
 var _temporary_rig: Node3D
+var _shadow_geometry_camera: Camera3D
 
 
 func _ready() -> void:
@@ -144,6 +145,15 @@ func _run() -> void:
 	var camera := get_viewport().get_camera_3d()
 	if !camera:
 		camera = _add_temporary_rig()
+	# The quads are the only geometry a warm-up frame has, and they are not bodies, so the
+	# sweep behind IVCoreSettings.apply_empty_shadow_pass_skip cannot see them: a light
+	# whose domain they leave empty would switch its map off and the remaining shaders would
+	# compile a shadowed-light count the app never runs. Declaring them keeps the whole
+	# stack live. Distance is the quads' own, since _add_quad parents them to the camera.
+	_shadow_geometry_camera = camera
+	var all_size_domains := (1 << IVCoreSettings.get_size_domain_count()) - 1
+	IVDynamicLight.add_local_shadow_geometry(camera,
+			all_size_domains | IVGlobal.LOCAL_SHADOW_CASTER)
 	if !shader_names.is_empty():
 		var layers := _get_layers()
 		var count := shader_names.size()
@@ -334,6 +344,9 @@ func _free_added_nodes() -> void:
 		if is_instance_valid(quad):
 			quad.queue_free()
 	_quads.clear()
+	if is_instance_valid(_shadow_geometry_camera):
+		IVDynamicLight.remove_local_shadow_geometry(_shadow_geometry_camera)
+	_shadow_geometry_camera = null
 	if is_instance_valid(_temporary_rig):
 		_temporary_rig.queue_free()
 	_temporary_rig = null

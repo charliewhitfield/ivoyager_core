@@ -224,6 +224,33 @@ What the fallback costs is local shadow maps -- spacecraft self-shadowing, and c
 shadowing a lander. The analytic astronomical shadows (rings, eclipses, transits, and the
 camera-fraction dimming that carries them onto craft) are independent and work either way.
 
+### `directional_shadow_count` stops being a constant
+
+Everything above assumes that count is fixed for a session. `IVCoreSettings.apply_empty_shadow_pass_skip`
+(opt-in; *Local shadow maps* in [VISUAL_MODEL.md](VISUAL_MODEL.md)) breaks that assumption: a
+shadowed light clears `shadow_enabled` while nothing in its reach would draw into its map or read
+it, so with shadows on the count takes **2, 1 or 0** instead of a constant 2. It is a fact about
+the frame, not about the instance, so each distinct value is its own program set for **every lit
+shader** -- compiled synchronously, on the main thread, on the first frame that reaches it. A
+warm-up can only ever cover the configuration it is run in. **That, not frame time, is why the
+skip is opt-in**, and why a Compatibility project should weigh it: it moves compile work from "all
+of it under the boot screen" to "some of it in flight". The relief it buys is a Forward+ effect
+(27-30 ms an iGPU frame; *Addendum: the empty shadow passes* in
+[GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md)) and the risk here is a Compatibility one.
+
+Four things hold it down. The setting is off by default. A project on the single-light fallback has
+no shadowed lights, so it is inert there -- which is the [Planetarium](https://github.com/ivoyager/planetarium)'s
+case on the web, and why that project can turn it on. Flips are made rare rather than merely
+correct: on is immediate, off waits 120 frames, and the enable and disable thresholds sit at 1.25
+and 2.0 times the reach. And the warm-up declares its own quads (below) so that it still compiles
+the count the app runs. Where a project measures the stalls anyway, the lever is to couple the two
+shadowed lights into one decision, taking the reachable counts from three to two at the cost of
+the receiver half of the predicate.
+
+The second side effect above becomes a question rather than a saving: if Godot frees the depth
+atlas when the count returns to zero, a re-enable pays that allocation again per flip rather than
+once per session. Not measured -- and the long disable delay is the hedge against it.
+
 
 ## The warm-up
 
@@ -293,7 +320,19 @@ rather than a compile.
 Neither radius lands in the middle domain (`0b0010`, 0.1-100 km), so with shadows on the middle
 light's additive specialization is never warmed and is paid on the first visit to a small moon.
 That is a real gap in the coverage -- closable by adding a radius between the two -- but it does
-not explain the residual stalls below: Titan and Mars are both `0b0001` bodies.
+not explain the residual stalls below: Titan and Mars are both `0b0001` bodies. The gap is worth
+more attention once `apply_empty_shadow_pass_skip` is on, since the middle light is then the one
+most likely to flip.
+
+The quads are also the reason the warm-up declares itself to that skip. They are not bodies, so
+nothing registers them with it; a light whose size domain they leave empty would switch its map
+off partway through and the remaining shaders would compile a shadowed-light count the app never
+runs -- a silent loss of coverage, not an error. `IVShaderWarmup` therefore registers the camera
+its quads hang from through `IVDynamicLight.add_local_shadow_geometry()`,
+with every domain bit and the caster bit, and removes it with the quads. Warming *all* the
+reachable counts instead is not the answer: the warm-up cannot know which ones a session will
+reach, that depends on the project's scene and the user's camera, and it would multiply a phase
+that already costs 11 s here to pre-pay stalls most projects never take.
 
 What a cold start costs on this GPU under the default trigger, both caches emptied (2026-09-03):
 
