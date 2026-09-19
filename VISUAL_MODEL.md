@@ -294,6 +294,43 @@ Three obligations fall on every farwarp consumer:
   annulus is cut into rows (`limb_annulus_rows`) for a variant of the same problem: its
   fragment stage reads the view ray from an interpolated true position, which drifts off
   the pixel's ray across a triangle whose corners are compressed by different factors.
+  The sphere's LOD ladder below does not fight this obligation: a body only takes a
+  coarser rung once it subtends little, and a body that subtends little spans a small
+  fraction of its own distance, which is where g() is closest to linear across it.
+
+### The sphere LOD ladder
+
+A body with no mesh of its own draws the shared sphere, and one sphere cannot serve both
+ends of the range: at 1.5 radii it is a resolved disc whose silhouette must not show
+facets, and at a few hundred radii it is a handful of pixels. `IVShellsModel` therefore
+picks a rung per frame from meshes built by `IVResourceInitializer` — `max_sphere_resolution`
+halved down to a floor of 16, with rings always half the segments.
+
+The rule is one number. A facet's chord sags inside the true sphere by
+`radius x (1 - cos(PI / segments))`, fixed in world units, so a rung serves every body whose
+on-screen radius keeps that sag within a budget of 0.15 px — the error the finest rung gives a
+screen-filling disc, where it measured indistinguishable. Each rung therefore covers a 4x range
+of on-screen size (1992, 498, 125, 31 and 7.8 px), and a body crossing back to a coarser rung
+must fall 20 % inside it, which is slack against jitter rather than a tuned crossover. Below
+that the `IVBodyPSF` handoff has already taken over at 1-2.5 px.
+
+What it buys is at the far end: before the ladder a body drew 65,536 triangles down to a
+2.5-pixel radius, dozens of bodies at a time in the system-wide views. What it protects is
+the near end — a close body keeps the finest rung, and the closest views in the app are
+closer than any the measurements covered (*Sphere mesh detail* in
+[GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md)).
+
+Two obligations fall on it, both discharged rather than assumed:
+
+- **A mesh swap must not drop the farwarp obligations above.** Verified on Godot 4.7.2: an
+  instance keeps its `custom_aabb`, its `sorting_use_aabb_center` and its surface override
+  material across an assignment to `mesh`.
+- **The rung is decided in pixels, on the CPU, and one `MeshInstance3D` has one mesh for
+  every viewport it draws into.** `IVScreenshotManager` renders these same nodes at a size of
+  its own, so the ladder takes the greater of the live viewport's render height and the height
+  a capture has registered (`IVShellsModel.capture_render_height`) — the same handshake
+  `IVStarsVisual` uses for its bin cull. Rungs are monotone in that height, so the answer can
+  be too fine but never too coarse.
 
 What deliberately does **not** ride farwarp: anything that computes from true positions.
 Occlusion (below), exposure metering, and mouse targeting all read true geometry — which
@@ -833,6 +870,7 @@ this is the spatial one.
 | | `radius_multiplier_visibility_range_end` | Distance cull in body radii (4000 ≈ 0.6 px angular diameter). |
 | | `max_camera_distance` | Camera range limit; also sizes every always-pass `custom_aabb`. |
 | | `plane_mesh_subdivisions` | Ring mesh subdivision, enough for per-vertex farwarp across the ring span. |
+| | `max_sphere_resolution` | Radial segments of the finest shared sphere (256) — the top of the LOD ladder, and the annulus's azimuth steps. Rings are half it at every rung. |
 | | `vertecies_per_orbit` / `vertecies_per_trajectory_segment` | State-path knots (500): smoothness base for the rebased line; the pin owns trueness. |
 | | `vertecies_per_conic_mesh` / `vertecies_per_orbit_low_res` | Shared unit conic (4096) for coarse body orbits; low-res loop (100) for SBG orbit lines. |
 | | `stroboscope_frames_per_second` (+ blur settings) | Artificial stable stroboscope for fast rotators at high time speed (0 = off). |

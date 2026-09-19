@@ -148,14 +148,16 @@ const float ATM_EDGE_FADE = 3.0;
 // The disc-air handoff band, as a fraction of the disc radius inside the silhouette. The
 // disc's air is composited by the disc's own shaders (atm_disc_air) — except at the very
 // silhouette, where no disc fragment is guaranteed to exist: every mesh is a polyhedron
-// whose silhouette sits up to its facet sagitta INSIDE the true sphere (7.5e-5 R at the
-// stock 256 segments), and the surface, deck and limb meshes each interpolate their own
-// copy of the ray, so a hard partition at b = R leaves a dotted arc of pixels that no
-// branch owns (measured: ~270 per view, up to 77 codes dark). Over this band the veil
-// hands from the disc shaders to the limb shell by complementary smoothstep weights, so
-// the sum is exact wherever both draw and the shell alone covers the sliver the disc
-// meshes miss; the seam error is bounded by sagitta / band, ~1.5 % of the veil at stock
-// segments and still ~12 % for a project at 64.
+// whose silhouette sits up to its facet sagitta INSIDE the true sphere (7.5e-5 R at 256
+// segments, the finest rung of the ladder IVShellsModel selects a body's sphere from), and
+// the surface, deck and limb meshes each interpolate their own copy of the ray, so a hard
+// partition at b = R leaves a dotted arc of pixels that no branch owns (measured: ~270 per
+// view, up to 77 codes dark). Over this band the veil hands from the disc shaders to the
+// limb shell by complementary smoothstep weights, so the sum is exact wherever both draw
+// and the shell alone covers the sliver the disc meshes miss; the seam error is bounded by
+// sagitta / band, ~1.5 % of the veil at the finest rung. A coarser rung raises that
+// fraction, but the ladder takes one only as a body shrinks on screen, and this band -- 1 %
+// of the disc radius -- goes sub-pixel with it, so what the fraction is of stops resolving.
 const float ATM_RIM_HANDOFF = 0.01;
 const float ATM_FAR_GATE_TAU = 30.0;  // chord extinction at which a ray's far half is dropped
 // Sigmas above a Gaussian layer's centre at which its column is treated as the exact zero it

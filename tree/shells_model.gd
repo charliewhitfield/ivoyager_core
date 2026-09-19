@@ -111,6 +111,14 @@ const PROPERTY_FEATURES := {
 
 const _SUN_DISC_BRIGHTNESS := 3.0 # nonphysical disc level; physical light derives it instead
 
+# The silhouette error the sphere ladder holds: at its rung's largest on-screen size, a facet's
+# chord sags this far inside the true sphere. 0.15 px is what the shipped finest rung gives a
+# screen-filling disc, where it measured indistinguishable.
+const _SPHERE_LOD_SAGITTA_PX := 0.15
+# How far inside a coarser rung's range a body must fall before that rung is taken. Rung ceilings
+# are 4x apart, so this is slack against jitter rather than a tuned crossover.
+const _SPHERE_LOD_HYSTERESIS := 0.8
+
 
 ## Registry of 'process' methods, keyed by the name used in a shells.tsv
 ## 'process' field. Each [Callable] runs on the shell every frame as
@@ -124,10 +132,24 @@ static var process_methods: Dictionary[StringName, Callable] = {}
 ## the mesh for the light). Register entries in [method _static_init] or from project code.
 static var shader_meshes: Dictionary[StringName, StringName] = {}
 
+## Render height an off-screen capture is about to use, or 0.0 for none. The shared sphere's LOD
+## ladder sizes a body in pixels, and one [MeshInstance3D] has one mesh for every viewport it
+## draws into, so a capture taller than the window would otherwise take the window's rung and
+## render a coarser silhouette than it has pixels for: [IVScreenshotManager] registers its render
+## height here, waits a frame, captures and clears it. The ladder takes the greater of this and
+## the live viewport, so a stale value can only hold a rung finer than needed, never coarser.
+## [IVStarsVisual] keeps the counterpart of this for its magnitude-bin cull.
+static var capture_render_height := 0.0
+
 # Debug-only caches for the per-shell override asserts in _build_material; built
 # lazily and kept for the session. Unused unless OS.is_debug_build().
 static var _material_property_names: Dictionary[StringName, bool] = {}
 static var _shader_uniform_names: Dictionary = {} # Shader -> Dictionary[StringName, bool]
+
+# The shared sphere ladder, resolved once on the first shell that draws one. Not in
+# _static_init(): a preinitializer may still be editing IVCoreSettings when this class loads.
+static var _sphere_lod_meshes: Array[Mesh] = []
+static var _sphere_lod_ceilings: PackedFloat64Array = [] # max pixel radius each rung may serve
 
 var _shell: int # 0 is the surface and orchestrator; 1..N are child shells
 var _body_name: StringName
@@ -135,6 +157,7 @@ var _mean_radius: float
 var _process_callable: Callable
 var _body: IVBody # owning body, for its true (un-farwarped) position and its published handoff
 var _applies_psf: bool # this body draws an IVBodyPSF, so this shell fades at the handoff
+var _sphere_lod_rung := -1 # index into the shared sphere ladder; -1 if this shell draws its own
 var _disc_material: ShaderMaterial # the shell's own material, LOD-driven each frame
 var _is_sun: bool # sun-mode (shell 0 with is_sun); see the disc LOD section
 var _sun_bv := 0.63 # sun-mode: cached B-V (disc color); fallback if the characteristic is missing
@@ -179,7 +202,13 @@ func _init(body_name: StringName, mean_radius: float, model_basis: Basis,
 	transform.basis = model_basis
 	# shell 0 may replace the shared sphere with the body's own mesh, or its surface class's;
 	# an overlay, with the mesh its shader places itself (shader_meshes)
-	mesh = mesh_override if mesh_override else IVGlobal.resources[&"sphere_mesh"] as Mesh
+	if mesh_override:
+		mesh = mesh_override
+		return
+	_build_sphere_lod_ladder()
+	# The finest rung until a frame has measured the body; a still preview never gets one.
+	_sphere_lod_rung = 0
+	mesh = _sphere_lod_meshes[0]
 
 
 func _ready() -> void:
@@ -207,6 +236,8 @@ func _ready() -> void:
 	_set_visibility_and_layers()
 	_resolve_process(process_method, process_args)
 	_enter_disc_lod()
+	if _sphere_lod_rung >= 0:
+		set_process(true)
 	if _is_sun:
 		_enter_sun_mode()
 	if _shell == 0:
@@ -218,15 +249,16 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _process_callable.is_valid():
 		_process_callable.call(self, delta)
-	if _applies_psf:
-		_process_disc_lod()
+	if _applies_psf or _sphere_lod_rung >= 0:
+		_process_size_lod()
 	if _is_sun:
 		_process_sun_physical_light()
 
 
 
 # *****************************************************************************
-# disc LOD (a body that draws an IVBodyPSF), and sun-mode within it
+# size LOD -- the disc/point crossfade (a body that draws an IVBodyPSF), the shared sphere's
+# mesh ladder, and sun-mode within the first
 
 # A body spans many decades of viewing distance: near, it is a resolved sphere (this model's
 # disc); far, it shrinks below a pixel and must become a point on the same photometric
@@ -249,10 +281,25 @@ func _process(delta: float) -> void:
 # fade, and does.
 #
 # Either way it happens in the shaders, which resolve the threshold against their own
-# VIEWPORT_SIZE; only what distance alone determines is set here (angular size). Nothing
-# viewport-dependent is on this side on purpose -- a CPU answer could only ever suit the
-# viewport this node lives in, and would leak that into an off-screen capture rendered at
-# another size.
+# VIEWPORT_SIZE; only what distance alone determines is set here (angular size). A per-fragment
+# threshold the shader can resolve exactly is never restated on this side, because a CPU copy
+# could only suit the viewport this node lives in, and an off-screen capture rendered at another
+# size would then get the wrong answer -- IVScreenshotManager draws these same nodes at a size of
+# its own.
+#
+# THE MESH LADDER is the one size decision that cannot be a shader's, since no shader swaps a
+# mesh. It discharges the same hazard the way IVStarsVisual's bin cull already does, that being
+# the same problem: it takes the GREATER of the live viewport's render height and the height a
+# capture has registered (capture_render_height), and its rungs are monotone in that height. So
+# the answer can be too fine but never too coarse, and a capture gets the rung its own pixels
+# earn. A rung is chosen per frame, so nothing here outlives the viewport it was decided for.
+#
+# WHAT THE LADDER TRADES. A sphere's facet chord sags inside the true sphere by its sagitta,
+# fixed in world units; what a view changes is how many pixels that buys. Each rung holds the
+# same sub-pixel silhouette error over a 4x range of on-screen size, so a body keeps a smooth
+# limb while a distant one stops drawing tens of thousands of triangles into a few pixels. The
+# measured basis, and the close-range views that set the finest rung, are in *Sphere mesh detail*
+# in GRAPHICS_PROFILING.md.
 #
 # SUN-MODE (shell 0 with is_sun) adds what only a star needs on this side: the disc holds a
 # constant surface brightness, derived from the star's own luminosity under physical light,
@@ -298,8 +345,8 @@ func _enter_sun_mode() -> void:
 	set_process(true)
 
 
-func _process_disc_lod() -> void:
-	if !_disc_material:
+func _process_size_lod() -> void:
+	if !_body:
 		return
 	var viewport := get_viewport()
 	if !viewport:
@@ -314,10 +361,65 @@ func _process_disc_lod() -> void:
 		return
 	# The body's mean radius, not this shell's scaled one: the whole body fades as one thing,
 	# and a deck 0.16 % out would otherwise cross the ramp at a slightly different distance.
-	_disc_material.set_shader_parameter(&"angular_radius", _mean_radius / camera_distance)
+	var angular_radius := _mean_radius / camera_distance
+	if _applies_psf:
+		_apply_disc_lod(angular_radius)
+	if _sphere_lod_rung >= 0:
+		_apply_sphere_lod(angular_radius, camera, viewport)
+
+
+func _apply_disc_lod(angular_radius: float) -> void:
+	if !_disc_material:
+		return
+	_disc_material.set_shader_parameter(&"angular_radius", angular_radius)
 	var handoff := _body.psf_handoff
 	_disc_material.set_shader_parameter(&"handoff_low", handoff.x)
 	_disc_material.set_shader_parameter(&"handoff_high", handoff.y)
+
+
+func _apply_sphere_lod(angular_radius: float, camera: Camera3D, viewport: Viewport) -> void:
+	# 3D render scale included: at 50 % a body covers half the pixels and earns half the mesh.
+	var render_height := maxf(viewport.get_visible_rect().size.y * viewport.scaling_3d_scale,
+			capture_render_height)
+	# The projection's own scale rather than a fov, so a KEEP_WIDTH camera needs no special case;
+	# this is the CPU side of the atmosphere_limb vertex shader's proj_11 * VIEWPORT_SIZE.y.
+	var projection := camera.get_camera_projection()
+	var pixel_radius := angular_radius * 0.5 * render_height * projection.y.y
+	var rung := _select_sphere_lod_rung(pixel_radius)
+	if rung == _sphere_lod_rung:
+		return
+	_sphere_lod_rung = rung
+	# Verified to carry the farwarp obligations and the material across: an instance keeps its
+	# custom_aabb, its sorting_use_aabb_center and its surface override, and every rung shares one
+	# vertex format, so Forward+ reuses the warm-up's pipeline and no rung compiles anything.
+	mesh = _sphere_lod_meshes[rung]
+
+
+# The coarsest rung whose silhouette error still meets the budget at this on-screen size. Taking
+# a rung coarser than the one in force demands extra margin, so a body sitting on a boundary
+# keeps the mesh it has; going finer is the safe direction and is never held back.
+func _select_sphere_lod_rung(pixel_radius: float) -> int:
+	var rung := _sphere_lod_ceilings.size() - 1
+	while rung > 0:
+		var ceiling := _sphere_lod_ceilings[rung]
+		if rung > _sphere_lod_rung:
+			ceiling *= _SPHERE_LOD_HYSTERESIS
+		if pixel_radius <= ceiling:
+			return rung
+		rung -= 1
+	return 0
+
+
+# A rung serves every body whose on-screen radius keeps its facet sagitta within the budget:
+# sagitta = radius * (1 - cos(PI / resolution)), so the ceiling is that inverted.
+static func _build_sphere_lod_ladder() -> void:
+	if !_sphere_lod_meshes.is_empty():
+		return
+	for resolution in IVResourceInitializer.get_sphere_lod_resolutions():
+		var lod_mesh: Mesh = IVGlobal.resources[IVResourceInitializer.get_sphere_mesh_key(
+				resolution)]
+		_sphere_lod_meshes.append(lod_mesh)
+		_sphere_lod_ceilings.append(_SPHERE_LOD_SAGITTA_PX / (1.0 - cos(PI / resolution)))
 
 
 # Keeps a star disc's brightness in step with IVExposureManager. Change-gated
@@ -735,8 +837,10 @@ func set_preview_camera_distance(camera_distance: float) -> void:
 ## [method set_preview_camera_distance], which this applies once.
 func set_static_preview(camera_distance: float) -> void:
 	# Idle processing is the only thing here that reaches outside this node: _rotate would
-	# animate the shell against sim time, and _process_disc_lod would read the REAL body's
-	# position and size the disc against a camera in a different World3D.
+	# animate the shell against sim time, and _process_size_lod would read the REAL body's
+	# position and size the disc -- and pick the sphere's mesh rung -- against a camera in a
+	# different World3D. Stopped before the first frame, a preview keeps the finest rung its
+	# _init() took, which is what a still wants at any distance.
 	set_process(false)
 	if _is_sun and _psf_settings:
 		# IVPSFSettings is shared with the live scene, so any edit to it would re-apply the
@@ -746,7 +850,7 @@ func set_static_preview(camera_distance: float) -> void:
 	if not _applies_psf or not _disc_material:
 		return
 	# The disc's alpha is a crossfade against its own on-screen pixel radius, and only
-	# _process_disc_lod knows how to measure that; with it off, angular_radius keeps the
+	# _process_size_lod knows how to measure that; with it off, angular_radius keeps the
 	# shader default and every fragment discards. Negative edges saturate the crossfade
 	# instead, so the disc always renders whatever the preview camera's distance.
 	_disc_material.set_shader_parameter(&"handoff_low", -2.0)

@@ -121,14 +121,12 @@ var limit_stops_in_multiplayer := true # overrides most stops
 ## Set true to enable fullscreen toggling. See also [IVFullScreenManager], which
 ## is not present in default Core initialization.
 var allow_fullscreen_toggle := false
-## Sets resolution of the common sphere mesh used by bodies with no other mesh, and the
-## azimuth steps of the atmosphere limb's annulus mesh. See [IVResourceInitializer] for
-## mesh construction. See also [member sphere_rings].
-var sphere_radial_segments := 256
-## Sets resolution of the common sphere mesh used by bodies with no other mesh. See
-## [IVResourceInitializer] for mesh construction. See also [member
-## sphere_radial_segments].
-var sphere_rings := 128
+## Sets the radial segments of the FINEST shared sphere mesh used by bodies with no other mesh —
+## the top of the distance LOD ladder [IVShellsModel] selects from — and the azimuth steps of the
+## atmosphere limb's annulus mesh, which is built at this resolution alone. Rings are always half
+## this, at every rung, which is what makes the facets square. See [IVResourceInitializer] for
+## mesh construction and for the ladder's floor.
+var max_sphere_resolution := 256
 ## Sets the rows of the atmosphere limb's annulus mesh, between its inner edge inside the
 ## disc and the shell's silhouette. More rows follow farwarp's compression more closely when
 ## the camera is at a craft beside the planet; fewer than 6 let a chord dip under the disc.

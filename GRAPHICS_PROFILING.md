@@ -49,9 +49,10 @@ in the rendered image, measured in 8-bit display codes on screenshots taken befo
    [SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md).
 5. Several costs buy nothing visible and can go with no option at all: the Milky Way and most of
    the star field in any lit-body view, the limb shell's disc-interior fragments, and sphere
-   detail beyond 128x64. Together they are worth 10-30% in most views and far more at Earth and
-   Titan. The limb's interior has since gone, for 19-54% of an iGPU atmosphere frame (see
-   *Addendum: the limb annulus, measured*).
+   detail a body's on-screen size does not earn. Together they are worth 10-30% in most views and
+   far more at Earth and Titan. The limb's interior has since gone, for 19-54% of an iGPU
+   atmosphere frame (see *Addendum: the limb annulus, measured*), and the sphere detail is now
+   distance-selected (see *Addendum: the sphere LOD ladder*).
 
 
 ## Where the frame goes today
@@ -143,7 +144,7 @@ Intel figures for the atmosphere views come from runs in the driver's normal sta
 
 | # | Option | Relief, Intel iGPU | Relief, GTX 1650 Ti | Visual cost | Verdict |
 |---|---|---|---|---|---|
-| 12 | **Sphere mesh detail**: 256x128 today. Restart, or runtime. | 128x64: -13 to -27%; 64x32: -17 to -38% | 128x64: -10 to -27%; 64x32: -16 to -34% | 128x64 is indistinguishable, with 0.16 px of silhouette error on a screen-filling disc. 64x32 shows rim artefacts. | Not an option: make 128x64 the default, or add distance LOD. |
+| 12 | **Sphere mesh detail**: 256x128 today. Restart, or runtime. | 128x64: -13 to -27%; 64x32: -17 to -38% | 128x64: -10 to -27%; 64x32: -16 to -34% | 128x64 is indistinguishable **in the eight views**, none nearer than 1.6 radii, with 0.16 px of silhouette error on a screen-filling disc. 64x32 shows rim artefacts. Closer than that it is not (see the addendum). | Not an option: distance LOD. Built since (see *Addendum: the sphere LOD ladder*). |
 | 13 | **Sun surface detail** (sunspot cells). Runtime uniform. | -36% (Sun close-up only) | Not measured | No sunspots. | Automatic LOD by disc size. |
 | 14 | **FXAA** (existing; Forward+ only) | +0 to +6% | +1 to +16% | A benefit: smoother lines, at a slight blur. | Keep. |
 | 15 | **TAA** (existing; Forward+ only, experimental) | +10 to +27% | +4 to +39% | Ghosts orbit lines, which are positioned in the vertex shader. | Remove, or keep it hidden. |
@@ -332,8 +333,10 @@ on Forward+. Taking them off is a large visual loss, so this belongs in the lowe
 
 *Figure notes (illustrated version).* At Saturn, glow off moves 8% of pixels by 5 codes or less.
 The Milky Way changes nothing there, because metering on Saturn puts it below one code, yet on the
-iGPU it still costs 10% of that frame. At Earth's limb, a 128x64 sphere is indistinguishable from
-256x128, which is why it should simply become the default; 64x32 flecks the rim.
+iGPU it still costs 10% of that frame. At Earth's limb, at 1.6 radii, a 128x64 sphere is
+indistinguishable from 256x128, and 64x32 flecks the rim. That indistinguishability is what the
+row above reads as a licence to default to 128x64, and it does not survive a closer view — see
+*Addendum: the sphere LOD ladder*.
 
 
 ## Free wins: relief with no visual change
@@ -345,7 +348,7 @@ These need no option. Each removes work whose result never reaches the screen.
 | **Limb shell as a camera-facing annulus**, not a full sphere (done; see addendum) | A dead-code limb body costs the same as a hidden shell. A discarding one costs about 1/3 of the full shader. | Measured on the iGPU: Earth-fill -37%, Venus close -54%, Titan and Mars close -19 to -20% |
 | **Skip the sky pass** when the panorama x exposure is below half a display code (done; see addendum) | Milky Way off changes zero pixels in every lit-body view | -10 to -17% (iGPU), -5 to -13% (GTX) in those views |
 | **Skip star bins** the current exposure renders below half a code; split the star mesh by bin (done; see addendum) | Cutting to V 11 changes zero pixels in lit-body views, yet stars cost 13-28% there | -13 to -28% in lit-body views |
-| **Sphere 128x64**, or distance LOD | 128x64 measured indistinguishable | -10 to -27% |
+| **Sphere distance LOD** (done; see addendum) | 128x64 measured indistinguishable at >= 1.6 radii, but not closer; a body drew 65,536 triangles down to a 2.5 px radius | -10 to -27% |
 | **Forward+: skip shadow passes** when no local caster is in range | An empty 8192 atlas costs ~20-25 ms per iGPU frame | -27 to -39% (iGPU Forward+) |
 | **Sunspot LOD** by disc size | Sunspots are 36% of a Sun close-up | Near the Sun only |
 
@@ -618,3 +621,67 @@ disappointment: the star field and the sky are a small share of a frame the limb
 −13 to −28 % (stars) in the *Free wins* table are for the Intel iGPU under Compatibility, the
 web app's case, and reaching that GPU needs the `NvOptimusEnablement`-cleared executable copy
 described under *How this was measured*. That run is outstanding.
+
+
+## Addendum: the sphere LOD ladder
+
+Added on 2026-09-19, in answer to a question the report could not settle from its own data: the
+row above calls 128x64 indistinguishable, but from what view? The eight views come no nearer
+than 1.6 radii, and the quoted 0.16 px is 128's silhouette sagitta against a 540 px disc radius.
+**Closer than that it is not indistinguishable**, and the shipped sphere is now chosen per frame
+instead (`IVShellsModel`; *The sphere LOD ladder* in [VISUAL_MODEL.md](VISUAL_MODEL.md)).
+
+**Why a near view is harder.** A facet's chord sags inside the true sphere by
+`R x (1 - cos(PI / segments))` — 1.92 km at 128x64 on Earth, 0.48 km at 256x128, for facets
+about 310 km and 155 km across. That is fixed in world units; what a view changes is how many
+pixels it buys. Framing Earth's horizon from the ISS at the default 24 mm lens (52 degrees
+vertical, f ~ 1107 px at 1080p) puts the limb 2,293 km away instead of the 7,958 km of a
+screen-filling disc:
+
+| View | Limb distance | Facet chord | Sagitta at 128x64 | at 256x128 |
+|---|---:|---:|---:|---:|
+| Earth at 3 radii | 18,020 km | 24 px | 0.13 px | 0.03 px |
+| Earth fills the screen (1.6 radii) | 7,960 km | 55 px | 0.44 px | 0.11 px |
+| ISS horizon, 24 mm | 2,293 km | 150 px | 0.93 px | 0.23 px |
+| ISS horizon, 100 mm | 2,293 km | 630 px | 3.9 px | 0.97 px |
+
+Twice the sagitta of the report's worst case, over a three times longer facet baseline, judged
+against a near-straight horizon rather than a strongly curved limb. At a long focal length even
+256x128 goes marginal.
+
+**Measured.** At the ISS, 60 m off the station with the horizon across the frame, 1920x1080,
+HUDs hidden, each rung pinned in turn and diffed against 256x128:
+
+| Mesh | Mean | p99 | Pixels > 2 codes | > 8 codes |
+|---|---:|---:|---:|---:|
+| 128x64 | 0.30 | 5 | 2.43 % | 0.29 % |
+| 64x32 | 1.13 | 23 | 7.86 % | 4.22 % |
+| 32x16 | 4.30 | 87 | 13.63 % | 10.22 % |
+
+For scale, the Reduced atmosphere tier moves 1.2-1.8 % of pixels by more than 2 codes with a
+maximum of 12-15, and the limb annulus moved a handful of single pixels. 128x64 here is a larger
+change than either, and it saturates: most of it is not the silhouette but the disc, because the
+veil field is painted on a polyhedron up to the sagitta inside the true sphere, so the whole
+pattern shifts radially.
+
+**What the ladder does instead.** A rung serves every body whose on-screen radius keeps its sag
+within 0.15 px, which gives ceilings of 1992, 498, 125, 31 and 7.8 px for 256, 128, 64, 32 and
+16 segments — a 4x range each. The near end is unchanged: at the ISS, Earth measures 1043 px and
+takes 256x128, exactly what shipped. The relief is at the far end, where before the ladder a body
+drew 65,536 triangles down to a 2.5 px radius (`IVBody.psf_handoff`), and a body without a PSF
+quad down to the 4000-radius cull at 0.28 px — dozens at a time in the system-wide views, which
+is where the row's -10 to -27 % was coming from.
+
+Verified in the app across a distance sweep and at the ISS: the rung always equalled what the
+budget demands for the measured on-screen size, including during fast camera motion, and a
+registered capture height of 4320 moved Earth from 32 to 64 segments and back on clearing. Two
+Godot behaviours the design rests on were confirmed on 4.7.2 rather than assumed: an instance
+keeps its `custom_aabb`, `sorting_use_aabb_center` and surface override material across a `mesh`
+assignment, and five rungs drawn through one `ShaderMaterial` compiled no additional pipelines
+(surface, draw and specialization counters flat), every rung sharing the sphere's vertex format.
+
+**Not yet measured: the relief itself.** The figures in the rows above are the fixed-resolution
+A/B from 2026-09-10, not a measurement of the ladder. What it actually returns on the Intel iGPU
+under Compatibility — the web app's case, and the one the change exists for — is outstanding,
+and needs the `NvOptimusEnablement`-cleared executable copy described under *How this was
+measured*.

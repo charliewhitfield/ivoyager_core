@@ -180,10 +180,14 @@ func capture_image() -> Image:
 				"GPU's %s px limit. Reduce Width, or pick an aspect nearer the window's.")
 				% [output_size.x, output_size.y, render_size.x, render_size.y, limit])
 		return null
-	# A capture taller than the window renders every star brighter, so the star field's
-	# exposure cull has to decide for THIS height or the shot would be missing bins that a
-	# render this tall should show. One process pass lands it: a bin returns undamped.
+	# Two per-frame decisions are made in pixels and would otherwise be made for the window. A
+	# capture taller than the window renders every star brighter, so the star field's exposure
+	# cull has to decide for THIS height or the shot would be missing bins that a render this
+	# tall should show; and a body's sphere would keep the mesh rung the window's pixels earned,
+	# leaving a faceted limb in a shot with the pixels to show it. One process pass lands both: a
+	# bin returns undamped, and a rung is chosen every frame anyway.
 	IVStarsVisual.capture_render_height = render_size.y
+	IVShellsModel.capture_render_height = render_size.y
 	await get_tree().process_frame
 	var sub_viewport := _build_sub_viewport(render_size, viewport, camera)
 	var image := await _render_once(sub_viewport)
@@ -191,6 +195,7 @@ func capture_image() -> Image:
 		image = await _render_once(sub_viewport)
 	sub_viewport.queue_free()
 	IVStarsVisual.capture_render_height = 0.0
+	IVShellsModel.capture_render_height = 0.0
 	if !image or image.is_empty():
 		push_error("IVScreenshotManager: the off-screen render returned no image")
 		return null
