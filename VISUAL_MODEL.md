@@ -869,6 +869,57 @@ FBM into grid-aligned creases). Pure functions only; each including shader owns 
 uniforms and blending, and octave count is a parameter because a textual `#include`
 cannot see a caller's later `const`.
 
+## The cloud deck's phase
+
+A cloud deck drifts over the surface beneath it: a `shells.tsv` `process` of `_rotate`, at the
+rate in `process_args` — 0.0003 deg/s on Earth's, which is 26 deg of sim day and nothing a
+real second shows. It is the only shipped shell that moves relative to its body, and the phase
+it moves to is a **closed form in the clock**: `IVShellsModel.get_spin()` returns
+`fposmod(times[0] x rate, TAU)` and `_rotate` writes the basis from it every frame, pause
+included.
+
+**It accumulated per-frame deltas until 2026-09-19, and the defect is worth recording because
+the obvious test could not see it.** The deck's phase was a function of the session's frame
+history rather than of the clock, which cost three things:
+
+- **One date did not render one Earth.** Paused at a fixed instant and posed identically, two
+  processes differed across the whole lit disc by however much unpaused sim time each had run
+  first. Measured at 1.6 radii, 1920x1080: 61.8 s of elapsed sim time (0.019 deg of deck)
+  moves mean 1.08 codes, 16.6 % of pixels past 2, maximum 79; 240 s (0.072 deg) moves 4.19,
+  40.2 % and 127. Within a run it reproduced exactly, because a paused deck stops — which is
+  what made it read as a property of the process instead of a bug (*Addendum: the quality
+  tiers, built* in [GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md)).
+- **A clock that moved took the deck nowhere.** `IVTimekeeper.set_time` jumped the date and
+  left the deck at the phase its frames had built; an excursion out and back returned
+  everything except the deck.
+- **The shadow the deck casts walked away from the deck.** The surface samples the deck's map
+  in its OWN frame (*Cloud shells* in [PHOTOMETRIC_MODEL.md](PHOTOMETRIC_MODEL.md)), so the
+  shadow fell behind by the accumulated phase — unbounded, and 26 deg per *second* at 1 day/s.
+  At 195 deg the Sahara renders under grey cloud-shaped darkening with no cloud above it. The
+  rule this broke was already on the record: *Renderer parity* in that document had found that
+  a cross-shell sample misregisters unless the consumer tracks the drifting frame, and that a
+  harness which pauses to be deterministic freezes the deck at zero drift — the one state in
+  which it looks right.
+
+The closed form settles the first two and makes the third solvable, which is why they were one
+change: `clouds_shadow_spin` carries the phase to the surface shader as (cos, sin), and the
+lookup turns the crossing direction back into the deck's frame before it reads the map. Both
+sides resolve the phase through the one `get_spin()` from the deck's own table rate — not from
+the deck NODE's basis, which shell 0 would read a frame stale, a whole revolution of error at
+the top time speeds.
+
+**What no phase rule can keep is the map's registration to the geography.** Measured from the
+epoch, Earth's deck is 689 turns round by 2026, so the composite sits at an arbitrary
+longitude for any date but J2000. That is inherent to a deck that drifts at all — the
+accumulation held registration only until the clock first ran, then lost it at 26 deg per sim
+day — and a cloud composite is weather, not a dated observation.
+
+Verified in the app, 1920x1080, HUDs hidden, sim paused: an excursion of 426,672 sim s and
+back to the same instant, 128 deg of deck under the old rule, renders **0 of 2,073,600
+pixels** changed, as do two separate processes over all six poses of the cross-run A/B recipe.
+Where the spin is exactly zero (`times[0] = 0`) the new surface shader is bit-identical to the
+one it replaces, and the four bodies with no deck are bit-identical at every pose.
+
 ## Time compression and the render
 
 The simulator draws at time speeds from pause to ~1e7× and beyond, and three visual
@@ -881,6 +932,9 @@ mechanisms answer to that:
   "natural" stroboscopic effect of process frames with a stable simulated one (a fixed
   simulated frame rate, plus a motion-blur term), which reads better at ~5–10 fps
   simulated.
+- **A shell's own spin** is a closed form in the clock rather than an integral of frames,
+  which is what keeps it correct at any speed and across a time jump (*The cloud deck's
+  phase*, above).
 - **High-speed registration loss** is the one known open defect in this document's
   domain, and it is recorded in the TODO rather than here.
 

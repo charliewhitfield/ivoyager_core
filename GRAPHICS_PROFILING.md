@@ -796,9 +796,22 @@ Reduced cuts — so the share should now be larger, not smaller. Confirming that
 `NvOptimusEnablement`-cleared executable copy described under *How this was measured*, and is
 outstanding along with the sphere ladder's and the exposure skips'.
 
-**One thing this measurement found that is not about the tiers.** Earth, alone of the four,
-does not render identically across two *processes*: about 1 code over its lit disc, tracing
-cloud and terrain detail, with zero mean bias. It reproduces exactly within a run (six poses, 0
-pixels, twice) and it is present with the **pre-change shader** as well, so it is neither this
-setting's nor the shader edit's. It sets the floor for any future cross-run A/B at Earth, and
-it is worth finding.
+**One thing this measurement found that was not about the tiers, and is now fixed.** Earth,
+alone of the four, did not render identically across two *processes*: about 1 code over its lit
+disc, tracing cloud detail, with zero mean bias. The cause was its cloud deck, the only shipped
+shell that moves relative to its body — `IVShellsModel._rotate` integrated per-frame deltas into
+the deck's basis, so its phase was a function of the session's frame history and not of the
+clock, and two processes had accumulated different amounts of unpaused sim time before the
+capture paused them. The signature matches that arithmetic: at 1.6 radii an elapsed 61.8 sim s
+(0.019 deg of deck) moves mean 1.08 codes with 16.6 % of pixels past 2 and a maximum of 79,
+against the 1.34, 20.3 % and 71 measured here, so the two runs differed by roughly 75 sim s of
+running. It reproduced within a run because a paused deck stops, which is exactly why it read as
+a property of the process.
+
+Fixed on 2026-09-19: the phase is now a closed form in the clock, and the deck's own shadow on
+the surface — which had no phase term at all and so fell behind the deck it belongs to — is
+carried with it (*The cloud deck's phase* in [VISUAL_MODEL.md](VISUAL_MODEL.md)). **A cross-run
+A/B at Earth now has no floor of its own**: an excursion of 426,672 sim s and back to the same
+instant, and two separate processes over all six poses, each render 0 of 2,073,600 pixels
+changed. The 1-code, tens-of-pixels floor the other three bodies show across processes is
+unrelated and remains.

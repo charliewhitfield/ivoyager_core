@@ -67,9 +67,12 @@ extends MeshInstance3D
 ## and cloud shaders redden their direct light through the same atmosphere the limb draws.
 ## Author them on the limb row only.[br][br]
 ##
-## Developer note: Process methods must gate themselves on [member IVStateManager.paused_tree]
-## as needed. This is because some methods need to run in a project setup where
-## the camera is able to move during pause.
+## Developer note: a shell processes while the tree is paused (a project may let the camera
+## move there), so a process method decides for itself what pause means to it. Prefer posing
+## the shell ABSOLUTELY against [member IVGlobal.times], as [method _rotate] does, and gate
+## nothing: a method that instead integrates [code]delta[/code] renders a shell whose state is
+## the session's frame history rather than the clock, and a pause gate on one that poses
+## absolutely would strand the shell whenever the clock is set while paused.
 
 
 ## Texture channel → the [enum BaseMaterial3D.Feature] enabled when that channel is
@@ -122,7 +125,8 @@ const _SPHERE_LOD_HYSTERESIS := 0.8
 
 ## Registry of 'process' methods, keyed by the name used in a shells.tsv
 ## 'process' field. Each [Callable] runs on the shell every frame as
-## [code]method(shells_model, delta, ...process_args)[/code]. Register entries in
+## [code]method(shells_model, delta, ...process_args)[/code], and once as the shell is built
+## with a [code]delta[/code] of 0.0 so nothing reads an unposed shell. Register entries in
 ## [method _static_init] or from project code to add a process method without subclassing.
 static var process_methods: Dictionary[StringName, Callable] = {}
 ## Meshes that overlay shells draw in place of the shared sphere, keyed by the shells.tsv
@@ -164,6 +168,9 @@ var _sun_bv := 0.63 # sun-mode: cached B-V (disc color); fallback if the charact
 var _sun_abs_mag := 4.83 # sun-mode: cached V absolute magnitude (for the disc's surface brightness)
 var _psf_settings: IVPSFSettings # sun-mode: the shared PSF camera (color ramp only, here)
 var _applied_sun_disc_brightness := NAN # sun-mode: change gate; NAN forces the first-frame write
+var _rest_basis: Basis # the basis as built, which a 'process' method poses the shell from
+var _clouds_shadow_spin_rate := 0.0 # deg/s of the deck shell 0 takes its cloud shadow from
+var _clouds_shadow_material: ShaderMaterial # shell 0's own, for the per-frame spin write
 
 var _times := IVGlobal.times
 
@@ -183,14 +190,29 @@ static func _static_init() -> void:
 	shader_meshes[&"atmosphere_limb_shader"] = &"limb_annulus_mesh"
 
 
-## Named by a shells.tsv 'process' field. Rotates [param shells_model]
-## at [param deg_per_sec] degrees per second.
-static func _rotate(shells_model: IVShellsModel, delta: float, deg_per_sec: float) -> void:
+## The rotation the simulator clock alone gives a shell spinning at [param deg_per_sec]
+## degrees per simulator second about its own +Y, measured from the epoch and wrapped to
+## [constant TAU]. The one formula for a shell's spin: a cloud deck's own drawing and the
+## surface shader's shadow lookup into that deck both resolve the phase through here, and a
+## phase they each derived would be a phase they could come to disagree on.
+static func get_spin(deg_per_sec: float) -> float:
 	const CONVERSION := PI / (180.0 * IVUnits.SECOND)
-	if IVStateManager.paused_tree:
-		return
-	delta *= shells_model._times[1] / Engine.time_scale
-	shells_model.rotate_y(delta * deg_per_sec * CONVERSION) # y up in model self reference
+	return fposmod(IVGlobal.times[0] * deg_per_sec * CONVERSION, TAU)
+
+
+## Named by a shells.tsv 'process' field. Spins [param shells_model] about its own +Y at
+## [param deg_per_sec] degrees per simulator second.[br][br]
+##
+## Poses the shell ABSOLUTELY, from [method get_spin]. An accumulated spin would be a function
+## of the session's frame history instead of the clock, which costs three things this one
+## keeps: the same date renders the same shell in any session, a clock that is set or reversed
+## carries the shell with it, and the phase stays available in closed form to the surface
+## shader that has to find the deck where it is drawn. See *The cloud deck's phase* in
+## VISUAL_MODEL.md.
+static func _rotate(shells_model: IVShellsModel, _delta: float, deg_per_sec: float) -> void:
+	# No pause gate: the clock can be set while paused, and the shell must follow it there too.
+	shells_model.transform.basis = (Basis(Vector3.UP, get_spin(deg_per_sec))
+			* shells_model._rest_basis) # y up in model self reference
 
 
 func _init(body_name: StringName, mean_radius: float, model_basis: Basis,
@@ -249,6 +271,8 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if _process_callable.is_valid():
 		_process_callable.call(self, delta)
+	if _clouds_shadow_spin_rate:
+		_update_clouds_shadow_spin()
 	if _applies_psf or _sphere_lod_rung >= 0:
 		_process_size_lod()
 	if _is_sun:
@@ -723,6 +747,7 @@ func _propagate_cloud_shadow(shell_specs: Array, asset_preloader: IVAssetPreload
 	var deck_texture: Texture = null
 	var deck_range_lo := Vector3.ZERO
 	var deck_range_hi := Vector3.ONE
+	var deck_spin_rate := 0.0
 	for shell_index in range(1, shell_specs.size()):
 		var spec: Dictionary = shell_specs[shell_index]
 		var overrides: Dictionary = spec[&"overrides"]
@@ -752,6 +777,14 @@ func _propagate_cloud_shadow(shell_specs: Array, asset_preloader: IVAssetPreload
 				var pair: Array = channel_ranges[param]
 				deck_range_lo = pair[0]
 				deck_range_hi = pair[1]
+		# A spinning deck is drawn at a phase the lookup has to match, and the phase is the
+		# deck's own row: taken here as a RATE and resolved per frame through the same
+		# get_spin() the deck poses itself with, because reading the deck NODE's basis instead
+		# would read it one frame stale -- a whole revolution of error at the top time speeds.
+		if spec[&"process"] == &"_rotate":
+			var process_args: Array = spec[&"process_args"]
+			if process_args:
+				deck_spin_rate = process_args[0]
 		break
 	if not deck_texture:
 		return
@@ -766,6 +799,20 @@ func _propagate_cloud_shadow(shell_specs: Array, asset_preloader: IVAssetPreload
 	material.set_shader_parameter(&"clouds_shadow_scale", deck_scale / surface_scale)
 	material.set_shader_parameter(&"clouds_shadow_range_lo", deck_range_lo)
 	material.set_shader_parameter(&"clouds_shadow_range_hi", deck_range_hi)
+	if not deck_spin_rate:
+		return
+	_clouds_shadow_spin_rate = deck_spin_rate
+	_clouds_shadow_material = material
+	_update_clouds_shadow_spin()
+	set_process(true)
+
+
+# Where the deck is DRAWN this frame, for the shadow lookup that has to sample it there. As
+# (cos, sin) so no fragment pays for the angle.
+func _update_clouds_shadow_spin() -> void:
+	var spin := get_spin(_clouds_shadow_spin_rate)
+	_clouds_shadow_material.set_shader_parameter(&"clouds_shadow_spin",
+			Vector2(cos(spin), sin(spin)))
 
 
 # Render priority = this shell's rank by scale (ascending; shell index breaks ties),
@@ -796,6 +843,9 @@ func _resolve_process(method: StringName, process_args: Array) -> void:
 	# Defining _process() enables idle processing by default, so disable it on a shell with no
 	# (or an unregistered) process method.
 	set_process(false)
+	# Shell 0's own scale is already applied and a child arrives pre-scaled, so this is the
+	# shell's built pose -- what _rotate poses from, and never itself a result of posing.
+	_rest_basis = transform.basis
 	if not method:
 		return
 	var callable: Callable = process_methods.get(method, Callable())
@@ -804,6 +854,11 @@ func _resolve_process(method: StringName, process_args: Array) -> void:
 				% [_body_name, _shell, method])
 		return
 	_process_callable = callable.bindv(process_args)
+	# Posed once here, so the shell is where the clock puts it from frame zero rather than from
+	# frame one. What reads that pose cannot wait: shell 0 writes the deck's phase to its own
+	# shadow lookup while building, and a still preview stops processing before a frame runs at
+	# all. A zero delta is a no-op to a process method that integrates one.
+	_process_callable.call(self, 0.0)
 	set_process(true)
 
 

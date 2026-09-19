@@ -734,7 +734,7 @@ reddened as it is at the tangent and no further; the lit-height ramp dominates t
 
 **The deck's shadow lands where it falls, not underneath the cloud (2026-09-08).** The sun ray
 from a surface point crosses the deck at a horizontally displaced place, so the shadow belongs
-there — `atm_cloud_shadow()` in `_atmosphere.gdshaderinc`, fed the deck's own map by
+there — `clouds_sun_transmittance()` in `_clouds.gdshaderinc`, fed the deck's own map by
 `IVShellsModel._propagate_cloud_shadow` and folded into the surface's sun leg, while the deck's
 alpha keeps only its view leg so nothing is counted twice. It is a REDISTRIBUTION and the
 render says so: over a lit disc the mean moves 0.998–1.001× while 10–19 % of the frame changes,
@@ -761,7 +761,9 @@ coherent under magnification. So a deck that looks coarse magnified wants a fine
 this is where to reach for one. Two consequences, both wanted: a deck and its shadow now read
 ONE map and line up by construction, where a procedural field the shadow lookup did not share
 could never be shadowed correctly; and the deck's coverage stops spreading, so real gaps open
-and the ground shows through them. The `.gdshader` files are the interface here — a body
+and the ground shows through them. One map is necessary and was not sufficient: a deck that
+drifts is also read at a PHASE, and the lookup got the deck's only from 2026-09-19 (*The cloud
+deck's phase* in [VISUAL_MODEL.md](VISUAL_MODEL.md)). The `.gdshader` files are the interface here — a body
 overriding a retired uniform through a `shells.tsv` column of the same name is silently
 ignored, as any unknown column is.
 
