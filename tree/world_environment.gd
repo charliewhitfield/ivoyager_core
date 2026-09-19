@@ -69,9 +69,31 @@ var starmaps_search: Array[String] = ["res://addons/ivoyager_assets/starmaps"]
 ## Multiplies all scene radiance (emission + lit surfaces + sky) before tonemapping;
 ## applied only under the Compatibility renderer to offset its dimmer output. Tune by eye.
 @export var gl_compatibility_exposure := 1.2
+## Stops drawing the background panorama while the compensating camera has metered it
+## below one display code. Relief with no visual change rather than a quality setting: in
+## any lit-body view the panorama is already black, yet the sky pass is 10-17% of an
+## integrated-GPU frame. Inert without physical light, where exposure rests at
+## [constant IVExposureManager.INACTIVE_EXPOSURE] and the sky's brightest texel sits near
+## display code 117. Set false to render (and measure) against the sky always drawn.
+## Requires [member Environment.background_color] to be black, which it is by default and
+## which nothing reads while the sky is drawn. See [i]Skipping what the camera has metered
+## away[/i] in PHOTOMETRIC_MODEL.md.
+@export var skip_invisible_starmap := true
+
+## Share of [constant IVPhotometry.ONE_DISPLAY_CODE_LINEAR] the sky must fall below to be
+## skipped, against the whole code it must reach to be drawn again. Half a code is the
+## 8-bit rounding boundary and so the real "cannot move a pixel" line; the gap to a whole
+## code is the hysteresis, which exposure glides through in 1 EV -- without it the pass
+## would flip on and off every frame while it sat on the line. Matches
+## [constant IVStarsVisual.HIDE_THRESHOLD_FRACTION], the same decision for the stars.
+const HIDE_THRESHOLD_FRACTION := 0.5
+
+var _starmap_material: ShaderMaterial # null until _add_starmap_sky() finds a panorama
+var _starmap_skipped := false
 
 
 func _ready() -> void:
+	set_process(false)
 	if IVGlobal.is_gl_compatibility:
 		environment.tonemap_exposure = gl_compatibility_exposure
 		# Glow stays ON here, and it is a deliberate trade rather than a free win. It is
@@ -100,12 +122,40 @@ func _ready() -> void:
 	IVStateManager.assets_preloaded.connect(_on_asset_preloader_finished)
 
 
+# What the sky pass costs is fixed -- a full-screen bicubic resample of the panorama --
+# however little of it the exposure has left, so below one display code it is pure waste.
+# The bound on its rendered radiance is energy_multiplier x exposure: a decoded 8-bit texel
+# cannot exceed 1.0, and that ceiling is what background_peak_magnitude_per_arcsec2 states
+# the panorama's brightest texel to be. energy_multiplier is read from the material rather
+# than taken as IVExposureManager.sky_energy so that whatever last wrote it is what this
+# answers to.
+func _process(_delta: float) -> void:
+	var skip := false
+	if skip_invisible_starmap and IVExposureManager.physical_active:
+		var energy_var: Variant = _starmap_material.get_shader_parameter(&"energy_multiplier")
+		var energy_multiplier := 0.0
+		if typeof(energy_var) == TYPE_FLOAT:
+			energy_multiplier = energy_var
+		var threshold := IVPhotometry.ONE_DISPLAY_CODE_LINEAR
+		if !_starmap_skipped:
+			threshold *= HIDE_THRESHOLD_FRACTION
+		skip = energy_multiplier * IVExposureManager.exposure < threshold
+	if skip == _starmap_skipped:
+		return
+	_starmap_skipped = skip
+	environment.background_mode = Environment.BG_COLOR if skip else Environment.BG_SKY
+
+
 # A fixed scene node's _ready() precedes core init, so IVGlobal.program is empty there
 # (the same reason IVStarsVisual defers its build); this signal is well after it.
 func _on_asset_preloader_finished() -> void:
 	if !add_starmap:
 		return
 	_add_starmap_sky()
+	# Only this node's own BG_SKY may be switched away and back: a project whose panorama
+	# did not resolve keeps whatever background its Environment authored.
+	_starmap_material = _get_starmap_material()
+	set_process(_starmap_material != null)
 	# The sky's level is IVPSFSettings photometry (see _get_starmap_energy), so this node
 	# is a consumer of those values and re-applies on the signal like the rest of them.
 	var psf_settings: IVPSFSettings = IVGlobal.program.get(&"PSFSettings")

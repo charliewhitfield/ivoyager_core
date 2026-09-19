@@ -537,10 +537,17 @@ the farwarp-only `farwarp_vertex.gdshader` — no pin, no rebase, no per-frame C
 Three point-sprite systems share one pattern — true positions in the mesh, farwarp in
 the vertex shader, an always-pass `custom_aabb`:
 
-- **The catalog star field** (`IVStarsVisual`): one `PRIMITIVE_POINTS` surface from the
-  magnitude-binned star binaries, vertices at true ecliptic positions, `CUSTOM0`
+- **The catalog star field** (`IVStarsVisual`): one `PRIMITIVE_POINTS` child per
+  magnitude-binned star binary, vertices at true ecliptic positions, `CUSTOM0`
   carrying (V, B−V) for the photometric chain (sibling document). A fixed node under
-  Universe, so it rides the origin shift, builds once and survives system rebuilds.
+  Universe, so it rides the origin shift, builds once and survives system rebuilds; the
+  parent holds no mesh of its own. The split is per BIN and not per region because its
+  purpose is the exposure cull, which drops a magnitude suffix and nothing else
+  (*Skipping what the camera has metered away*, sibling document) — there is no distance
+  or direction culling here, and could not be, farwarp having put every star inside the
+  camera's range. Each child repeats the farwarp obligations below for itself: its own
+  always-pass `custom_aabb`, its own `sorting_use_aabb_center = false`, and the parent's
+  `layers`, which a child does not inherit.
 - **Per-body PSF quads** (`IVBodyPSF`, next section): not point sprites, but the same
   law on the same shared settings — spatially each is just another farwarp item whose
   AABB always contains the camera.

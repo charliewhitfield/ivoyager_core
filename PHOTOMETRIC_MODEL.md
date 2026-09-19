@@ -198,6 +198,9 @@ identical at every exposure. Nor does anything outside the candidate set above m
 the set is bodies and the two asserted shell ceilings, so a project's own local scene is
 invisible to the meter however much of the frame it fills (*A project's own lighting*).
 
+What metering decides is also what need not be drawn at all: see *Skipping what the camera
+has metered away*.
+
 ## A project's own lighting
 
 A project that hangs a scene of its own inside the simulation
@@ -1016,6 +1019,127 @@ the panorama had been ~6× too bright relative to the stars it sits behind.
 erased), so the correction holds with physical light OFF as well and the two modes
 differ by exposure alone — toggling the setting moves the sky and the stars together.
 At rest exposure the whole sky rides `exposure_max_ev` above the authored look.
+
+## Skipping what the camera has metered away
+
+Metering's output is also a visibility decision. Once the camera has stopped down for a
+sunlit body, most of what this document calibrates renders below the darkest code a display
+can show, and the GPU is still drawing every bit of it — in a lit-body view the background
+panorama is 10–17 % of an integrated-GPU frame and the star field 13–28 %, for nothing. Two
+consumers act on that: `IVWorldEnvironment` stops drawing the panorama
+(`skip_invisible_starmap`), and `IVStarsVisual` stops submitting each magnitude bin the
+exposure has taken under (`cull_invisible_bins`). Both poll the `IVExposureManager` statics
+from their own `_process`, as `IVDynamicLight` and `IVBodyPSF` do, and the manager gains
+nothing: a per-frame visibility decision is not a value it supersedes, and a consumer that
+owns its own decision restores itself on deactivation through the same branch a project
+running without physical light takes anyway.
+
+### One display code, and why it is not 1/255
+
+`IVPhotometry.ONE_DISPLAY_CODE_LINEAR` is the linear radiance that encodes to 1/255 on the
+sRGB toe — `(1/255) / 12.92`, about 3.04e-4. Nothing sits between a shader's linear value
+and that transfer: `tonemap_mode` is LINEAR, and `tonemap_exposure` is pinned to 1.0 under
+Compatibility while physical light is active.
+
+**`psf_visible_size()` cuts at a LINEAR 1/255, which is a different threshold for a
+different job.** That value is about 13 display codes, some 1800x brighter. It is the right
+cut for a sprite's outer edge, where the question is where a Gaussian stops being worth
+rasterizing; it is the wrong one for asking whether a source renders at all.
+
+**The glare wing binds at the faint end, not the core.** A star at intensity 1/255 has a
+core size law that already returns zero, while its wing still peaks at
+`glare_scale * (1/255)^glare_gamma`, about 2.6e-3 linear — eight or nine codes. With the
+shipped PSF the wing puts the one-code cut near intensity 2.2e-6, about 8.1 magnitudes
+fainter than the core criterion would. A predicate built on the size law alone would delete
+stars that are plainly visible, so the test is the peak of core plus wing
+(`IVPSFSettings.get_peak_light()`).
+
+### Half a code, and the bound that buys
+
+A drawn layer is dropped below **half** a code and is not restored until it reaches a whole
+one. The lower figure is the 8-bit rounding boundary — below it the layer alone cannot round
+to anything — and the gap between the two is hysteresis, one EV of exposure glide, without
+which a layer sitting on the line would flip every frame.
+
+Half a code is also what makes the guarantee provable rather than measured. In the toe the
+encode is linear at 12.92, so removing a contribution under half a code moves an encoded
+value by under half a code and the rounded result **by at most one**, at any pose, over any
+content. Bit-identity is not available at any positive threshold: what is removed is added
+light, and added light can carry a pixel across a rounding boundary however small it is.
+Measured at a frozen exposure with HUDs hidden, Earth at 3 radii (13 bins hidden, sky
+skipped) and Saturn at 45 degrees (4 bins, sky skipped) came back bit-identical, while
+Jupiter's moon system — where the sky sat at 0.099 of a code, just under the threshold —
+moved 337 pixels of 2.07 M by exactly one code, faint star pixels the removed sky had been
+tipping over a boundary.
+
+### The panorama
+
+Its rendered radiance is bounded by `energy_multiplier * iv_exposure`: a decoded 8-bit texel
+cannot exceed 1.0, and 1.0 is precisely what `background_peak_magnitude_per_arcsec2` asserts
+the brightest texel to be. Nothing else is view-dependent — an extended source sampled per
+pixel holds its surface brightness across fov and resolution — so this is the one skip with
+no capture hazard and no geometry in it. With the shipped anchor the sky goes at exposure
+1.75e-3, 10.2 EV below the dark-adapted rest, which an EV sweep confirms to the stop.
+
+Skipping is `background_mode = BG_COLOR`, so `environment.sky` survives for
+`IVExposureManager._find_starmap_material()` and for the return. Ambient is unaffected
+(`ambient_light_source` is COLOR, and the manager drives its energy). Reflections come from
+the background, and a sky certified under half a code reflects under half a code — reflected
+radiance cannot exceed incident.
+
+### The star bins, and the two tests neither of which is sufficient
+
+A star's rendered value falls with magnitude, so what the camera can show is always a prefix
+of the bins and what it drops is always a suffix. Walking that suffix inward from the faint
+end, a bin is dropped only if **both** hold:
+
+- **Its brightest star is invisible on its own.** The bound is exact and free: the bins
+  partition by magnitude, and `_build_bin_mesh()` records the brightest magnitude it actually
+  decoded rather than trusting the file's tag.
+- **The glow of every bin dropped so far is invisible together.** `blend_add` is a sum, and
+  the faint bins are where the stars are — 1.1 M in `11.5` and `12.0` alone. Cutting to V 11
+  was measured to dim a dark sky by about 7 codes over a third of it, which is entirely stars
+  that are individually under one code. A per-bin test would drop four such bins and find
+  each one innocent.
+
+The summed term is a bin's mean added radiance per pixel: its sky density, times the screen
+solid angle over the pixel count, times the light one sprite lays down. Two simplifications
+are deliberate and both err toward drawing. The screen solid angle is the small-angle
+`4 tan^2(fov/2)` form — the one `fov_compensation` is itself built on, so the fov terms
+cancel as the star shader's header says they do, and it over-states a wide screen's share of
+the sky. And every star in a bin is charged at its brightest member's peak, which over-states
+by the bin's own half-magnitude width: a factor 1.14 in wing amplitude.
+
+**Density is measured where the field is densest, not on average.** The catalog is a galaxy
+seen from inside it: `11.5` and `12.0` run about 3x the mean density in the Milky Way band,
+so a mean-density estimate would clear a bin for culling while its band was still glowing.
+`_get_peak_sky_density()` takes the maximum over 96 equal-solid-angle cells — bands of equal
+`sin(latitude)` by equal longitude — from a subsample of the decode loop.
+
+The model reproduces the measured cut without being fitted to it: at Saturn's metered
+exposure of 2.8e-5 it puts the boundary between the `11.5` bin (wing peak 1.58e-4, above the
+half-code line) and the `12.0` bin (1.39e-4, below), which is where the running app puts it,
+and which is the V 11 cut that GRAPHICS_BUDGET.md certified as changing zero pixels in
+lit-body views.
+
+### Resolution, and the one place it is a correctness question
+
+The per-star peak carries `resolution_scale^2` while the summed term is near
+resolution-invariant, the two halves of the same law the star shader's header sets out. The
+asymmetry has a consequence: an off-screen capture taller than the window renders every star
+brighter, so a bin correctly hidden for the window would be *missing* from a 4K screenshot.
+`IVScreenshotManager` therefore registers its render height in
+`IVStarsVisual.capture_render_height` and waits a frame before building its viewport; a
+hidden bin returns undamped, which is what makes one frame enough. Measured at a fixed
+exposure, a 2x capture height restores three bins and a 4x height six.
+
+### Renderer parity
+
+One threshold serves both renderers, and it is conservative on the web one. `display_write()`
+pre-inverts the Compatibility bracket so a linear radiance lands at the same code either way,
+and with glow enabled Compatibility crushes the dim end further still (0.041x on 6-8 code
+content, measured under *Renderer parity*). Nothing below 1.0 linear reaches the glow pass in
+any case: `glow_hdr_threshold` is 1.0 and `glow_bloom` is 0.
 
 ## Rings
 
@@ -1943,6 +2067,9 @@ lever a capped pass cannot offer is one the shader does not need.
 | | `meter_albedo` | Metering albedo where what the camera sees is not the map alone — a body whose shells add light over it. Earth only. |
 | | `emission_luminance_scale` | Luminance of a full-white emission texel at multiplier 1.0. |
 | | `ambient_starlight_illuminance` | Integrated starlight: ambient level and the metering floor. |
+| `IVWorldEnvironment` | `skip_invisible_starmap` | Stops drawing the background panorama once exposure has taken it under half a display code. False renders the sky always, which is the A/B an exposure-skip measurement diffs against. See *Skipping what the camera has metered away*. |
+| `IVStarsVisual` | `cull_invisible_bins` | The same for each magnitude bin of the star field. False submits the whole catalog. |
+| | `capture_render_height` (static) | Render height an off-screen capture is about to use; `IVScreenshotManager` sets and clears it. Not a tunable. |
 | | `auto`, `manual_exposure_ev`, `exposure_adjustment_ev` | Runtime overrides for a GUI: hold the metered result, replace it with a stated EV, or offset either. The defaults (auto, no adjustment) apply the metered result itself. |
 | | `auto_exposure_ev` (read-only) | The metered and adapted result, in EV relative to the authored sky look. Live every frame whether or not `auto` is set, so a control can display it and hand it to manual without a jump. |
 
