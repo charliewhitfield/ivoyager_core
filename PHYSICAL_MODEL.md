@@ -25,34 +25,37 @@ of the two-body problem is written in exactly these variables, so between the ev
 change a body's state the simulator evaluates where an integrator would step — no step
 size, no accumulated error, and no constraint on the order in which bodies are updated.
 Orientation is the same bargain in a single variable, an angle linear in time (the
-spacecraft attitude laws being the standing exception; *Rotation*). Two consequences run
-through the whole document:
+spacecraft attitude laws being the standing exception; *Rotation*). Three consequences run
+through the whole document; the fuller case for the representation itself is *Why
+elements*, under *Orbits*.
 
-- **Any time is as cheap as now.** Every state query on `IVBody` takes an optional
-  `time`, and every `IVOrbit` getter named `_at_time` (and every static) is valid without
-  an `update()` call. That is what makes projected positions, orbit-line sampling, the
-  trajectory joins, OS-time synchronization and time reversal ordinary calls rather than
-  features — and it is why a body whose per-frame processing is switched off loses
+- **Any time can be queried, not just now.** Every state query on `IVBody` takes an
+  optional `time`, and every `IVOrbit` getter named `_at_time` (and every static) is valid
+  without an `update()` call. That is what makes projected positions, orbit-line sampling,
+  the trajectory joins, OS-time synchronization and time reversal ordinary calls rather
+  than features — and it is why a body whose per-frame processing is switched off loses
   nothing.
-- **Nothing accumulates, so nothing drifts.** Two machines holding the same elements and
-  the same time compute the same position, to the rounding of identical operations. The
-  multiplayer consequences are drawn out under *Persistence, determinism and sync*.
+- **The physical state rarely has to change.** A body under no perturbation has nothing to
+  write between the events that change its elements. A perturbation small enough to absorb
+  at intervals rather than continuously — nearly every third-body effect — is an occasional
+  write. Perturbations that can be expressed as a rate on an element, which covers orbital
+  precessions (and allows, for example, a Sun-synchronous orbit), is written once and then
+  carried exactly by the same evaluation at no further cost.
+- **There is no error to accumulate.** Two machines holding the same elements and element
+  rates compute the same *exact* position and velocity at any given time. Only element
+  changes (e.g., thrust) need to be synced. The multiplayer consequences are drawn out under
+  *Persistence, determinism and sync*.
 
-**Elements are live state, not a recorded path.** Nothing here is a keyframed trajectory
-or a time-indexed lookup of pre-computed positions: change an orbit's elements and the
-body goes somewhere else from that moment on. An impulse is already three lines — read
-the state at *t*, add Δv, solve the new orbit — and a rocket under continuous thrust is
-that same call repeated as often as the accuracy wants, which is how a project can fly one
-today; `IVManeuveringOrbit` is on the roadmap to make impulse and constant thrust a
-first-class orbit rather than each project's own loop. What the model does *not* do is
-derive such changes for you. There is no N-body force integration, so a third body
-perturbs nothing unless something writes the perturbation into the elements — which is why
-the slow perturbations of the real solar system arrive as published rates on elements
-(*Orbits*), and why the routes to a body that perturbs its neighbors are sketched rather
-than built (*Three kinds of project*, TODO). The line worth keeping is between the machinery
-and the data: the Planetarium's solar system unfolds the same way in every session because
-its tables transcribe a known past, which is a property of that data and not a limit of
-what the machinery can be given.
+**Elements are live state.** Nothing here fixes a spacecraft's or any other body's
+trajectory: change the elements and the body goes somewhere else from that moment on. An
+impulse is three logical steps — read the state at *t*, add Δv, solve the new orbit — and
+a rocket under continuous thrust is that repeated, every frame if its accuracy needs it.
+External perturbations are supported today; `IVManeuveringOrbit` is on the roadmap to
+spare a project the three steps. Our Planetarium's solar system unfolds the same way in
+every session because its tables encode a known past and future. That's a property of the
+data and the Planetarium, not a limit imposed by our physical model. What we don't provide
+is an N-body force integration. A project that needs that can build it (see *Three kinds
+of project needs*).
 
 ## Physical state versus visual state
 
@@ -138,7 +141,7 @@ ancestors: `parent`, `star` (itself if a star, else the star above) and `star_or
 `ordered_satellites`, the latter sorted by semi-parameter — defined for every conic where
 semi-major axis is not — which is the GUI's traversal order. `top_bodies` holds every
 root, and the indexing code allows a star to be a star-orbiter, so a hierarchical
-multi-star system is expressible in the tables, though untested (*Three kinds of project*).
+multi-star system is expressible in the tables, though untested (*Three kinds of project needs*).
 
 **A top body has no motion.** A root has no orbit, and today no translation or velocity
 either: it sits at the Universe origin and the body never writes its own position.
@@ -556,10 +559,10 @@ because the fitted orbits were saved. The persisted set is also what a save must
 through a table change: elements, not row references (only `IVTrajectory.create_from_table`
 and a `characteristics.trajectory` name touch a table after build, and only at new game).
 
-## Three kinds of project
+## Three kinds of project needs
 
-The model, and the code around it, serve three families of project that the Core does not
-distinguish; a project can be any two of them, or all three.
+The model, and the code around it, serve three families of project need that are not
+exclusive.
 
 ### Approaching the real solar system
 

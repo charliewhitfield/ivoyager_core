@@ -1,31 +1,36 @@
 # The Visual Model
 
 This document describes how I, Voyager places, scales, culls, shadows and picks what the
-camera sees: the machinery that turns a double-precision simulation spanning some fifteen
+camera sees: the machinery that turns a double-precision simulation that spans fifteen
 orders of magnitude into a scene a float32 render pipeline can draw without shakes,
-missing geometry or absurd shadows. It is about the logic and the invariants;
-implementation detail lives in the class and shader docs. It has two siblings.
+missing geometry or absurd shadows. It is about the logic and architecture;
+implementation detail lives in the class and shader file docs. It has two siblings.
 [PHYSICAL_MODEL.md](PHYSICAL_MODEL.md) is the objective simulation underneath — bodies,
-orbits, rotation, time and scale, the 64-bit truth that everything here renders and never
-modifies. [PHOTOMETRIC_MODEL.md](PHOTOMETRIC_MODEL.md) covers how bright each pixel is; this
-one covers where everything is, how big it renders, what stands between it and the light,
-and how the mouse finds it. A system that has both a photometric and a spatial face (rings,
-the sun, the star field) appears in both this document and the photometric one, split by
-concern and cross-referenced.
+orbits, rotation, time and scale, the 64-bit "truth" for astronomical scales that
+everything here renders and never modifies. [PHOTOMETRIC_MODEL.md](PHOTOMETRIC_MODEL.md)
+covers how bright each pixel is when physical light is enabled. This document covers where
+everything is, how big it renders, what stands between it and the light, and how the mouse
+identifies items on the screen. A system that has both a photometric and a spatial face
+(rings, the sun, the star field) appears in both this document and the photometric one,
+split by concern and cross-referenced. A fourth document is not a sibling but a plan:
+[IVBody_REDESIGN_v0.3.md](IVBody_REDESIGN_v0.3.md) is the v0.3 rework of `IVBody`, and it
+reaches as far into this model as into the physical one — its §2.4 replaces the first two of
+the four bridging mechanisms the next section names, and its §2.5 is what lets a project hang
+a scene of its own inside the simulation. Where a section below describes a v0.2 mechanism
+that plan replaces, it says so.
 
 ## Overview: two number systems
 
 The simulation's truth is double precision; the render pipeline is not. A GDScript
 `float` is 64-bit, and every scale-sensitive computation — orbital state, trajectory
-paths, time — runs in it (state paths and rebase anchors are `PackedFloat64Array`s
-precisely so they stay in it). But Godot's `Vector3`, every `Node3D` transform, and
-everything on the GPU is float32 in a standard engine build. Float32 carries a relative
+paths, time — runs in it; state paths and rebase anchors are `PackedFloat64Array`s
+precisely so they stay in it. But Godot's `Vector3` and every `Node3D` transform (in a
+standard engine build) and everything on the GPU is float32. Float32 carries a relative
 step of about 1.2e-7 (one ULP), which is a property of *magnitude*: a position at 1 au
-quantizes at ~18 km, at 40 au at ~700 km. Against that, one screen pixel at the reference
-view (50° fov, 1080 lines) subtends ~8e-4 rad — so a naive f32 scene shows kilometer-scale
+quantizes at ~18 km, at 40 au at ~700 km. A naive f32 scene shows kilometer-scale
 shakes at planet range and loses distant content entirely to the depth buffer's limits.
 
-Four mechanisms bridge the gap, and the rest of this document is mostly their contracts:
+Four mechanisms bridge the gap, and the rest of this document is mostly about them:
 
 - **Parenting, so imprecision cancels.** Bodies are scene-tree children of what they
   orbit, and the camera is a child of its target body. The f32 rounding of a long
@@ -45,27 +50,69 @@ Four mechanisms bridge the gap, and the rest of this document is mostly their co
   position — the orbit line under a zoomed camera — the CPU computes the residual in
   doubles each frame and the shader applies it (the render-frame pin, the rebased line).
 
-The first two of those four are patches on a frame the scene tree was never able to build, and
-v0.3 replaces both: every body goes `top_level` and places itself from f64 against a **frame
-anchor**, which is the origin by definition rather than by subtraction. That is also what lets
-a project hang a scene of its own — with Godot physics and `position` as truth — inside the
-simulation; see *The render frame anchor and local scenes*.
+In upcoming v0.3, the first two items will become unecessary: every astronomical body
+in v0.3 is `top_level` and places itself from f64 against a **frame anchor** (a local
+non-astronomical scene, which is simply the camera in the case of the Planetarium). The
+frame anchor is the origin by definition rather than by subtraction. This will allow a
+project to simply "add on" I, Voyager's solar system to a standard Godot scene; see *The
+render frame anchor and local scenes*.
 
-One consequence is worth stating as a principle, because it decides what a second camera
-may do: **the whole per-frame render state is conditioned for exactly one viewpoint.**
-The origin shift, the `iv_farwarp_start` global, every farwarp-remapped vertex, the HUD
-symbol placements and the mouse-probe globals all assume the live `IVCamera`'s position.
-A secondary camera (the hi-res screenshot rig) must copy that camera's global transform
-exactly and may differ only in render size; a camera placed anywhere else sees geometry
-warped for someone else. For the same reason a secondary camera must be a plain
-`Camera3D`, never an `IVCamera` — announcing itself on `IVGlobal.current_camera_changed`
-would hand the farwarp, occlusion, picking and world-controller systems to a throwaway.
+One consequence is that **the whole per-frame render state is conditioned for exactly
+one astronomical viewpoint.** The origin shift, the `iv_farwarp_start` global, every
+farwarp-remapped vertex,
+the HUD symbol placements and the mouse-probe globals all assume a single view position.
+A secondary camera (e.g., our screenshot rig) must copy that camera's global transform;
+a camera placed anywhere else in the solar system sees geometry warped for someone else.
+This does not prevent multiplayer games because only the physical state of astronomical
+objects needs to be shared, and it does not prevent multiple cameras in a local scene as
+long as they share the same astronomical view. The visual state is a player's subjective
+*astronomical* view rendered on a single machine, derived entirely from the objective
+physical state.
+
+### Why not compile Godot in 64-bit?
+
+Godot builds with `scons precision=double`, which makes `real_t` a double and takes with it
+every built-in type that can hold a world coordinate — `Vector3`, `Transform3D`, `Basis`,
+`Plane`, `AABB`, `Projection`, and therefore `Node3D.position` and `global_position`. The
+arguments for it are strong:
+
+- **The f32 problems would be fixed on the CPU.** A GDScript `float` is already 64-bit; making
+  all engine types 64-bit would enable us to use them for astronomical calculations. The main
+  advantage is that `Node3D.position` and `global_position` could be treated as "truth" rather
+  than as a strongly compressed (lossy) value assigned from the true f64 value. We could also
+  remove workarounds like our use of `PackedFloat64Array` in place of `Vector`, `Basis`,
+  etc. 
+- **Origin shifting would resolve to millimetres** rather than onto a ~16 km lattice, which is
+  the direct cause of the shadow boil in *The limits of origin shifting*.
+- **The near:far ceiling would move.** The ~2^24 cap is a float32 *CPU* cancellation in
+  `Projection::get_projection_planes()` (*The depth range*), computed in `real_t`.
+- **Godot physics and collisions could work at astronomical magnitudes**, where today they are
+  confined to a local scene.
+
+Against that stands one counterpoint and one blocker. The counterpoint is that **it does not
+reach the GPU.** A double build keeps vertex attributes, varyings, uniforms and the depth
+buffer in float32 (what it buys on the render side is a double-precision *transform*, carried
+to the shader in split-float form). The pipeline this document is about is still a float32
+pipeline, geometry spanning many orders of magnitude is still interpolated in f32, and the
+systems built for that (farwarp above all) would still be needed.
+
+The blocker is distribution. A double-precision Godot is not the binary anyone downloads from
+godotengine.org, and its export templates are not the ones the editor fetches: a project would
+have to build, maintain and ship an engine and a template set for every target it exports to
+(web included) and redo it at every engine version. I, Voyager is an addon whose value is that
+it drops into a standard Godot project.
+
+**Therefore, we don't use it, and everything here assumes a standard build.** However, a
+project might want it for other reasons (astronomical collisions is the main one). This may
+simplify some of what follows but the GPU limit is still very real.
 
 ## Origin shifting and the frame order
 
+*(Becomes obsolete in v0.3.)*
+
 Each frame `IVCamera` processes its own motion, then subtracts its global position from
 the Universe root's translation — camera at origin, to the f32 rounding of its ancestor
-chain, which at planetary distances is kilometres (*Smallness, not stationarity*, below).
+chain, which at planetary distances is kilometres (*The limits of origin shifting*, below).
 Ordinary tree children ride the shift automatically (their locals are untouched; the world
 moves under them). Two kinds of code do not, and both are ordered explicitly:
 
@@ -93,30 +140,37 @@ Distance computations are shift-invariant (both endpoints carry the same Univers
 translation), so code at priority 0 may difference two same-frame globals freely; what it
 may not do is place a world-space node from them before the shift settles.
 
-### Smallness, not stationarity
+### The limits of origin shifting
 
-The shift does what it was built to do. It takes near-camera world magnitudes from ~1e11
-units down to a few kilometres, and that smallness is the whole point: one f32 ULP at 5 km is
-half a millimetre, against 16 km at 1 au. Relative geometry stays exact on top of it because
-the error is shared (*Overview*). Nothing below is a defect in that.
+The shift buys smallness, and smallness is most of what the render needs. Near-camera world
+magnitudes drop from ~1e11 units to a few kilometres, where one f32 ULP is half a millimetre
+against 16 km at 1 au, and relative geometry stays exact on top of that because the error is
+shared (*Overview*).
 
-What the shift does not deliver — and was never asked to — is a *stationary* world frame. The
-subtraction runs in float32 on a number holding the camera's distance from the Universe
-origin, where one ULP at 1 au is ~16 km, so the camera comes to rest *within* ~8 km of the
-origin rather than *on* it, and that residual is free to drift. Measured on the ISS:
-`Universe.x` unchanged across 109 consecutive frames, the camera 1.1–6.6 km out, and the whole
-near-camera scene translating **129 m per frame** — the ISS's orbital speed over the frame
-rate — with jumps to ~4 km on the frames where the lattice does move.
+What it does not buy is a *stationary* world frame, and some things need one. The subtraction
+runs in float32 on a number holding the camera's distance from the Universe origin, where one
+ULP at 1 au is ~16 km, so the camera comes to rest *within* ~8 km of the origin rather than
+*on* it, and that residual is free to drift. Measured on the ISS: `Universe.x` unchanged across
+109 consecutive frames, the camera 1.1–6.6 km out, and the whole near-camera scene translating
+**129 m per frame** — the ISS's orbital speed over the frame rate — with jumps to ~4 km on the
+frames where the lattice does move.
 
-That cost nothing until 2026-09, when a consumer turned out to need stationarity rather than
-smallness: Godot anchors its directional-shadow texel lattice in absolute world space (*Local
-shadow maps*, and the TODO entry). Two things follow for anyone re-opening it. The quantum is
+The consumer that needs a stationary frame is Godot's directional shadow, which anchors its
+texel lattice in absolute world space: a near scene sliding through that lattice re-rolls its
+sub-texel phase every frame, **and a spacecraft self-shadow appears to "boil"** (*Local shadow
+maps*, and the TODO entry).
+
+Two things generalize from that, and both matter to anyone re-opening it. The quantum is
 *relative*, so it is ~16 km at 1 au whatever `IVUnits.METER` is — a project cannot tune its
 way out by changing sim scale, and a scale-sensitivity hunt is the wrong investigation. And
-the general form of the finding is that the render frame is anchored to the Universe root, so
-a body sweeps through it at its **absolute** speed rather than its speed relative to the
-camera; anything reading world-space *position* rather than a difference sees that sweep. The
-designed answer is to stop anchoring the frame at the Universe root at all — the next section.
+the frame is anchored at the **Universe root**, so a body sweeps through it at its *absolute*
+speed rather than at its speed relative to the camera; anything reading a world-space position
+rather than a difference between two of them sees that sweep.
+
+Both follow from where the frame is anchored, which is what the designed answer changes: place
+every body from f64 against a frame anchor that is the origin by definition, and the frame stops
+moving under the near scene at all ([IVBody_REDESIGN_v0.3.md](IVBody_REDESIGN_v0.3.md) §2.4).
+That is the next section.
 
 ## The render frame anchor and local scenes
 
@@ -129,18 +183,21 @@ set in a base on the Moon, a lander sim, a ship whose interior you walk around: 
 local scenes, its own camera, Godot collision shapes and Godot physics, and wants all of it to
 sit inside a real solar system under a real sky.
 
-**The two-number-systems split is about astronomical scale and about nothing else.** A body's
-rendered `position` is derived and disposable because at 1e11 units an f32 coordinate quantizes
-at kilometres; at 1e2 units it quantizes below a micron, and inside a local scene `position` is
-the truth and Godot's physics is the motion model, unchanged. The two regimes and what each
-owns are tabulated in [PHYSICAL_MODEL.md](PHYSICAL_MODEL.md) *A game whose action is local*.
-What falls to this document is the frame they meet in.
+**The two-number-systems split is about astronomical scale.** A body's rendered `position` is
+derived and disposable because at 1e11 units an f32 coordinate quantizes at kilometres; at 1e2
+units it quantizes below a micron, so a local scene is under no such constraint. Inside one,
+`position` can be the truth exactly as in any other Godot project — Godot physics moving a
+`CharacterBody3D`, Godot collision, the project's own camera, its own gravity — and nothing
+here asks otherwise. What has to meet our systems is a project's astronomical-scale content,
+if it has any. The two regimes and what each owns are tabulated in
+[PHYSICAL_MODEL.md](PHYSICAL_MODEL.md) *A game whose action is local*. What falls to this
+document is the frame they meet in.
 
 **The seam is one node: the frame anchor.** Under §2.4 every `IVBody` is `top_level` and places
 itself at `f64(absolute − anchor_absolute)`. The anchor is placed by that same rule, so it lands
 at exactly zero, and whatever hangs below it is therefore at ordinary local coordinates in a
 world frame that does not move — which is the condition Godot physics, Godot collision and
-Godot's directional-shadow lattice all want, and the condition *Smallness, not stationarity*
+Godot's directional-shadow lattice all want, and the condition *The limits of origin shifting*
 says v0.2 cannot deliver. **What I, Voyager needs from a project's scene is its root.** We place
 that node; everything under it is the project's and is never touched.
 
@@ -150,7 +207,7 @@ as a constant ~1.2e-7 rad of angular error only while the camera sits close to i
 Planetarium meets that by anchoring on its own `IVCamera` (distance zero, and the degenerate
 case of the same formula); a project meets it because a viewer inside a level cannot leave it.
 
-Four consequences worth stating, because each is a thing a project would otherwise have to
+Five consequences worth stating, because each is a thing a project would otherwise have to
 discover:
 
 - **Local content needs no farwarp work.** A local scene lives at distances far under T, where
@@ -159,6 +216,15 @@ discover:
   be astronomically distant needs the always-pass `custom_aabb` and the rest. This holds as long
   as T is set from the camera's own near scale, which `IVCamera` gets from its parent distance;
   a foreign camera has no parent in our sense and would have to supply it (TODO).
+- **The camera's depth range is the one thing a local scene must change.** Godot's `Camera3D`
+  ships `near = 0.05` and `far = 4000`, and 4000 units does not reach the farwarp'd sky: at a
+  metre-scale near distance T is ~1e4 units, which puts the Moon at ~1.2e5, the sun at ~1.8e5
+  and the catalog stars at ~3e5 (*Farwarp*), so a default far plane clips every astronomical
+  thing away. A project's camera takes `IVCamera`'s rule instead — `near = 0.1 ×` and
+  `far = 1e6 ×` the same near scale that sets T — which lands the compressed universe at ~30 %
+  of the far plane and holds the near:far ratio at the 1e7 the engine caps (*The depth
+  range*); a default `near` of 0.05 under a 1e6 far plane would exceed that cap on its own.
+  Nothing else about the scene changes.
 - **Local content is near-domain for lighting.** `IVCoreSettings.size_layers` sorts by radius
   into far / middle / near, and a project's scene belongs with the near light (*Local shadow
   maps*), which carries shadow maps and scales its energy by the camera-point occlusion
@@ -182,12 +248,13 @@ with the project's scene standing where the visual would.
 
 **What v0.2 offers today.** Under our `IVCamera`, a scene parented to an `IVBody` does ride the
 origin shift, and its f32 error is largely shared with the camera's and cancels, so it renders.
-But it is exactly the case *Smallness, not stationarity* describes: its world position is
+But it is exactly the case *The limits of origin shifting* describes: its world position is
 composed in f32 from astronomical terms, and it sweeps through the world frame at its body's
 **absolute** speed — which is what makes craft self-shadowing boil, and it would do the same to
 a base's. Under a project's own camera there is no origin shift at all, since `IVCamera` is what
 performs it, and the scene sits at raw astronomical world coordinates rounding at kilometres.
-Neither is a frame to build a game in. The anchor is, and it arrives with §2.4.
+Neither is a frame to build a game in. The anchor is, and it arrives with
+[IVBody_REDESIGN_v0.3.md](IVBody_REDESIGN_v0.3.md) §2.4.
 
 ## The depth range
 
@@ -298,13 +365,24 @@ Three obligations fall on every farwarp consumer:
   coarser rung once it subtends little, and a body that subtends little spans a small
   fraction of its own distance, which is where g() is closest to linear across it.
 
+What deliberately does **not** ride farwarp: anything that computes from true positions.
+Occlusion (below), exposure metering, and mouse targeting all read true geometry — which
+is consistent *because* the remap preserves screen direction, so a true-position
+unprojection lands on the same pixel as the remapped rendering. This invariant — true
+math, warped drawing, same pixels — is load-bearing across the model; the picking and
+orbit-line sections both depend on it.
+
+Disable the whole system with `IVCoreSettings.apply_farwarp = false` (the global goes to
+0.0, every shader takes the identity branch, the HUD symbol becomes an ordinary child).
+
 ### The sphere LOD ladder
 
-A body with no mesh of its own draws the shared sphere, and one sphere cannot serve both
-ends of the range: at 1.5 radii it is a resolved disc whose silhouette must not show
-facets, and at a few hundred radii it is a handful of pixels. `IVShellsModel` therefore
-picks a rung per frame from meshes built by `IVResourceInitializer` — `max_sphere_resolution`
-halved down to a floor of 16, with rings always half the segments.
+A body with no mesh of its own draws the shared sphere. One sphere at the finest resolution
+(256 radial segments by default) serves the whole range correctly but isn't cheap, since
+a body a few pixels across still draws every triangle a screen-filling disc needs. The
+ladder is a rendering optimization: `IVShellsModel` picks a rung per frame from meshes built
+by `IVResourceInitializer` — `max_sphere_resolution` halved down to a floor of 16, with
+rings always half the segments.
 
 The rule is one number. A facet's chord sags inside the true sphere by
 `radius x (1 - cos(PI / segments))`, fixed in world units, so a rung serves every body whose
@@ -314,11 +392,10 @@ of on-screen size (1992, 498, 125, 31 and 7.8 px), and a body crossing back to a
 must fall 20 % inside it, which is slack against jitter rather than a tuned crossover. Below
 that the `IVBodyPSF` handoff has already taken over at 1-2.5 px.
 
-What it buys is at the far end: before the ladder a body drew 65,536 triangles down to a
-2.5-pixel radius, dozens of bodies at a time in the system-wide views. What it protects is
-the near end — a close body keeps the finest rung, and the closest views in the app are
-closer than any the measurements covered (*Sphere mesh detail* in
-[GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md)).
+What it optimizes are visible "spheroid" bodies that aren't extremely close to the camera: before
+the ladder a body drew 65,536 triangles down to a 2.5-pixel radius, which might be many moon bodies
+in a gas giant system. What it protects is the near end — a view of Earth's rim from the ISS
+(See *Sphere mesh detail* in [GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md).
 
 Two obligations fall on it, both discharged rather than assumed:
 
@@ -331,16 +408,6 @@ Two obligations fall on it, both discharged rather than assumed:
   a capture has registered (`IVShellsModel.capture_render_height`) — the same handshake
   `IVStarsVisual` uses for its bin cull. Rungs are monotone in that height, so the answer can
   be too fine but never too coarse.
-
-What deliberately does **not** ride farwarp: anything that computes from true positions.
-Occlusion (below), exposure metering, and mouse targeting all read true geometry — which
-is consistent *because* the remap preserves screen direction, so a true-position
-unprojection lands on the same pixel as the remapped rendering. This invariant — true
-math, warped drawing, same pixels — is load-bearing across the model; the picking and
-orbit-line sections both depend on it.
-
-Disable the whole system with `IVCoreSettings.apply_farwarp = false` (the global goes to
-0.0, every shader takes the identity branch, the HUD symbol becomes an ordinary child).
 
 ## Sun occlusion: analytic shadows
 
@@ -427,13 +494,13 @@ region and the sun-less night side settle at the same ambient level. The feed co
 when `IVCoreSettings.apply_analytic_shadows` is false (that setting disables only the
 shadow terms and the light dimming), so night sides never go black.
 
-**The model assumes one star.** The manager feeds a single sun direction and one occluder
-set, and one AO value scales all direct light uniformly — a fragment eclipsed from star A
-but lit by star B cannot be expressed in it. The occlusion math itself is already
-sun-parameterized and reusable per star; only the application is single-sun (per-light
-attenuation in a custom `light()`, viable now that the METER scale-sensitivity that once
-ruled it out is resolved, or additive per-star passes). See the shaderinc header and the
-multistar entry in the TODO.
+**The model presently assumes one star (TODO: support multiple stars).** The manager feeds
+a single sun direction and one occluder set, and one AO value scales all direct light
+uniformly — a fragment eclipsed from star A but lit by star B cannot be expressed in it.
+The occlusion math itself is already sun-parameterized and reusable per star; only the
+application is single-sun (per-light attenuation in a custom `light()`, viable now that
+the METER scale-sensitivity that once ruled it out is resolved, or additive per-star
+passes). See the shaderinc header and the multistar entry in the TODO.
 
 ## Local shadow maps
 
@@ -457,7 +524,7 @@ One thing reach cannot buy back is steadiness. Godot stabilises a directional sh
 snapping the ortho bounds to a texel lattice anchored in **absolute world space**
 (`renderer_scene_cull.cpp`, `_light_instance_setup_directional_shadow`), which holds static
 world geometry on the same texels every frame. Our near scene is not static in world space —
-see *Smallness, not stationarity* — so its sub-texel phase re-randomises every frame and craft
+see *The limits of origin shifting* — so its sub-texel phase re-randomises every frame and craft
 self-shadowing boils. Reach and atlas size set the amplitude of that boil, not its existence.
 An anchored frame makes the near scene stationary by construction, which is the fix and is also
 the condition a project's own level needs (*The render frame anchor and local scenes*).
@@ -468,7 +535,13 @@ Two rules keep the maps honest across the warp boundary:
   distance > T while every true-position receiver sits inside it; without the clamp
   (`directional_shadow_max_distance` ≤ last frame's `farwarp_start`), near casters stamp
   oversized shadows on warp-compressed bodies, and a warped body's own light-space
-  imprint false-shadows its camera-space self.
+  imprint false-shadows its camera-space self. The room that leaves is worth stating in
+  metres, because a local scene has to fit inside it: T is 1e4 × the camera's distance to
+  its target, so a camera 2 m from a lander has 20 km of shadow room and one 100 m out has
+  1000 km. Against that the near light asks for at most `target_plus` (250 m) plus the
+  camera distance, so the clamp overrides it only inside ~2.5 cm of the target — no
+  ordinary local scene comes near the boundary. What the clamp does govern is the middle
+  light, whose 1000 km floor exceeds T whenever the camera is within 100 m of its target.
 - **Only true-position "terrain" casts.** Casters carry the
   `IVGlobal.LOCAL_SHADOW_CASTER` layer bit (0b1_0000_0000, the near/middle rows'
   `shadow_caster_mask`). Craft-scale bodies hold it statically; larger bodies are granted
@@ -652,7 +725,7 @@ still clears the bar by an order of magnitude through the 2090s.
 
 ## Point sources: one PSF quad per bright body
 
-`IVBodyPSF` draws the camera's point-spread response to one body's flux on a
+`IVBodyPSF` draws one body's flux through the camera's point-spread function (PSF) on a
 camera-facing quad — the Gaussian PSF core plus the `1/r²` glare wing, summed in linear
 in one fragment and crossing into the renderer's colour space through one
 `display_write()` (`body_psf.gdshader`). It replaced the sun's former `sun_point` +
@@ -999,7 +1072,7 @@ this is the spatial one.
   near-camera scene translates through world space at the camera target's orbital speed
   (129 m/frame on the ISS, with ~4 km lattice snaps), because the origin shift resolves
   onto a ~16 km f32 lattice at 1 au and so holds the camera *near* the origin rather than
-  *on* it (*Smallness, not stationarity*). Godot's directional-shadow texel lattice is
+  *on* it (*The limits of origin shifting*). Godot's directional-shadow texel lattice is
   anchored in absolute world space, so the sub-texel phase re-rolls every frame.
   Established 2026-09 by the decisive experiment: pause, translate the scene rigidly by
   one frame's worth of real motion, and ~25k pixels change — every one of them on the
@@ -1021,7 +1094,9 @@ this is the spatial one.
   (planned for v0.3, §§2.4–2.5 of
   [IVBody_REDESIGN_v0.3.md](IVBody_REDESIGN_v0.3.md));
   or a `precision=double` engine build, which would let the existing shift resolve to
-  millimetres, at the cost of custom builds for every export target including web.
+  millimetres but would not retire farwarp, and which we have ruled out because it requires
+  custom engine and export-template builds for every target including web (*Why not compile
+  Godot in 64-bit?*).
 - **A project's own scene: the anchor exists, the plumbing around it does not.** *The render
   frame anchor and local scenes* states the contract v0.3's placement rule establishes; three
   things it needs are unbuilt and undesigned. A project cannot **announce its own camera** —

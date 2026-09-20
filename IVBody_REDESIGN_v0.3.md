@@ -186,9 +186,8 @@ astronomical.
 #### Two requirements on the render frame
 
 Rendering through f32 makes two demands on the world frame — one about where the camera *is* in
-it, one about how it *moves* through it. Neither is absolute, and that is worth saying plainly:
-an ordinary game violates both every frame and nothing suffers. What neither may be is
-**astronomical**.
+it, one about how it *moves* through it. Neither is an issue in a normal Godot scene tree. Both
+become a problem when they are **astronomical** in size.
 
 1. **Location — the camera's world-space magnitude stays small.** Float32's step is relative,
    so how precisely anything near the camera can be placed is set by how far the camera is from
@@ -203,8 +202,7 @@ an ordinary game violates both every frame and nothing suffers. What neither may
 
 Both say "camera" because in the Planetarium the camera is the only thing in the near scene.
 The general subject of both is the **near scene** — whatever is being drawn at close range,
-which in a project is a whole level with the camera inside it. §2.4 names that subject and
-§2.5 is what it is for; nothing in the diagnosis below changes.
+which in a project might be a whole level with the camera inside it.
 
 Neither is a requirement of the simulation; both are artifacts of rendering it, which is why
 they sit on the visual side of §2.1 — and why they are hard to meet while the body's `position`
@@ -217,13 +215,13 @@ is carrying physical state. Where v0.2 stands on each:
   camera is stationary relative to a station that is not moving relative to it — and the frame
   still sweeps ~129 m per frame underneath them both, a hundred-odd metres against a
   hundred-metre subject. Godot's shadow lattice re-rolls on every one of those frames, and the
-  station's self-shadowing visibly boils. It is nobody's bug: the frame is anchored at the
-  barycentre, so a body travels through it at its **absolute** speed rather than its speed
+  **station's self-shadowing visibly boils**. Godot's world frame is anchored at the Sun;
+  a body travels through it at its **absolute** speed rather than its speed
   relative to the camera, and nothing on the shading side can see that, let alone undo it.
 
 The ~16 km quantum behind both is *relative*, so it is ~16 km at 1 au whatever `IVUnits.METER`
-is; changing sim scale is not a way out ([VISUAL_MODEL.md](VISUAL_MODEL.md) *Smallness, not
-stationarity*).
+is; changing sim scale is not a way out ([VISUAL_MODEL.md](VISUAL_MODEL.md) *The limits of
+origin shifting*).
 
 #### What holds it together, and why that is the problem
 
@@ -261,17 +259,15 @@ something anyone can rely on without thinking about it, and that is the objectio
   *within* ~8 km of the origin rather than *on* it. It delivers the smallness it was built for.
   What it leaves behind — a camera that is near the origin but still traveling through the
   frame — is requirement 2, untouched.
-- **`IVPathVisual`'s rebased tier** (`tree/path_visual.gd` — read it as the evidence; it does
-  not summarize). One graphic has to be correct in the local render frame, against nearby
+- **`IVPathVisual`'s rebased tier** (`tree/path_visual.gd` — read it as the evidence).
+  One graphic has to be correct in the local render frame, against nearby
   objects, while its total extent is astronomical, and a large part of the class is machinery
-  for inheriting the right rounding in the right places and not in the wrong ones. The comments
-  it needs are the tell: one of them warns against setting `global_position` because that "would
-  re-do the large-magnitude float32 cancellation this mode exists to avoid." Needing a comment
-  to explain code is already a bad sign; needing *that* comment means the reader has to hold the
-  whole error chain in their head before touching the line safely. (Caveat: the change below
-  removes most of this difficulty but not all of it. The Hermite tessellation is
-  level-of-detail, and the render-frame pin corrects the curve's own approximation error, which
-  no amount of precision removes — both survive.)
+  for inheriting the right rounding in the right places and not in the wrong ones. The code
+  comments are nearly incomprehensible: one of them warns against setting `global_position`
+  because that "would re-do the large-magnitude float32 cancellation." To understand the code
+  or even the comments requires you to hold the whole error chain in your head. (Caveat: the
+  change below removes most of this difficulty but not all of it. The level-of-detail mechanics
+  are still needed after the 32-bit issues are removed.)
 - **Farwarp's assembly rule.** `update_farwarp()` must build its result camera-relatively and
   carries a standing warning never to derive it by offsetting true-scale positions — the
   rounding of the large terms swamps the small result.
@@ -310,7 +306,8 @@ somewhere other than the scene being drawn.
 `top_level` and places itself relative to a frame anchor, from f64.**
 
 ```gdscript
-	# top_level == true; position = absolute_f64(time) - anchor_absolute_f64(time)
+top_level = true
+position = absolute_f64(time) - anchor_absolute_f64(time)
 ```
 
 The **frame anchor** is the one node whose absolute position the render frame is built around.
@@ -411,7 +408,7 @@ all — which is exactly what the sleep rebuild needs to be free to change (§9.
   missed: [PHYSICAL_MODEL.md](PHYSICAL_MODEL.md) *The body tree* credits parenting with letting
   "float32 imprecision cancel in the render", which stops being true; and
   [VISUAL_MODEL.md](VISUAL_MODEL.md)'s *Overview* (four mechanisms, parenting first), *Origin
-  shifting and the frame order*, *Smallness, not stationarity* and both TODO entries are all
+  shifting and the frame order*, *The limits of origin shifting* and both TODO entries are all
   rewritten by this.
 
 *The fallback, if v0.3 slips.* The flaw can be patched instead of removed: each frame, walk up
