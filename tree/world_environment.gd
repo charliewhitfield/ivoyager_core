@@ -36,6 +36,14 @@ extends WorldEnvironment
 ## The default Environment omits it because the Core plugin is stand-alone without
 ## assets; a missing file simply leaves the black clear-color background. Discrete
 ## stars are drawn separately by [IVStarsVisual].[br][br]
+##
+## Glow halos keep the share of the frame they are authored for at any render height
+## (window size, 3D render scale or capture): this node reads the Environment's glow
+## level weights at [method Node._ready] as authored for a render
+## [code]iv_reference_viewport_height[/code] tall, and shifts them to the current height.
+## Change them at runtime with [method set_glow_levels], not on the Environment, which
+## this node overwrites whenever the height changes. Inert under Compatibility, whose
+## glow has no levels. See [i]Glow: the bloom pass[/i] in PHOTOMETRIC_MODEL.md.[br][br]
 
 ## If true, a background panorama discovered under [member starmaps_search] by
 ## [member starmap_background_file_prefix] is added to the Environment's sky as a
@@ -88,12 +96,37 @@ var starmaps_search: Array[String] = ["res://addons/ivoyager_assets/starmaps"]
 ## [constant IVStarsVisual.HIDE_THRESHOLD_FRACTION], the same decision for the stars.
 const HIDE_THRESHOLD_FRACTION := 0.5
 
+## Render height an off-screen capture is about to use, or 0.0 for none. Set and cleared by
+## [IVScreenshotManager], so the capture's glow is shifted for its own frame. Not a tunable.
+static var capture_render_height := 0.0
+
 var _starmap_material: ShaderMaterial # null until _add_starmap_sky() finds a panorama
 var _starmap_skipped := false
+var _glow_levels: Array[float] = [] # as authored for the reference height; empty = no shift
+var _glow_render_height := 0.0 # the height the Environment's levels are shifted for
+
+
+# Moves each weight octaves_finer levels finer (coarser if negative). A weight landing between
+# two levels is split to keep the halo's variance, level widths doubling per level; weight
+# past either end of the chain piles onto the end level.
+static func _shift_glow_levels(levels: Array[float], octaves_finer: float) -> Array[float]:
+	var shifted: Array[float] = []
+	shifted.resize(levels.size())
+	shifted.fill(0.0)
+	var last_level := levels.size() - 1
+	for level in levels.size():
+		var weight := levels[level]
+		if weight == 0.0:
+			continue
+		var position := level - octaves_finer
+		var fine_level := floori(position)
+		var coarse_share := (pow(4.0, position - fine_level) - 1.0) / 3.0
+		shifted[clampi(fine_level, 0, last_level)] += weight * (1.0 - coarse_share)
+		shifted[clampi(fine_level + 1, 0, last_level)] += weight * coarse_share
+	return shifted
 
 
 func _ready() -> void:
-	set_process(false)
 	if IVGlobal.is_gl_compatibility:
 		environment.tonemap_exposure = gl_compatibility_exposure
 		# Glow stays ON here, and it is a deliberate trade rather than a free win. It is
@@ -119,7 +152,52 @@ func _ready() -> void:
 		# pass that runs regardless, for a few ALU. Nothing here switches it back off, so a
 		# project that wants it anyway can author it into its own Environment.
 		environment.adjustment_enabled = true
+		for level in RenderingServer.MAX_GLOW_LEVELS:
+			_glow_levels.append(environment.get_glow_level(level))
+	set_process(!_glow_levels.is_empty())
 	IVStateManager.assets_preloaded.connect(_on_asset_preloader_finished)
+
+
+func _process(_delta: float) -> void:
+	if !_glow_levels.is_empty():
+		_update_glow_levels()
+	if _starmap_material:
+		_update_starmap_skip()
+
+
+## Returns the glow level weights as authored for a render
+## [code]iv_reference_viewport_height[/code] tall, which this node shifts to the current
+## render height. Empty under Compatibility.
+func get_glow_levels() -> Array[float]:
+	return _glow_levels.duplicate()
+
+
+## Sets the glow level weights ([constant RenderingServer.MAX_GLOW_LEVELS] of them, as
+## [method Environment.set_glow_level] takes them) for a render
+## [code]iv_reference_viewport_height[/code] tall. Use this rather than the Environment to
+## change glow levels at runtime. No effect under Compatibility, whose glow has no levels.
+func set_glow_levels(levels: Array[float]) -> void:
+	assert(levels.size() == RenderingServer.MAX_GLOW_LEVELS)
+	if _glow_levels.is_empty():
+		return
+	_glow_levels = levels.duplicate()
+	_glow_render_height = 0.0 # applied on the next frame
+
+
+# Every glow level is a blur of the render buffer in its own texels, so an unshifted halo is
+# fixed in render pixels: narrower in a taller render, wider at a lower 3D render scale.
+func _update_glow_levels() -> void:
+	var render_height := capture_render_height
+	if render_height <= 0.0:
+		var viewport := get_viewport()
+		render_height = viewport.get_visible_rect().size.y * viewport.scaling_3d_scale
+	if render_height <= 0.0 or render_height == _glow_render_height:
+		return
+	_glow_render_height = render_height
+	var octaves_finer := log(IVBodyPSF.get_reference_viewport_height() / render_height) / log(2.0)
+	var levels := _shift_glow_levels(_glow_levels, octaves_finer)
+	for level in levels.size():
+		environment.set_glow_level(level, levels[level])
 
 
 # What the sky pass costs is fixed -- a full-screen bicubic resample of the panorama --
@@ -129,7 +207,7 @@ func _ready() -> void:
 # the panorama's brightest texel to be. energy_multiplier is read from the material rather
 # than taken as IVExposureManager.sky_energy so that whatever last wrote it is what this
 # answers to.
-func _process(_delta: float) -> void:
+func _update_starmap_skip() -> void:
 	var skip := false
 	if skip_invisible_starmap and IVExposureManager.physical_active:
 		var energy_var: Variant = _starmap_material.get_shader_parameter(&"energy_multiplier")
@@ -155,7 +233,7 @@ func _on_asset_preloader_finished() -> void:
 	# Only this node's own BG_SKY may be switched away and back: a project whose panorama
 	# did not resolve keeps whatever background its Environment authored.
 	_starmap_material = _get_starmap_material()
-	set_process(_starmap_material != null)
+	set_process(!_glow_levels.is_empty() or _starmap_material != null)
 	# The sky's level is IVPSFSettings photometry (see _get_starmap_energy), so this node
 	# is a consumer of those values and re-applies on the signal like the rest of them.
 	var psf_settings: IVPSFSettings = IVGlobal.program.get(&"PSFSettings")

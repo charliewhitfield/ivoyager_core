@@ -406,8 +406,8 @@ Two obligations fall on it, both discharged rather than assumed:
   every viewport it draws into.** `IVScreenshotManager` renders these same nodes at a size of
   its own, so the ladder takes the greater of the live viewport's render height and the height
   a capture has registered (`IVShellsModel.capture_render_height`) — the same handshake
-  `IVStarsVisual` uses for its bin cull. Rungs are monotone in that height, so the answer can
-  be too fine but never too coarse.
+  `IVStarsVisual` uses for its bin cull and `IVWorldEnvironment` for glow. Rungs are monotone
+  in that height, so the answer can be too fine but never too coarse.
 
 ## Sun occlusion: analytic shadows
 
@@ -1062,7 +1062,7 @@ this is the spatial one.
 | | `vertecies_per_orbit` / `vertecies_per_trajectory_segment` | State-path knots (500): smoothness base for the rebased line; the pin owns trueness. |
 | | `vertecies_per_conic_mesh` / `vertecies_per_orbit_low_res` | Shared unit conic (4096) for coarse body orbits; low-res loop (100) for SBG orbit lines. |
 | | `stroboscope_frames_per_second` (+ blur settings) | Artificial stable stroboscope for fast rotators at high time speed (0 = off). |
-| user options | `render_scale` | The 3D render buffer as a share of the window (100, 85, 70 or 50 %), set by `IVGraphicsManager`. Every decision about what the buffer can resolve is made in its pixels: the sphere LOD rung, the star-bin cull, the disc, ring and point-source handoffs, and picking. HUD sizes stay in window pixels, being sizes on the screen. |
+| user options | `render_scale` | The 3D render buffer as a share of the window (100, 85, 70 or 50 %), set by `IVGraphicsManager`. Every decision about what the buffer can resolve is made in its pixels: the sphere LOD rung, the star-bin cull, the disc, ring and point-source handoffs, and picking. HUD sizes stay in window pixels, being sizes on the screen, and glow halos keep their share of the frame (*Glow: the bloom pass* in the sibling document). |
 | `IVDynamicLight` | `SHADOW_ENABLE_REACH_RATIO` / `SHADOW_DISABLE_REACH_RATIO` / `SHADOW_DISABLE_DELAY_FRAMES` (constants, 1.25 / 2.0 / 120) | Flip suppression for the empty-pass skip. Asymmetric on purpose: on is immediate, off waits. |
 | | `shadow_maps_enabled` (static) | False clears every shadow map, whatever the skip decides. `IVGraphicsManager` sets it from the user's Shadow Resolution option (Off). |
 | `dynamic_lights.tsv` | per-row masks, shadow distances, `apply_sun_occlusion` | The light stack: domains, shadow reach, which rows dim by the camera-point sun fraction. |

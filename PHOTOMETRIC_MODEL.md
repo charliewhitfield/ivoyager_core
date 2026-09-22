@@ -1857,7 +1857,8 @@ true.
 | `glow_hdr_threshold` | 1.0 | **No, not downward.** 1.0 is the whole contract: "what clips, spills." Lowering it blooms metered content; raising it mutes the faint end for no gain, since the cap already flattens the bright end. |
 | `glow_hdr_luminance_cap` | 12.0 | **Yes, knowingly.** The one photometric lever here — where bloom stops being proportional to flux (see below). Raising it buys honest wing energy on the brightest sources and costs bright-end size hierarchy and firefly damping. Inert under Compatibility, which clamps lower on its own. |
 | `glow_blend_mode` | Screen | **Yes, except Soft Light.** Screen and Additive both composite pre-tonemap in linear and agree over dark sky. Soft Light is the odd one out: the engine applies it *after* tonemapping, on display-referred values, which is the one mode that is wrong here on principle rather than to taste. |
-| `glow_levels`, `glow_intensity`, `glow_strength`, `glow_mix`, `glow_map*` | 2/3/4 at 0.8/0.4/0.1, 0.3, 1.0, 0.05, none | **Yes, freely.** Halo width, weight and shape. None of them touch which pixels qualify, only how their light is spread. |
+| `glow_levels` | 2/3/4 at 0.8/0.4/0.1 | **Yes, as authored for the 1080 reference height.** Halo width and shape, not which pixels qualify. `IVWorldEnvironment` shifts them to the render height (*Render height*, below), so change them at runtime through its `set_glow_levels()`: a write to the Environment is overwritten at the next height change. |
+| `glow_intensity`, `glow_strength`, `glow_mix`, `glow_map*` | 0.3, 1.0, 0.05, none | **Yes, freely.** Halo weight and shape. None of them touch which pixels qualify, only how their light is spread. |
 | `glow_normalized` | off | **Yes, but it does nothing here.** It renormalizes the level weights on the CPU (free), and at fixed levels that is a uniform 1/1.3 rescale — indistinguishable from turning `glow_intensity` down. Tested; no visible change. |
 
 One setting outside the glow group belongs in the same list: **the tonemapper**. Glow
@@ -1874,7 +1875,8 @@ veiling-glare add.
   and contribution is full by 3.0 — and **capped at `glow_hdr_luminance_cap` = 12.0** per
   channel. A Reinhard weighting on the first downsample suppresses single-pixel fireflies,
   which also suppresses the sub-pixel star shimmer a bloom could otherwise amplify.
-- The blurred levels (defaults 2/3/4 at 0.8/0.4/0.1 — quarter- to sixteenth-resolution)
+- The blurred levels (defaults 2/3/4 at 0.8/0.4/0.1 — quarter- to sixteenth-resolution of
+  the render buffer, shifted with its height: *Render height*, below)
   times `glow_intensity` 0.3 composite **before tonemapping, in linear light**, for every
   blend mode but Soft Light. The default Screen blend at `white` 1.0 is
   `color + glow − color·glow`: over dark sky — where every halo lives — that is an additive
@@ -2008,13 +2010,30 @@ down, not up. `glow_bloom` must stay 0.0 for this to hold, which it must anyway.
 The probe itself reads at `POST_TRANSPARENT`, pre-tonemap and therefore pre-glow, so picking
 was never at risk from glow — only the picture was.
 
-**Captures.** Hi-res screenshots share the environment and get glow; halo radii are
-resolution-relative (blur levels) where the PSF is absolute pixels, so a halo holds its share
-of the frame while stars stay pin-sharp, and a taller render pushes fainter stars over the
-threshold — both consistent with the fixed-f-number camera the star field already implements.
-The 2D icon rig runs its own `World3D` on the default environment: **no glow in icons**,
-which keeps transparent readbacks clean and costs the exact in-sim look of overexposed
-content. Accepted.
+**Render height: a halo keeps its share of the frame.** Every glow level is a blur of the
+render buffer in that buffer's own texels, so left alone a halo is fixed in render pixels: a
+taller window or a hi-res capture narrows it against the frame, and a 3D render scale below 1
+widens it. Measured around the sun on Forward+, its light ran ×1.46 at 70 % render scale and
+×1.98 at 50 %, and its reach nearly as much. `IVWorldEnvironment` therefore holds the
+Environment's levels as authored for the 1080 reference height (`iv_reference_viewport_height`,
+the height the PSF law is normalized to) and shifts them `log2(1080 / render height)` octaves,
+finer below the reference and coarser above it. A weight that lands between two levels is
+split to keep the halo's variance, level widths doubling per level: at 85 % and 70 % that held
+the light to 1.02 and 1.03 of 100 %, where a split linear in octaves ran 1.09 and 1.17.
+Verified in frame-height units against a 1080-tall render at 100 %: 85, 70 and 50 % render
+scale, a 1440-tall window and 720- and 1440-tall screenshots all land within 0.94–1.03 of its
+light and 2 px (1080-equivalent) of its reach. A capture gets its own height through
+`IVWorldEnvironment.capture_render_height`, the handshake `IVScreenshotManager` already runs
+for the star cull and the sphere LOD, so the live view shows the capture's levels for the few
+frames of a shot. **Compatibility cannot do this**: its glow has no levels, so a halo there
+stays fixed in render pixels (×1.60 of its light at 70 %, ×2.23 at 50 %).
+
+**Captures.** Hi-res screenshots share the environment, so they get glow at their own height
+(above), while stars stay pin-sharp — the PSF is absolute pixels — and a taller render pushes
+fainter stars over the threshold, consistent with the fixed-f-number camera the star field
+already implements. The 2D icon rig runs its own `World3D` on the default environment: **no
+glow in icons**, which keeps transparent readbacks clean and costs the exact in-sim look of
+overexposed content. Accepted.
 
 **Compatibility gets a different pass, and it is ON there — a deliberate trade, not a free
 win.** It was gated off on 2026-08-31 and back on with the PSF quad system, and the
@@ -2096,6 +2115,8 @@ lever a capped pass cannot offer is one the shader does not need.
 | | `emission_luminance_scale` | Luminance of a full-white emission texel at multiplier 1.0. |
 | | `ambient_starlight_illuminance` | Integrated starlight: ambient level and the metering floor. |
 | `IVWorldEnvironment` | `skip_invisible_starmap` | Stops drawing the background panorama once exposure has taken it under half a display code. False renders the sky always, which is the A/B an exposure-skip measurement diffs against. See *Skipping what the camera has metered away*. |
+| | `set_glow_levels()` / `get_glow_levels()` | The glow level weights as authored for the 1080 reference height, which the node shifts to the render height; the runtime way to change them. See *Glow: the bloom pass*. |
+| | `capture_render_height` (static) | Render height an off-screen capture is about to use, so its glow levels are shifted for it; `IVScreenshotManager` sets and clears it. Not a tunable. |
 | `IVStarsVisual` | `cull_invisible_bins` | The same for each magnitude bin of the star field. False submits the whole catalog. |
 | | `capture_render_height` (static) | Render height an off-screen capture is about to use; `IVScreenshotManager` sets and clears it. Not a tunable. |
 | | `auto`, `manual_exposure_ev`, `exposure_adjustment_ev` | Runtime overrides for a GUI: hold the metered result, replace it with a stated EV, or offset either. The defaults (auto, no adjustment) apply the metered result itself. |

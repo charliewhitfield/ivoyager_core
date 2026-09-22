@@ -237,8 +237,11 @@ stars: detected peaks fall from 24k to 12k to 5.6k.
 **Built since** as the user option 3D Render Scale (setting `render_scale`): 100, 85, 70 or 50%,
 upscaled with FSR 1 on Forward+ and bilinear on Compatibility. Line and point picking, which had
 assumed an unscaled buffer, now follows the scaled one (*Mouse picking* in
-[VISUAL_MODEL.md](VISUAL_MODEL.md)). The relief at 85% and 70% is not measured; the figures
-above are for 75% and 50%.
+[VISUAL_MODEL.md](VISUAL_MODEL.md)). Glow halos keep their share of the frame on Forward+,
+where they had widened as 1/scale; on Compatibility, whose glow has no levels to shift, they
+still do, twice as wide at 50% (*Glow: the bloom pass* in
+[PHOTOMETRIC_MODEL.md](PHOTOMETRIC_MODEL.md)). The relief at 85% and 70% is not measured; the
+figures above are for 75% and 50%.
 
 
 ## The renderer, on desktop
