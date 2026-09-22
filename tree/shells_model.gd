@@ -172,9 +172,6 @@ var _rest_basis: Basis # the basis as built, which a 'process' method poses the 
 var _clouds_shadow_spin_rate := 0.0 # deg/s of the deck shell 0 takes its cloud shadow from
 var _clouds_shadow_material: ShaderMaterial # shell 0's own, for the per-frame spin write
 
-var _times := IVGlobal.times
-
-
 
 
 # *****************************************************************************
