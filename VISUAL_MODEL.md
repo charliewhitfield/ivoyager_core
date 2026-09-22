@@ -913,8 +913,9 @@ so content brighter than an id cannot decode as one. The band is one binade of R
 whose half-float step is 1/2048 — exactly 1024 representable values per channel, which
 is where the 30 bits come from; a broadcast that did not survive storage exactly would
 decode as the *wrong* id. An `IVFragmentIDCompositorEffect` on the live camera
-dispatches a tiny compute probe at `POST_TRANSPARENT` — pre-tonemap, pre-glow, so the
-picture can never perturb picking — reads the resolved HDR buffer over the same grid,
+dispatches a tiny compute probe at `POST_TRANSPARENT` — pre-tonemap and pre-glow, so
+neither can perturb picking, though an additive transparent draw can (see TODO) — reads
+the resolved HDR buffer over the same grid,
 returns the id nearest the mouse asynchronously, and the identifier holds it against
 dropout (40 frames or 20 px of mouse travel) so a thin line does not flicker its label.
 
@@ -933,9 +934,15 @@ not settled (TODO).
 The system requires a `RenderingDevice`: on the Compatibility renderer the identifier
 removes itself and every producer's `if _fragment_identifier:` guard falls back to the
 plain materials — no line/point mouse-over on the web export, while body picking (pure
-CPU) is unaffected. One stated assumption: window pixels equal internal-buffer pixels
-(no FSR / resolution scaling) — the broadcast grid and the probe would misalign under
-scaling (see TODO).
+CPU) is unaffected.
+
+The stamp and the probe both live in the 3D render buffer, which 3D render scale makes
+smaller than the window the mouse moves in. The identifier maps the mouse to the buffer
+pixel under it and hands that one whole pixel to both. The two sparse grids must coincide
+exactly, and a scaled mouse position is fractional: rounded separately, the stamp and
+the probe land on different pixels and find nothing, silently. `fragment_range`
+therefore counts buffer pixels, so at 50 % the probe reaches twice as far across the
+screen, and each stamped pixel is magnified with the rest of the image.
 
 ## Close-range detail
 
@@ -1032,6 +1039,7 @@ this is the spatial one.
 | Empty-pass skip | renderer-neutral: it keys on whether a light has a map, not on the renderer | same — but here the flip recompiles, which is why it is opt-in (*Local shadow maps*) |
 | Body mouse targeting | CPU, identical | identical |
 | Line/point picking | compute probe at `POST_TRANSPARENT` | **absent** (no RenderingDevice); producers fall back to plain materials |
+| 3D render scale upscale | FSR 1 (Forward+); bilinear (Mobile) | bilinear |
 | GPU Kepler points | identical | identical (solver unrolled for old GL compilers) |
 
 ## Settings summary
@@ -1054,6 +1062,7 @@ this is the spatial one.
 | | `vertecies_per_orbit` / `vertecies_per_trajectory_segment` | State-path knots (500): smoothness base for the rebased line; the pin owns trueness. |
 | | `vertecies_per_conic_mesh` / `vertecies_per_orbit_low_res` | Shared unit conic (4096) for coarse body orbits; low-res loop (100) for SBG orbit lines. |
 | | `stroboscope_frames_per_second` (+ blur settings) | Artificial stable stroboscope for fast rotators at high time speed (0 = off). |
+| user options | `render_scale` | The 3D render buffer as a share of the window (100, 85, 70 or 50 %), set by `IVGraphicsManager`. Every decision about what the buffer can resolve is made in its pixels: the sphere LOD rung, the star-bin cull, the disc, ring and point-source handoffs, and picking. HUD sizes stay in window pixels, being sizes on the screen. |
 | `IVDynamicLight` | `SHADOW_ENABLE_REACH_RATIO` / `SHADOW_DISABLE_REACH_RATIO` / `SHADOW_DISABLE_DELAY_FRAMES` (constants, 1.25 / 2.0 / 120) | Flip suppression for the empty-pass skip. Asymmetric on purpose: on is immediate, off waits. |
 | | `shadow_maps_enabled` (static) | False clears every shadow map, whatever the skip decides. `IVGraphicsManager` sets it from the user's Shadow Resolution option (Off). |
 | `dynamic_lights.tsv` | per-row masks, shadow distances, `apply_sun_occlusion` | The light stack: domains, shadow reach, which rows dim by the camera-point sun fraction. |
@@ -1152,11 +1161,14 @@ this is the spatial one.
   benign today — the shipped system adds no bodies at runtime, and the bodies that *do*
   re-parent (patched-conic spacecraft) are not shader receivers — but either assumption
   breaking silently mis-shadows. Invalidate the cache on tree change when it matters.
-- **Fragment-id picking assumes unscaled rendering.** The broadcast grid and the probe
-  both work in internal-buffer pixels assumed equal to window pixels; FSR or 3D
-  resolution scaling would misalign them and break line/point picking quietly. Either
-  scale `iv_mouse_fragcoord` and the probe origin by the internal/window ratio, or
-  assert scaling off.
+- **Additive transparent draws corrupt the id stamps beneath them.** The probe reads
+  after the transparent pass, and a stamp decodes only if nothing has been added over it:
+  about 1/4096 breaks the exact encoding. `IVBodyPSF`'s glare wing is additive, so lines
+  and points near a bright source cannot be picked. Measured from 4.7 AU with the Sun in
+  frame, orbit targets up to about 250 px from it were lost at 50 % render scale, and every
+  one returned with `glare_scale` at 0. The zone widens as the render scale drops, the glare
+  law being written per render pixel. Every id shader draws opaque, so probing before the
+  transparent pass should end it; what that gives up is transparent geometry hiding an id.
 - **An atmosphere limb is not eclipsed.** The planet's own shadow is in the limb model
   but an eclipse by another body is not; `sun_occlusion_visible_fraction` at the
   tangent point would add it (also listed in the sibling document's atmosphere TODO —

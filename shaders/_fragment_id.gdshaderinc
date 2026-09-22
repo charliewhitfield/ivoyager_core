@@ -25,7 +25,7 @@
 // `render_mode unshaded` outputs ALBEDO directly and skips the EMISSION add.
 //
 // Globals are set by IVFragmentIdentifier each frame:
-//   iv_mouse_fragcoord  - mouse position + (0.5, 0.5) in internal-buffer pixels
+//   iv_mouse_fragcoord  - center of the internal-buffer pixel under the mouse
 //   iv_fragment_id_range - sparse-grid half-extent; <= 0 disables broadcasting
 //
 // Fragment id components arrive in [1, 1024] per channel (offset-by-1 sentinel

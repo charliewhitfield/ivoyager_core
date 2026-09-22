@@ -20,23 +20,31 @@
 class_name IVGraphicsManager
 extends Node
 
-## Applies user graphics settings (antialiasing, shadow resolution and atmosphere
-## quality) to the rendering server, the main window viewport and the local
-## shadow maps, and publishes the renderer's colour-space convention to shaders.
+## Applies user graphics settings (antialiasing, shadow resolution, atmosphere
+## quality and 3D render scale) to the rendering server, the main window viewport
+## and the local shadow maps, and publishes the renderer's colour-space convention
+## to shaders.
 ##
 ## Added by [IVCoreInitializer]. Settings [code]atmosphere_quality[/code],
-## [code]msaa_3d[/code], [code]fxaa[/code], [code]use_taa[/code] and
-## [code]shadow_resolution[/code] are defined in [IVSettingsManager] and
-## exposed in [IVOptionsPopup]; this node applies them at startup and re-applies
-## them live on change. [member atmosphere_quality_settings], [member
+## [code]render_scale[/code], [code]msaa_3d[/code], [code]fxaa[/code],
+## [code]use_taa[/code] and [code]shadow_resolution[/code] are defined in
+## [IVSettingsManager] and exposed in [IVOptionsPopup]; this node applies them at
+## startup and re-applies them live on change. [member
+## atmosphere_quality_settings], [member render_scale_settings], [member
 ## msaa_settings] and [member shadow_resolution_settings] are the enumerations
-## backing the three dropdowns.[br][br]
+## backing the four dropdowns.[br][br]
 ##
-## Renderer support differs: MSAA and atmosphere quality work in all renderers;
-## FXAA is unavailable in the Compatibility renderer (including web exports); TAA
-## is Forward+ only; and directional shadows on Compatibility depend on
-## [member IVCoreSettings.apply_gl_compatibility_shadows] (see [IVDynamicLight]).
-## Unsupported settings are skipped here and hidden by [IVOptionsPopup].[br][br]
+## Renderer support differs: MSAA, atmosphere quality and render scale work in all
+## renderers; FXAA is unavailable in the Compatibility renderer (including web
+## exports); TAA is Forward+ only; and directional shadows on Compatibility depend
+## on [member IVCoreSettings.apply_gl_compatibility_shadows] (see
+## [IVDynamicLight]). Unsupported settings are skipped here and hidden by
+## [IVOptionsPopup].[br][br]
+##
+## Render scale sets the main viewport's [member Viewport.scaling_3d_scale],
+## upscaling with FSR 1 on Forward+ and bilinear elsewhere; the 2D GUI keeps the
+## window's resolution. Which pixel decisions must follow the scaled buffer is in
+## the settings summary of [code]VISUAL_MODEL.md[/code].[br][br]
 ##
 ## Atmosphere quality writes the [code]iv_atm_*[/code] shader globals that
 ## [code]shaders/_atmosphere.gdshaderinc[/code] reads. Both tiers are one shader
@@ -59,6 +67,17 @@ extends Node
 var atmosphere_quality_settings: Dictionary[StringName, int] = {
 	ATMOSPHERE_NORMAL = 0,
 	ATMOSPHERE_REDUCED = 1,
+}
+
+## Enumeration backing the [code]render_scale[/code] dropdown in
+## [IVOptionsPopup]. Mapped to a 3D render scale in [method _apply_render_scale].
+## Insertion order must equal value order (the popup uses the setting value as
+## the dropdown item index).
+var render_scale_settings: Dictionary[StringName, int] = {
+	RENDER_SCALE_100 = 0,
+	RENDER_SCALE_85 = 1,
+	RENDER_SCALE_70 = 2,
+	RENDER_SCALE_50 = 3,
 }
 
 ## Enumeration backing the [code]msaa_3d[/code] dropdown in [IVOptionsPopup].
@@ -92,6 +111,7 @@ func _ready() -> void:
 	RenderingServer.global_shader_parameter_set(&"iv_display_encode",
 			1.0 if IVGlobal.is_gl_compatibility else 0.0)
 	_apply_atmosphere_quality()
+	_apply_render_scale()
 	_apply_msaa()
 	_apply_fxaa()
 	_apply_taa()
@@ -113,6 +133,24 @@ func _apply_atmosphere_quality() -> void:
 	RenderingServer.global_shader_parameter_set(&"iv_atm_gl_first", gl_first)
 	RenderingServer.global_shader_parameter_set(&"iv_atm_gl_nodes", gl_nodes)
 	RenderingServer.global_shader_parameter_set(&"iv_atm_ring_max_taps", ring_max_taps)
+
+
+func _apply_render_scale() -> void:
+	var setting: int = IVSettingsManager.get_setting(&"render_scale")
+	var render_scale := 1.0 # also the scale for a stale cached index past the end
+	match setting:
+		1:
+			render_scale = 0.85
+		2:
+			render_scale = 0.7
+		3:
+			render_scale = 0.5
+	# Only Forward+ has FSR 1. The engine would fall back to bilinear elsewhere anyway,
+	# but with a warning.
+	var is_forward_plus := RenderingServer.get_current_rendering_method() == "forward_plus"
+	_window.scaling_3d_mode = (Viewport.SCALING_3D_MODE_FSR if is_forward_plus
+			else Viewport.SCALING_3D_MODE_BILINEAR)
+	_window.scaling_3d_scale = render_scale
 
 
 func _apply_msaa() -> void:
@@ -165,6 +203,8 @@ func _settings_listener(setting: StringName, _value: Variant) -> void:
 	match setting:
 		&"atmosphere_quality":
 			_apply_atmosphere_quality()
+		&"render_scale":
+			_apply_render_scale()
 		&"msaa_3d":
 			_apply_msaa()
 		&"fxaa":

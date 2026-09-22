@@ -24,8 +24,8 @@ extends CompositorEffect
 ## [IVFragmentIdentifier].
 ##
 ## Runs at [code]EFFECT_CALLBACK_TYPE_POST_TRANSPARENT[/code] each frame:[br]
-## 1. Iterates a sparse 3-pixel grid around [member _world_mouse], bounded by
-##    the fragment range passed in to [method _init].[br]
+## 1. Iterates a sparse 3-pixel grid around the pixel set by [method
+##    set_probe_pixel], bounded by the fragment range passed in to [method _init].[br]
 ## 2. Each grid pixel is lifted out of the broadcast band (see
 ##    [code]id_broadcast()[/code] in [code]_fragment_id.gdshaderinc[/code]) and
 ##    rounded; channel values in [code][1, 1024][/code] are valid id-encoded
@@ -61,9 +61,9 @@ signal fragment_decoded(id: int)
 # and passed to _init(); not changeable after construction.
 var _fragment_range: int
 
-# Read on render thread; written from main thread. A torn read on Vector2 is
-# at most one stale frame's mouse position — acceptable.
-var _world_mouse := Vector2.ZERO
+# Read on render thread; written from main thread. A torn read on Vector2i is
+# at most one stale frame's probe pixel — acceptable.
+var _probe_pixel := Vector2i.ZERO
 
 # Render-thread state.
 var _rd: RenderingDevice
@@ -104,10 +104,11 @@ func _notification(what: int) -> void:
 		_rd.free_rid(_sampler_rid)
 
 
-## Main-thread setter for the window-space mouse position used as the probe
-## center. Read on the render thread.
-func set_world_mouse(pos: Vector2) -> void:
-	_world_mouse = pos
+## Main-thread setter for the probe center: the 3D render buffer's pixel under
+## the mouse, which [IVFragmentIdentifier] also broadcasts to the id shaders.
+## Read on the render thread.
+func set_probe_pixel(pixel: Vector2i) -> void:
+	_probe_pixel = pixel
 
 
 # *****************************************************************************
@@ -192,7 +193,7 @@ func _render_callback(callback_type: int, render_data: RenderData) -> void:
 	ssbo_uniform.add_id(_ssbo_rid)
 	var ssbo_uniform_set := UniformSetCacheRD.get_cache(shader_rid, 1, [ssbo_uniform])
 
-	var probe_pixel := Vector2i(_world_mouse)
+	var probe_pixel := _probe_pixel
 
 	var push_size := _PUSH_CONSTANT_MSAA_SIZE if use_msaa else _PUSH_CONSTANT_SIZE
 	var push_constant := PackedByteArray()

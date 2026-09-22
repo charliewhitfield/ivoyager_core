@@ -124,7 +124,7 @@ Intel figures for the atmosphere views come from runs in the driver's normal sta
 | # | Option | Relief, Intel iGPU | Relief, GTX 1650 Ti | Visual cost | Verdict |
 |---|---|---|---|---|---|
 | 1 | **Atmosphere quality**: Full / Reduced / Off. Runtime shader swap, or restart. | Reduced -22 to -38%; Off -76 to -95% (atmosphere views) | The shell is 15-39% of the frame | Reduced: none visible. Up to 15 codes on 1-2% of pixels, confined to the limb band. Off: no air at all, and Titan loses its identity. | Built as Normal / Reduced, and a runtime setting rather than a restart one (see *Addendum: the quality tiers, built*). Off is not built. |
-| 2 | **3D render scale**: 100 / 85 / 75 / 50%. Runtime. FSR 1 on Forward+. | 75%: -17 to -28%; 50%: -30 to -66% | 75%: -13 to -36%; 50%: -25 to -64% | Soft lines and HUD text. At 50%, orbit lines turn chunky, and the star field coarsens because star size follows render height. | Add. On a 2x hi-DPI web canvas, 50% simply restores 1x cost. |
+| 2 | **3D render scale**: 100 / 85 / 75 / 50%. Runtime. FSR 1 on Forward+. | 75%: -17 to -28%; 50%: -30 to -66% | 75%: -13 to -36%; 50%: -25 to -64% | Soft lines and HUD text. At 50%, orbit lines turn chunky, and the star field coarsens because star size follows render height. | Built as 100 / 85 / 70 / 50% (see *3D render scale*). On a 2x hi-DPI screen, 50% simply restores 1x cost. |
 | 3 | **Renderer** (desktop): Auto / Forward+ / Compatibility. Restart. | Compatibility 1.4-8x faster than Forward+ | Mixed: Compatibility faster in 5 of 8 views | Compatibility loses mouse-over identification of orbit lines and asteroids, FXAA and TAA, and local shadow maps. The picture itself matches. | Add, with Auto choosing Compatibility on integrated GPUs. |
 | 4 | **Star catalogue depth**: all (V 15) / V 11 / V 9.5. Restart, or a 0.3-1.1 s rebuild. | V 11: -17 to -29%; V 9.5: -26 to -43% (star-heavy views) | V 11: -28 to -31%; V 9.5: -44 to -52% | None in lit-body views, where exposure hides faint stars. In dark-sky views, V 11 dims the diffuse star glow (about 7 codes over a third of the sky) and V 9.5 is visibly sparser. | Add as a restart option. It also saves memory and load time. |
 | 5 | **Shadow resolution** (existing; Forward+ only in the Planetarium) | vs 8192 on Forward+: 2048 -27 to -39%; 16384 +18 to +88% | 2048: -1 to -10%; 16384: +28 to +387% | Spacecraft-scale self-shadowing only. Eclipses and ring shadows are analytic and unaffected. | Keep. Drop 16384, add Off, and default to 4096. All three are built. |
@@ -221,9 +221,11 @@ Forward+ can use FSR 1, which measured the same as bilinear at 75% (-9 to -39%) 
 
 Two things make it matter more than the table suggests:
 
-- **The web canvas renders at physical pixels.** `display/window/dpi/allow_hidpi` defaults to
-  true, so a laptop at 2x devicePixelRatio renders four times the pixels of a 1080p window. At that
-  density 50% is not a sacrifice; it is the 1x cost.
+- **Both builds render at physical pixels.** `display/window/dpi/allow_hidpi` defaults to true:
+  the web canvas is sized at its CSS size times devicePixelRatio, and on Windows Godot declares
+  itself DPI-aware. So a laptop at 2x renders four times the pixels of a 1080p window, and every
+  figure in this report was taken in a 1080p window. At that density 50% is not a sacrifice; it
+  is the 1x cost.
 - **The HUD is in the 3D pass.** Orbit lines, names and symbols scale with it, and the star field
   changes because its PSF is sized in render pixels.
 
@@ -231,6 +233,12 @@ Two things make it matter more than the table suggests:
 edge softens, and 50% is clearly coarse; on the GTX this saves 22% and 35% of the Saturn frame.
 Each star is drawn as a render-pixel PSF and then magnified, so lower scales give fewer, fatter
 stars: detected peaks fall from 24k to 12k to 5.6k.
+
+**Built since** as the user option 3D Render Scale (setting `render_scale`): 100, 85, 70 or 50%,
+upscaled with FSR 1 on Forward+ and bilinear on Compatibility. Line and point picking, which had
+assumed an unscaled buffer, now follows the scaled one (*Mouse picking* in
+[VISUAL_MODEL.md](VISUAL_MODEL.md)). The relief at 85% and 70% is not measured; the figures
+above are for 75% and 50%.
 
 
 ## The renderer, on desktop
@@ -400,7 +408,7 @@ in the built setting helps a machine that cannot compile the limb shader at all.
 **Graphics**
 
 - Atmosphere quality: Normal / Reduced (built)
-- 3D render scale: 100 / 85 / 75 / 50%
+- 3D render scale: 100 / 85 / 70 / 50% (built)
 - Star field: Full / Reduced (no wing) / Minimal (no wing, no Milky Way)
 - Glow: on / off
 - MSAA: off / 2x / 4x

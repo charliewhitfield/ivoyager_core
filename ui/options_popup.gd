@@ -118,6 +118,7 @@ extends PopupPanel
 	],
 	LABEL_GRAPHICS_PERFORMANCE = [
 		[&"LABEL_ATMOSPHERE_QUALITY", &"atmosphere_quality"],
+		[&"LABEL_RENDER_SCALE", &"render_scale"],
 		[&"LABEL_SHADOW_RESOLUTION", &"shadow_resolution"],
 		[&"LABEL_MSAA", &"msaa_3d"],
 		[&"LABEL_FXAA", &"fxaa"],
@@ -134,6 +135,7 @@ extends PopupPanel
 	language = [&"LanguageManager", &"language_settings"],
 	gui_size = [&"CoreSettings", &"gui_size_settings"],
 	atmosphere_quality = [&"GraphicsManager", &"atmosphere_quality_settings"],
+	render_scale = [&"GraphicsManager", &"render_scale_settings"],
 	msaa_3d = [&"GraphicsManager", &"msaa_settings"],
 	shadow_resolution = [&"GraphicsManager", &"shadow_resolution_settings"],
 	screenshot_aspect = [&"ScreenshotManager", &"aspects"],
@@ -181,6 +183,7 @@ extends PopupPanel
 	small_bodies_point_size = &"HINT_SMALL_BODIES_POINT_SIZE",
 	hide_hud_when_close = &"HINT_HIDE_HUD_WHEN_CLOSE",
 	atmosphere_quality = &"HINT_ATMOSPHERE_QUALITY",
+	render_scale = &"HINT_RENDER_SCALE",
 	shadow_resolution = &"HINT_SHADOW_RESOLUTION",
 	msaa_3d = &"HINT_MSAA_3D",
 	fxaa = &"HINT_FXAA",
@@ -192,6 +195,7 @@ extends PopupPanel
 ## texts assume.
 @export var option_web_tooltips: Dictionary[StringName, StringName] = {
 	atmosphere_quality = &"HINT_WEB_ATMOSPHERE_QUALITY",
+	render_scale = &"HINT_WEB_RENDER_SCALE",
 	shadow_resolution = &"HINT_WEB_SHADOW_RESOLUTION",
 	msaa_3d = &"HINT_WEB_MSAA_3D",
 }

@@ -66,8 +66,9 @@ const _ID_MAX := (1 << _ID_BIT_WIDTH) - 1
 var drop_id_frames := 40
 ## Tunes the loss of current id by mouse movement. OK to change at runtime.
 var drop_id_mouse_movement := 20.0
-## Sets probe size around mouse. Side length sampled is
-## [code](fragment_range / 3 + 1)^2[/code] (49 pixels at default 9). Must be a
+## Sets probe size around mouse, in pixels of the 3D render buffer, which a 3D
+## render scale below 1 makes coarser than the window's. Pixels sampled is
+## [code](2 * fragment_range / 3 + 1)^2[/code] (49 at default 9). Must be a
 ## non-negative multiple of 3. Don't change at runtime.
 var fragment_range := 9
 
@@ -134,12 +135,20 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	# Setting the global before draw submission so this frame's id-shaders
-	# broadcast at the same pixel the compositor effect will sample. Window
-	# pixels are assumed equal to internal-buffer pixels (no FSR scaling).
-	var mouse_pos := _world_controller.mouse_position
+	# broadcast at the same pixel the compositor effect will sample. Both work in
+	# the 3D render buffer, which 3D render scale makes smaller than the window the
+	# mouse moves in. They share one whole buffer pixel because their sparse grids
+	# must coincide exactly, which a fractional center would break.
+	var viewport := get_viewport()
+	var window_size := viewport.get_visible_rect().size
+	if window_size.x <= 0.0 or window_size.y <= 0.0:
+		return
+	var buffer_size := (window_size * viewport.scaling_3d_scale).floor() # engine truncates too
+	var mouse_pixel := Vector2i(((_world_controller.mouse_position + Vector2(0.5, 0.5))
+			* buffer_size / window_size).floor())
 	RenderingServer.global_shader_parameter_set(&"iv_mouse_fragcoord",
-			mouse_pos + Vector2(0.5, 0.5))
-	_effect.set_world_mouse(mouse_pos)
+			Vector2(mouse_pixel) + Vector2(0.5, 0.5))
+	_effect.set_probe_pixel(mouse_pixel)
 
 
 # *****************************************************************************

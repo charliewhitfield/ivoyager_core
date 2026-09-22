@@ -228,11 +228,13 @@ func _update_psf_handoff() -> void:
 	var camera_distance := global_position.distance_to(camera.global_position)
 	if camera_distance <= 0.0:
 		return
-	# The ring system's own projected image, in pixels of radius. pixel_angle mirrors
-	# rings.gdshader's vertex(), which takes it from the same projection matrix.
-	var view_height := viewport.get_visible_rect().size.y
+	# The ring system's own projected image, in pixels of radius. The ramp's ends are
+	# rasterization limits, so they are pixels of the 3D render buffer, which 3D render
+	# scale shrinks below the window's. pixel_angle mirrors rings.gdshader's vertex(), which
+	# takes it from the same projection matrix and that buffer's VIEWPORT_SIZE.
+	var render_height := viewport.get_visible_rect().size.y * viewport.scaling_3d_scale
 	var projection := camera.get_camera_projection()
-	var pixel_angle := 2.0 / maxf(view_height * absf(projection.y.y), 1e-9)
+	var pixel_angle := 2.0 / maxf(render_height * absf(projection.y.y), 1e-9)
 	var outer_pixels := outer_radius / (camera_distance * pixel_angle)
 	var psf_fraction := 1.0 - smoothstep(PSF_HANDOFF_LOW_PX, PSF_HANDOFF_HIGH_PX,
 			outer_pixels)

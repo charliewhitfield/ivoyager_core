@@ -43,6 +43,7 @@ HINT_PAUSE,Pause
 HINT_PAUSE_ON_LOAD,Start paused after loading a save
 HINT_PHYSICAL_LIGHT,"Physically accurate light: sunlight falls off with distance\nas it really does, and the camera adjusts its exposure,\nso stars and the Milky Way fade out when a sunlit body\nis in view. Off: hand-tuned lighting with a fixed exposure"
 HINT_POINTS_CKBX_COLOR,Show/hide points and set their color
+HINT_RENDER_SCALE,"Resolution of the 3D view as a share of the window's,\nscaled up to fill it. Menus and panels are not affected.\nLower is faster but softer: orbit lines and names blur,\nand faint stars thin out.\n\nGPU cost for desktop: HIGH at 100% on a high-resolution\nscreen. 50% renders a quarter of the pixels"
 HINT_RESTORE_FORWARD_TIME,Restore forward time
 HINT_RESTORE_DEFAULT_HOTKEY,Restore default hotkey
 HINT_RESTORE_DEFAULT_OPTION,Restore default option
@@ -86,4 +87,5 @@ HINT_VIEW_ZOOM,View at close range
 HINT_VIS_ON_MO_CKBX,Uncheck for visibility\non mouse-over only
 HINT_WEB_ATMOSPHERE_QUALITY,"Detail of the scattering calculation that renders air on Earth,\nVenus, Mars and Titan. Reduced integrates each view ray at\nfewer points: no visible change beyond a slight shift in the\nthin band at the limb.\n\nGPU cost for web: HIGH at Normal, close to a body with air"
 HINT_WEB_MSAA_3D,"Multisample antialiasing: smooths jagged edges on orbit\nlines, ring edges and spacecraft.\n\nGPU cost for web: MODERATE at 2x or 4x; HIGH at 8x"
+HINT_WEB_RENDER_SCALE,"Resolution of the 3D view as a share of the window's,\nscaled up to fill it. Menus and panels are not affected.\nLower is faster but softer: orbit lines and names blur,\nand faint stars thin out.\n\nGPU cost for web: HIGH at 100% on a high-resolution\nscreen. 50% renders a quarter of the pixels"
 HINT_WEB_SHADOW_RESOLUTION,"Resolution of shadows cast by spacecraft and other objects\nnear the camera, or Off for none. Higher is sharper, but\nuses more video memory (8192: 256 MB). Eclipse and ring\nshadows are not affected.\n\nGPU cost for web: LOW"
