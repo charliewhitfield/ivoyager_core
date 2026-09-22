@@ -43,8 +43,8 @@ extends CompositorEffect
 ## WARNING: All [RenderingDevice] work happens on the render thread.
 ## [signal fragment_decoded] is hopped to the main thread before emit.[br][br]
 ##
-## WARNING: CompositorEffect is currently marked @experimental. It's possilbe
-## that API might change, although the capability are unlikely to go away.[br][br]
+## WARNING: CompositorEffect is currently marked @experimental. It's possible
+## that API might change, although the capabilities are unlikely to go away.[br][br]
 ##
 ## TODO: When Godot proposal [url]https://github.com/godotengine/godot-proposals/issues/7916[/url]
 ## is fully implemented, we won't need this class or the probe compute shader.

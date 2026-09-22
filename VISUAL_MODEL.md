@@ -932,7 +932,10 @@ hide an id: an opaque body hides a line behind it by depth, as on screen, but a 
 point seen through an atmosphere limb or a ring is picked through it — even behind a ring
 dense enough to hide it from the eye. The one transparent surface that is opaque to the
 eye, the sun's photosphere, lies under CPU body targeting, which `IVMouseTargetLabel`
-prefers.
+prefers. Fog is the same case. The engine blends fog into a fragment after the shader
+writes it, which with its default fog lost every orbit and point target, so every id
+shader renders `fog_disabled`: a line fogged from sight is still picked, and the SBG
+points, which share their shader with the id, render unfogged.
 
 That trade is deliberate. Until 2026-09-22 the probe ran after the transparent pass, where
 additive draws — which by design hide nothing — lifted the stamps beneath them off their
