@@ -25,7 +25,8 @@ extends CompositorEffect
 ##
 ## Runs at [code]EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT[/code] each frame:[br]
 ## 1. Iterates a sparse 3-pixel grid around the pixel set by [method
-##    set_probe_pixel], bounded by the fragment range passed in to [method _init].[br]
+##    set_probe_pixel], bounded by the fragment range passed in to [method _init]
+##    or [method set_fragment_range].[br]
 ## 2. Each grid pixel is lifted out of the broadcast band (see
 ##    [code]id_broadcast()[/code] in [code]_fragment_id.gdshaderinc[/code]) and
 ##    rounded; channel values in [code][1, 1024][/code] are valid id-encoded
@@ -61,8 +62,8 @@ const _SSBO_BYTE_SIZE := 16 # ivec3 best_channels + int best_dist_sq
 ## [code]-1[/code] when the probe found no valid id.
 signal fragment_decoded(id: int)
 
-# Sparse-grid half-extent in pixels (multiple of 3). Owned by IVFragmentIdentifier
-# and passed to _init(); not changeable after construction.
+# Sparse-grid half-extent in pixels (multiple of 3). Read on render thread; written from
+# main thread. A stale read is at most one frame's probe on the previous range.
 var _fragment_range: int
 
 # Read on render thread; written from main thread. A torn read on Vector2i is
@@ -113,6 +114,14 @@ func _notification(what: int) -> void:
 ## Read on the render thread.
 func set_probe_pixel(pixel: Vector2i) -> void:
 	_probe_pixel = pixel
+
+
+## Main-thread setter for the sparse grid's half-extent, in 3D render buffer pixels. It
+## must be a multiple of 3 and match the [code]iv_fragment_id_range[/code] global the id
+## shaders stamp to, which [IVFragmentIdentifier] sets with it. Read on the render thread.
+func set_fragment_range(fragment_range: int) -> void:
+	assert(fragment_range >= 0 and fragment_range % 3 == 0)
+	_fragment_range = fragment_range
 
 
 # *****************************************************************************

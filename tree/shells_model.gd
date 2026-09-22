@@ -400,7 +400,7 @@ func _apply_disc_lod(angular_radius: float) -> void:
 
 func _apply_sphere_lod(angular_radius: float, camera: Camera3D, viewport: Viewport) -> void:
 	# 3D render scale included: at 50 % a body covers half the pixels and earns half the mesh.
-	var render_height := maxf(viewport.get_visible_rect().size.y * viewport.scaling_3d_scale,
+	var render_height := maxf(IVGraphicsManager.get_render_size(viewport).y,
 			capture_render_height)
 	# The projection's own scale rather than a fov, so a KEEP_WIDTH camera needs no special case;
 	# this is the CPU side of the atmosphere_limb vertex shader's proj_11 * VIEWPORT_SIZE.y.

@@ -290,7 +290,7 @@ func _get_drawn_bin_count() -> int:
 	var camera := viewport.get_camera_3d()
 	if !camera:
 		return n_bins
-	var render_height := maxf(viewport.get_visible_rect().size.y * viewport.scaling_3d_scale,
+	var render_height := maxf(IVGraphicsManager.get_render_size(viewport).y,
 			capture_render_height)
 	if render_height <= 0.0:
 		return n_bins

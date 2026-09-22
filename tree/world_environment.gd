@@ -189,8 +189,7 @@ func set_glow_levels(levels: Array[float]) -> void:
 func _update_glow_levels() -> void:
 	var render_height := capture_render_height
 	if render_height <= 0.0:
-		var viewport := get_viewport()
-		render_height = viewport.get_visible_rect().size.y * viewport.scaling_3d_scale
+		render_height = IVGraphicsManager.get_render_size(get_viewport()).y
 	if render_height <= 0.0 or render_height == _glow_render_height:
 		return
 	_glow_render_height = render_height

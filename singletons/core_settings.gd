@@ -88,10 +88,17 @@ var gui_size_settings: Dictionary[StringName, int] = {
 	GUI_LARGE = 2,
 	GUI_EXTRA_LARGE = 3,
 }
-## Size multipliers for each of [member gui_size_settings]. Before adjusting,
+## Size multipliers for each of [member gui_size_settings]. The default setting,
+## GUI_MEDIUM, is not 1.0: the base sizes these multiply (in [IVThemeManager] and
+## every [IVControlModResizable]) are the GUI_LARGE setting. Before adjusting,
 ## consider effects on font sizing in [IVThemeManager] (font sizes are rounded
 ## to the nearest integer after multiplication). See also [IVControlModResizable].
-var gui_size_multipliers: Array[float] = [0.75, 1.0, 1.25, 1.5]
+var gui_size_multipliers: Array[float] = [0.625, 0.75, 1.0, 1.25]
+## Scales the 2D GUI and the HUD by the screen's own scale (Windows display scaling, or
+## the browser's devicePixelRatio), so they keep their size on a hi-DPI screen: see
+## [IVGraphicsManager]. False leaves 1 GUI pixel to 1 screen pixel. Assumes the project's
+## stretch mode is disabled.
+var apply_display_scale := true
 
 ## Start time as an array of [year, month, day, hour, minute, second]. Used by
 ## [IVTimekeeper].

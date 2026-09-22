@@ -886,6 +886,59 @@ Four approximations worth carrying:
 - **A ringed planet's quad carries the globe's flux only**; its rings keep their own
   distance cull, at 2.4× the globe's. The regime where that shows is narrow.
 
+## Pixel spaces
+
+Three kinds of pixel meet on the screen, and every size in the Core is stated in one of them.
+
+- **Logical pixels** are the GUI's: the root viewport's 2D space, which `get_visible_rect()`,
+  `unproject_position()` and every mouse position are in. HUD sizes are stated here too — a
+  body's name and symbol, an asteroid point, the click radius, the hover probe — because they
+  are sizes on the screen, and like the GUI's text they must not shrink when a screen's pixels
+  do.
+- **Window pixels** are the display's own. `display/window/dpi/allow_hidpi` is on by default:
+  Godot declares itself DPI-aware on Windows and sizes the web canvas at its CSS size times
+  devicePixelRatio, so both builds draw into physical pixels. A screenshot is in these.
+- **Render pixels** are the 3D buffer's: window pixels times the 3D render scale, what a
+  shader reads as `VIEWPORT_SIZE` and `IVGraphicsManager.get_render_size()` returns. Every
+  decision about what the render can resolve is made in them (*Settings summary*).
+
+**The display scale maps logical pixels onto window pixels.** `IVGraphicsManager` reads it from
+the screen and sets it as the root window's `content_scale_factor`
+(`IVCoreSettings.apply_display_scale`). On Windows it is the primary screen's
+`screen_get_dpi() / 96`: Godot is only system-DPI-aware there and reports no scale, and a
+system-aware window is drawn at the system DPI on every screen. On the web it is
+devicePixelRatio, re-read every frame, because browser zoom changes it and raises no event —
+the canvas keeps its pixel count, so there is not even a resize to catch. macOS and Wayland
+report a change through the window's `dpi_changed`. With the project's stretch mode disabled
+the scale acts on 2D alone: Godot lays the GUI out in logical pixels and rasterizes its fonts
+and vector icons at the scale, sharp at any factor, while the 3D view goes on rendering at
+window pixels. A window still at the project's size at startup is enlarged by the scale and
+fitted to the screen, since that size is the room the GUI was laid out for; a size from the
+command line is left alone. The GUI Size option multiplies on top.
+
+**The 3D pass draws the HUD, so the HUD is converted.** A body's name and symbol are
+billboards sized against the logical viewport height, which puts them in logical pixels, and
+the name's glyphs and outline are rasterized at the display scale so they are not magnified to
+a blur. An asteroid point is a `POINT_SIZE` in render pixels, so `IVSBGPositionsVisual`
+multiplies it by the scale, and `IVFragmentIdentifier` widens its probe by it so the hover
+tolerance is the same distance on any screen. A change of scale always arrives as a root
+`size_changed` — it moves either the logical size or the window's — so each of these re-reads
+it on `IVGlobal.viewport_size_changed`. What cannot follow is a line: an orbit line is one
+render pixel wide on any screen.
+
+**`get_visible_rect()` is not the render size.** Under a display scale it is the window's size
+divided by that scale. Code that mirrors a shader's `VIEWPORT_SIZE`, or maps a mouse position
+to a buffer pixel, takes `get_render_size()`: the ring crossfade, the sphere LOD rung, the
+star-bin cull, the glow levels and the picking probe all do.
+
+Until 2026-09-22 neither build applied a scale. The GUI was laid out in window pixels, so a
+250 % Windows laptop drew it at 40 % of its designed size, which no GUI Size setting could
+make up. Verified on that laptop (3840×2400): the GUI and its popups lay out at 2.5, names
+rasterize at 2.5 times their logical size, a changed scale re-sizes names, points and the
+probe live, hover picking of bodies, orbit lines and asteroids passes at 2.5 and at 1.5, and
+with the HUD and GUI hidden the 3D render in a 1920×1080 window is bit-identical to the
+unscaled build's at four poses.
+
 ## Mouse picking
 
 Picking has two halves, split by what is being picked.
@@ -893,7 +946,7 @@ Picking has two halves, split by what is being picked.
 **Bodies: CPU screen-space targeting.** Every in-lifespan body pushes itself to
 `IVWorldController` each frame (`update_world_target`) with its camera distance; the
 controller unprojects the *true* global position and keeps the target whose screen
-distance to the mouse is least, within a click radius (`min_click_radius` = 20 px,
+distance to the mouse is least, within a click radius (`min_click_radius` = 20 logical px,
 enlarged for bodies that resolve larger on screen). Unprojecting true positions is
 correct *because* farwarp preserves screen direction — the projection of where the body
 really is lands on the pixels where it is drawn, beyond the far plane or not. Bodies
@@ -964,13 +1017,16 @@ removes itself and every producer's `if _fragment_identifier:` guard falls back 
 plain materials — no line/point mouse-over on the web export, while body picking (pure
 CPU) is unaffected.
 
-The stamp and the probe both live in the 3D render buffer, which 3D render scale makes
-smaller than the window the mouse moves in. The identifier maps the mouse to the buffer
-pixel under it and hands that one whole pixel to both. The two sparse grids must coincide
-exactly, and a scaled mouse position is fractional: rounded separately, the stamp and
-the probe land on different pixels and find nothing, silently. `fragment_range`
-therefore counts buffer pixels, so at 50 % the probe reaches twice as far across the
-screen, and each stamped pixel is magnified with the rest of the image.
+The stamp and the probe both live in the 3D render buffer, whose pixels are not the
+mouse's: the mouse moves in logical pixels, which a display scale makes coarser than the
+window's, and 3D render scale makes the buffer coarser than the window (*Pixel spaces*).
+The identifier maps the mouse to the buffer pixel under it and hands that one whole pixel
+to both. The two sparse grids must coincide exactly, and a scaled mouse position is
+fractional: rounded separately, the stamp and the probe land on different pixels and find
+nothing, silently. `fragment_range` therefore counts buffer pixels, times the display
+scale to the nearest multiple of 3: at 50 % render scale the probe reaches twice as far
+across the screen, each stamped pixel magnified with the rest of the image, while on a
+2.5× screen it reaches as far as on a 1× one.
 
 ## Close-range detail
 
@@ -1083,6 +1139,7 @@ this is the spatial one.
 | | `apply_size_layers` / `size_layers` | Layer bits by body radius — the lighting size domains ([100 km, 0.1 km] → three domains). |
 | | `local_shadow_caster_ceiling` | Dynamic `LOCAL_SHADOW_CASTER` grant range (1e5 km; must cover the largest shadowed `shadow_max_ceiling` in `dynamic_lights.tsv`). |
 | | `apply_empty_shadow_pass_skip` | Opt-in: a shadowed light clears `shadow_enabled` while nothing in reach would draw into its map or read it (*Local shadow maps*). |
+| | `apply_display_scale` | The screen's own scale as the root window's content scale, so GUI and HUD sizes are logical pixels (*Pixel spaces*). Off, a logical pixel is a window pixel. |
 | | `radius_multiplier_visibility_range_end` | Distance cull in body radii (4000 ≈ 0.6 px angular diameter). |
 | | `max_camera_distance` | Camera range limit; also sizes every always-pass `custom_aabb`. |
 | | `plane_mesh_subdivisions` | Ring mesh subdivision, enough for per-vertex farwarp across the ring span. |
@@ -1090,13 +1147,13 @@ this is the spatial one.
 | | `vertecies_per_orbit` / `vertecies_per_trajectory_segment` | State-path knots (500): smoothness base for the rebased line; the pin owns trueness. |
 | | `vertecies_per_conic_mesh` / `vertecies_per_orbit_low_res` | Shared unit conic (4096) for coarse body orbits; low-res loop (100) for SBG orbit lines. |
 | | `stroboscope_frames_per_second` (+ blur settings) | Artificial stable stroboscope for fast rotators at high time speed (0 = off). |
-| user options | `render_scale` | The 3D render buffer as a share of the window (100, 85, 70 or 50 %), set by `IVGraphicsManager`. Every decision about what the buffer can resolve is made in its pixels: the sphere LOD rung, the star-bin cull, the disc, ring and point-source handoffs, and picking. HUD sizes stay in window pixels, being sizes on the screen, and glow halos keep their share of the frame (*Glow: the bloom pass* in the sibling document). |
+| user options | `render_scale` | The 3D render buffer as a share of the window (100, 85, 70 or 50 %), set by `IVGraphicsManager`. Every decision about what the buffer can resolve is made in its pixels: the sphere LOD rung, the star-bin cull, the disc, ring and point-source handoffs, and picking. HUD sizes stay in logical pixels, being sizes on the screen, and glow halos keep their share of the frame (*Glow: the bloom pass* in the sibling document). |
 | `IVDynamicLight` | `SHADOW_ENABLE_REACH_RATIO` / `SHADOW_DISABLE_REACH_RATIO` / `SHADOW_DISABLE_DELAY_FRAMES` (constants, 1.25 / 2.0 / 120) | Flip suppression for the empty-pass skip. Asymmetric on purpose: on is immediate, off waits. |
 | | `shadow_maps_enabled` (static) | False clears every shadow map, whatever the skip decides. `IVGraphicsManager` sets it from the user's Shadow Resolution option (Off). |
 | `dynamic_lights.tsv` | per-row masks, shadow distances, `apply_sun_occlusion` | The light stack: domains, shadow reach, which rows dim by the camera-point sun fraction. |
 | `IVSunOcclusionManager` | `MAX_OCCLUDERS` / `MIN_OCCLUDER_RADIUS` (constants) | Occluder slots (6, matching the shader array) and the sub-km candidate cutoff. |
-| `IVWorldController` | `min_click_radius` | Body-picking screen radius floor (20 px). |
-| `IVFragmentIdentifier` | `fragment_range`, `drop_id_frames`, `drop_id_mouse_movement` | Probe grid half-extent (9 → 49 sampled pixels); id retention against flicker. |
+| `IVWorldController` | `min_click_radius` | Body-picking screen radius floor (20 logical px). |
+| `IVFragmentIdentifier` | `fragment_range`, `drop_id_frames`, `drop_id_mouse_movement` | Probe grid half-extent in buffer pixels, times the display scale (9 → 49 sampled pixels at 1×); id retention against flicker. |
 | `IVPathVisual` | `REBASE_*`, `PIN_*` (constants) | Rebase trigger (500 → ~0.3 px), rebake policy, tessellation bounds, pin window sizing. |
 | `IVBodyPositionVisual` | `HUD_RENDER_PRIORITY` (constant) | HUD symbol/name above the shell transparency range. |
 | `IVBodyPSF` | `HANDOFF_*` (constants) | Disc/point crossfade: fade span, the fallback for a source with no saturated core, and the exposure/magnitude shift that re-solves it. |
@@ -1256,3 +1313,6 @@ this is the spatial one.
     twice; `camera_tree_changed` carries one star and is the funnel every consumer subscribes
     to; and `IVSleepManager` sleeps and hides the sleepable bodies outside the camera's
     planetary system, so a second system's planets stay awake while its moons do not.
+- **The display scale is unverified in a browser.** *Pixel spaces* was verified on Windows
+  only; the web path (devicePixelRatio, re-read every frame for zoom) has not been run in an
+  export, and neither has the macOS and Wayland `dpi_changed` path.

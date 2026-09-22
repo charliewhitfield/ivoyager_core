@@ -241,7 +241,7 @@ func _update_psf_handoff() -> void:
 	# scale shrinks below the window's -- and of a capture's, if that is taller (see
 	# capture_render_height). pixel_angle mirrors rings.gdshader's vertex(), which takes it
 	# from the same projection matrix and that buffer's VIEWPORT_SIZE.
-	var render_height := maxf(viewport.get_visible_rect().size.y * viewport.scaling_3d_scale,
+	var render_height := maxf(IVGraphicsManager.get_render_size(viewport).y,
 			capture_render_height)
 	var projection := camera.get_camera_projection()
 	var pixel_angle := 2.0 / maxf(render_height * absf(projection.y.y), 1e-9)

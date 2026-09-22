@@ -35,7 +35,9 @@ extends RefCounted
 ## "MediumFixedFont", and "LargeFixedFont". The main theme's default_font_size
 ## is also dynamically managed. Font sizes are determined by this class's
 ## properties and (for dynamic) the global "gui_size" setting (a value of
-## [member IVCoreSettings.gui_size_settings]).[br][br]
+## [member IVCoreSettings.gui_size_settings]). Every size here is in logical
+## pixels, which the display scale maps to the screen (see [IVGraphicsManager]),
+## so "gui_size" is relative to the screen's own scale.[br][br]
 
 
 ## Emitted when the body-name Label3D font size changes: the main theme's
@@ -183,16 +185,16 @@ func get_label3d_names_font_size() -> int:
 	return roundi(default_font_size * names_percent / 100.0)
 
 
-## Returns the current body symbol screen size (px), derived from the active GUI
-## size and the "body_symbol_size_percent" user setting.
+## Returns the current body symbol screen size (logical px), derived from the active
+## GUI size and the "body_symbol_size_percent" user setting.
 func get_body_symbol_size() -> float:
 	var gui_size: int = IVSettingsManager.get_setting(&"gui_size")
 	var percent: int = IVSettingsManager.get_setting(&"body_symbol_size_percent")
 	return _default_symbol_sizes[gui_size] * percent / 100.0
 
 
-## Returns the current small-bodies symbol point size (px), derived from the
-## active GUI size and the "small_bodies_symbol_size_percent" user setting.
+## Returns the current small-bodies symbol point size (logical px), derived from
+## the active GUI size and the "small_bodies_symbol_size_percent" user setting.
 func get_small_bodies_symbol_size() -> float:
 	var gui_size: int = IVSettingsManager.get_setting(&"gui_size")
 	var percent: int = IVSettingsManager.get_setting(&"small_bodies_symbol_size_percent")

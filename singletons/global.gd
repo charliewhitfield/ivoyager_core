@@ -68,7 +68,9 @@ signal camera_fov_changed(fov: float)
 ## listens and, if [param name] is the current selection, bumps selection up to its parent.
 signal selection_invalidated(name: StringName)
 ## This signal is emitted by [IVGlobal] code connected to the root viewport.
-## Signals when the viewport size changes and also on [signal ui_dirty].
+## Signals when the viewport size or the display scale changes, and also on
+## [signal ui_dirty]. [param size] is the visible size in logical pixels, the 2D
+## GUI's; for the 3D render's, see [method IVGraphicsManager.get_render_size].
 signal viewport_size_changed(size: Vector2)
 ## Emit from anywhere for [IVConfirmationDialog].
 signal confirmation_required(text: StringName, action: Callable, stop_sim: bool,

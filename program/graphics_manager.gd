@@ -21,9 +21,9 @@ class_name IVGraphicsManager
 extends Node
 
 ## Applies user graphics settings (antialiasing, shadow resolution, atmosphere
-## quality and 3D render scale) to the rendering server, the main window viewport
-## and the local shadow maps, and publishes the renderer's colour-space convention
-## to shaders.
+## quality and 3D render scale) and the screen's display scale to the rendering
+## server, the main window viewport and the local shadow maps, and publishes the
+## renderer's colour-space convention to shaders.
 ##
 ## Added by [IVCoreInitializer]. Settings [code]atmosphere_quality[/code],
 ## [code]render_scale[/code], [code]msaa_3d[/code], [code]fxaa[/code],
@@ -45,6 +45,13 @@ extends Node
 ## upscaling with FSR 1 on Forward+ and bilinear elsewhere; the 2D GUI keeps the
 ## window's resolution. Which pixel decisions must follow the scaled buffer is in
 ## the settings summary of [code]VISUAL_MODEL.md[/code].[br][br]
+##
+## With [member IVCoreSettings.apply_display_scale], the screen's own scale becomes
+## the main window's [member Window.content_scale_factor], so the 2D GUI and every
+## mouse position are in logical pixels, and a window still at the project's size
+## opens that much larger. The 3D view keeps rendering at the screen's pixels, so
+## [method Viewport.get_visible_rect] is no longer the render size: use [method
+## get_render_size]. See [i]Pixel spaces[/i] in [code]VISUAL_MODEL.md[/code].[br][br]
 ##
 ## Atmosphere quality writes the [code]iv_atm_*[/code] shader globals that
 ## [code]shaders/_atmosphere.gdshaderinc[/code] reads. Both tiers are one shader
@@ -105,6 +112,18 @@ var shadow_resolution_settings: Dictionary[StringName, int] = {
 @onready var _window := get_tree().get_root()
 
 
+## Returns the size in pixels of [param viewport]'s 3D render buffer, which its shaders
+## read as [code]VIEWPORT_SIZE[/code]: the window's own pixels times [member
+## Viewport.scaling_3d_scale]. Make any decision about what the render can resolve in
+## these, never in [method Viewport.get_visible_rect], which a display scale makes the
+## 2D GUI's logical size.
+static func get_render_size(viewport: Viewport) -> Vector2:
+	var window := viewport as Window
+	var sub_viewport := viewport as SubViewport
+	var pixels := Vector2(window.size) if window else Vector2(sub_viewport.size)
+	return (pixels * viewport.scaling_3d_scale).floor() # the engine truncates too
+
+
 func _ready() -> void:
 	IVSettingsManager.changed.connect(_settings_listener)
 	# The renderer cannot change without a restart, so this is written once and never again.
@@ -116,6 +135,65 @@ func _ready() -> void:
 	_apply_fxaa()
 	_apply_taa()
 	_apply_shadow_resolution()
+	set_process(false)
+	if !IVCoreSettings.apply_display_scale:
+		return
+	_scale_project_sized_window() # first, so the GUI never lays out in a window too small for it
+	_apply_display_scale()
+	_window.dpi_changed.connect(_apply_display_scale)
+	# A browser changes devicePixelRatio with zoom and raises no event for it; the canvas
+	# keeps its pixel count, so there is no resize to catch either.
+	set_process(OS.has_feature("web"))
+
+
+func _process(_delta: float) -> void:
+	_apply_display_scale()
+
+
+func _apply_display_scale() -> void:
+	var display_scale := _get_display_scale()
+	if display_scale <= 0.0 or is_equal_approx(display_scale, _window.content_scale_factor):
+		return
+	_window.content_scale_factor = display_scale
+
+
+# Godot is only system-DPI-aware on Windows and reports no scale there. A system-aware
+# window is drawn at the system DPI on every screen, and that is the primary screen's.
+func _get_display_scale() -> float:
+	if OS.has_feature("windows"):
+		return DisplayServer.screen_get_dpi(DisplayServer.SCREEN_PRIMARY) / 96.0
+	return DisplayServer.screen_get_scale()
+
+
+# The project's window size is room for the GUI, so it grows with the display scale. A
+# size that came from the command line, the OS or the editor's game view is left alone.
+func _scale_project_sized_window() -> void:
+	if (OS.has_feature("web") or Engine.is_embedded_in_editor()
+			or _window.mode != Window.MODE_WINDOWED or _window.size != _get_project_window_size()):
+		return
+	var usable_rect := DisplayServer.screen_get_usable_rect(_window.current_screen)
+	var decorations := _window.get_size_with_decorations() - _window.size
+	var scaled_size := Vector2i((Vector2(_window.size) * _get_display_scale()).round())
+	var new_size := scaled_size.min(usable_rect.size - decorations)
+	if new_size == _window.size:
+		return
+	var client_offset := _window.position - _window.get_position_with_decorations()
+	_window.size = new_size
+	@warning_ignore("integer_division")
+	_window.position = (usable_rect.position + (usable_rect.size - new_size - decorations) / 2
+			+ client_offset)
+
+
+# The size Godot opens the window at when no command-line size overrides it.
+func _get_project_window_size() -> Vector2i:
+	var width: int = ProjectSettings.get_setting("display/window/size/viewport_width")
+	var height: int = ProjectSettings.get_setting("display/window/size/viewport_height")
+	var width_override: int = ProjectSettings.get_setting(
+			"display/window/size/window_width_override", 0)
+	var height_override: int = ProjectSettings.get_setting(
+			"display/window/size/window_height_override", 0)
+	return Vector2i(width_override if width_override > 0 else width,
+			height_override if height_override > 0 else height)
 
 
 func _apply_atmosphere_quality() -> void:
