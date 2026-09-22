@@ -2013,8 +2013,8 @@ from "every channel above 0.5" to "every channel inside one octave", so content 
 than an id — a star, a lit limb — can no longer be mistaken for one; false positives went
 down, not up. `glow_bloom` must stay 0.0 for this to hold, which it must anyway.
 
-The probe itself reads at `POST_TRANSPARENT`, pre-tonemap and therefore pre-glow, so picking
-was never at risk from glow — only the picture was.
+The probe itself reads at `PRE_TRANSPARENT`, well before glow, so picking was never at risk
+from glow — only the picture was.
 
 **Render height: a halo keeps its share of the frame.** Every glow level is a blur of the
 render buffer in that buffer's own texels, so left alone a halo is fixed in render pixels: a

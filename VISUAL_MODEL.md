@@ -914,11 +914,35 @@ so content brighter than an id cannot decode as one. The band is one binade of R
 whose half-float step is 1/2048 — exactly 1024 representable values per channel, which
 is where the 30 bits come from; a broadcast that did not survive storage exactly would
 decode as the *wrong* id. An `IVFragmentIDCompositorEffect` on the live camera
-dispatches a tiny compute probe at `POST_TRANSPARENT` — pre-tonemap and pre-glow, so
-neither can perturb picking, though an additive transparent draw can (see TODO) — reads
-the resolved HDR buffer over the same grid,
-returns the id nearest the mouse asynchronously, and the identifier holds it against
-dropout (40 frames or 20 px of mouse travel) so a thin line does not flicker its label.
+dispatches a tiny compute probe at `PRE_TRANSPARENT`, reads the HDR buffer over the same
+grid — the unresolved multisample buffer under MSAA, since a resolve would average the
+encoding away — returns the id nearest the mouse asynchronously, and the identifier holds
+it against dropout (40 frames or 20 px of mouse travel) so a thin line does not flicker
+its label.
+
+**The probe reads the opaque pass, before anything is added over it.** A stamp decodes
+only if it survives exactly, and about 1/4096 added to it breaks it. Between the opaque
+pass, where every id shader draws, and the probe nothing changes a stamp: the sky draws
+only where no geometry wrote depth, and glow and tonemapping come later still.
+`PRE_TRANSPARENT` is also the only such point the Mobile renderer runs (`POST_OPAQUE` and
+`POST_SKY` fire on Forward+ alone), and the probe asks for no resolve, which under MSAA
+would add one it never reads. Two rules follow. An id shader must stay in the opaque pass
+(`_fragment_id.gdshaderinc` lists what moves one out). And transparent geometry does not
+hide an id: an opaque body hides a line behind it by depth, as on screen, but a line or
+point seen through an atmosphere limb or a ring is picked through it — even behind a ring
+dense enough to hide it from the eye. The one transparent surface that is opaque to the
+eye, the sun's photosphere, lies under CPU body targeting, which `IVMouseTargetLabel`
+prefers.
+
+That trade is deliberate. Until 2026-09-22 the probe ran after the transparent pass, where
+additive draws — which by design hide nothing — lifted the stamps beneath them off their
+encoding, and `IVBodyPSF`'s glare wing made that visible. From 4.7 AU on Forward+, 19 of
+125 orbit targets were lost with glare on, all within 190 px of the Sun, at 100 % render
+scale, and 37 within about 300 px at 50 %, the glare law being written per render pixel;
+every one returned with `glare_scale` at 0. After the move no target's result depends on
+glare, at either scale, with or without MSAA, and what was found without glare is
+unchanged. Phobos' orbit measures the semantic change: behind Mars' disc it is hidden both
+ways, and behind Mars' limb shell it was hidden and is now picked.
 
 Three id spaces serve three producer shapes: a per-body orbit line stamps one uniform id
 (`path_id.gdshader`, a `material_overlay` above the base pass — pin and farwarp applied
@@ -1039,7 +1063,7 @@ this is the spatial one.
 | Local shadow maps | multi-light stack | same, iff `apply_gl_compatibility_shadows` (default true; re-test the historical defects on a new target) — else one unshadowed light |
 | Empty-pass skip | renderer-neutral: it keys on whether a light has a map, not on the renderer | same — but here the flip recompiles, which is why it is opt-in (*Local shadow maps*) |
 | Body mouse targeting | CPU, identical | identical |
-| Line/point picking | compute probe at `POST_TRANSPARENT` | **absent** (no RenderingDevice); producers fall back to plain materials |
+| Line/point picking | compute probe at `PRE_TRANSPARENT` | **absent** (no RenderingDevice); producers fall back to plain materials |
 | 3D render scale upscale | FSR 1 (Forward+); bilinear (Mobile) | bilinear |
 | GPU Kepler points | identical | identical (solver unrolled for old GL compilers) |
 
@@ -1162,14 +1186,6 @@ this is the spatial one.
   benign today — the shipped system adds no bodies at runtime, and the bodies that *do*
   re-parent (patched-conic spacecraft) are not shader receivers — but either assumption
   breaking silently mis-shadows. Invalidate the cache on tree change when it matters.
-- **Additive transparent draws corrupt the id stamps beneath them.** The probe reads
-  after the transparent pass, and a stamp decodes only if nothing has been added over it:
-  about 1/4096 breaks the exact encoding. `IVBodyPSF`'s glare wing is additive, so lines
-  and points near a bright source cannot be picked. Measured from 4.7 AU with the Sun in
-  frame, orbit targets up to about 250 px from it were lost at 50 % render scale, and every
-  one returned with `glare_scale` at 0. The zone widens as the render scale drops, the glare
-  law being written per render pixel. Every id shader draws opaque, so probing before the
-  transparent pass should end it; what that gives up is transparent geometry hiding an id.
 - **An atmosphere limb is not eclipsed.** The planet's own shadow is in the limb model
   but an eclipse by another body is not; `sun_occlusion_visible_fraction` at the
   tangent point would add it (also listed in the sibling document's atmosphere TODO —

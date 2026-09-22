@@ -27,9 +27,13 @@ extends Node
 ## at a sparse 3-pixel grid pattern around the mouse, bounded by
 ## [member fragment_range]. An [IVFragmentIDCompositorEffect] attached to the
 ## active [Camera3D]'s [Compositor] dispatches a tiny compute shader at
-## [code]POST_TRANSPARENT[/code], reads the resolved HDR color buffer
-## ([code]RGBA16F[/code], pre-tonemap), finds the broadcast pixel closest to
-## the mouse, and asynchronously returns the id to GDScript.[br][br]
+## [code]PRE_TRANSPARENT[/code], reads the HDR color buffer
+## ([code]RGBA16F[/code]) as the opaque pass left it, finds the broadcast pixel
+## closest to the mouse, and asynchronously returns the id to GDScript. An id
+## shader must therefore draw in the opaque pass (see
+## [code]_fragment_id.gdshaderinc[/code]). An opaque body hides an id behind it,
+## by depth; transparent geometry does not. See "Mouse picking" in
+## VISUAL_MODEL.md.[br][br]
 ##
 ## The system requires a [RenderingDevice] (Forward+ or Mobile renderer). On
 ## Compatibility renderer, this object removes itself from

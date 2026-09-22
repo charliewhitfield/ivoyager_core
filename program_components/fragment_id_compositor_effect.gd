@@ -23,18 +23,22 @@ extends CompositorEffect
 ## Compute-shader probe attached to the active [Camera3D]'s [Compositor] by
 ## [IVFragmentIdentifier].
 ##
-## Runs at [code]EFFECT_CALLBACK_TYPE_POST_TRANSPARENT[/code] each frame:[br]
+## Runs at [code]EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT[/code] each frame:[br]
 ## 1. Iterates a sparse 3-pixel grid around the pixel set by [method
 ##    set_probe_pixel], bounded by the fragment range passed in to [method _init].[br]
 ## 2. Each grid pixel is lifted out of the broadcast band (see
 ##    [code]id_broadcast()[/code] in [code]_fragment_id.gdshaderinc[/code]) and
 ##    rounded; channel values in [code][1, 1024][/code] are valid id-encoded
-##    pixels (offset-by-1 sentinel). Without MSAA this reads the resolved HDR
-##    color buffer; with MSAA it reads the unresolved multisampled buffer and
+##    pixels (offset-by-1 sentinel). Without MSAA this reads the HDR color
+##    buffer; with MSAA it reads the unresolved multisampled buffer and
 ##    scans samples, since a resolve would average the exact encoding away.[br]
 ## 3. Tracks the closest-to-center valid sample and writes it to a small SSBO.[br]
 ## 4. Issues an asynchronous readback. The callback decodes the id and emits
 ##    [signal fragment_decoded] on the main thread via [code]call_deferred[/code].[br][br]
+##
+## The probe sees the opaque pass and nothing drawn over it, so an id shader
+## must draw in the opaque pass, and transparent geometry does not hide an id;
+## see "Mouse picking" in VISUAL_MODEL.md.[br][br]
 ##
 ## WARNING: All [RenderingDevice] work happens on the render thread.
 ## [signal fragment_decoded] is hopped to the main thread before emit.[br][br]
@@ -77,8 +81,8 @@ var _sampler_rid := RID()
 
 func _init(fragment_range: int) -> void:
 	_fragment_range = fragment_range
-	effect_callback_type = EFFECT_CALLBACK_TYPE_POST_TRANSPARENT
-	access_resolved_color = true
+	effect_callback_type = EFFECT_CALLBACK_TYPE_PRE_TRANSPARENT
+	access_resolved_color = false # true would add an unread MSAA resolve every frame
 	enabled = true
 	RenderingServer.call_on_render_thread(_init_render_resources)
 
@@ -148,7 +152,7 @@ func _init_render_resources() -> void:
 
 
 func _render_callback(callback_type: int, render_data: RenderData) -> void:
-	if !enabled or callback_type != EFFECT_CALLBACK_TYPE_POST_TRANSPARENT:
+	if !enabled or callback_type != effect_callback_type:
 		return
 	if _rd == null or !_pipeline_rid.is_valid():
 		return

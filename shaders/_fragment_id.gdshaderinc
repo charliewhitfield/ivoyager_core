@@ -31,6 +31,11 @@
 // Fragment id components arrive in [1, 1024] per channel (offset-by-1 sentinel
 // applied by IVFragmentIdentifier.encode_vec3) and reach ALBEDO through
 // id_broadcast(), never raw.
+//
+// An id shader must stay in the opaque pass. Writing ALPHA, a blend mode,
+// depth_draw_never or depth_test_disabled each moves it to the transparent pass,
+// which the probe reads before, so its id would never be seen (VISUAL_MODEL.md,
+// "Mouse picking").
 
 global uniform vec2 iv_mouse_fragcoord;
 global uniform float iv_fragment_id_range;
