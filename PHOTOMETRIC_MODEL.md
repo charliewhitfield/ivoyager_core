@@ -1518,7 +1518,13 @@ centres. Above the ramp a ring is a shape a viewer can see and must not become a
 it, a plane that cannot be rasterized must not be what carries the light. Measured in the
 app, the engine's sum reproduces the offline full-resolution integral to 0.9988-1.0001 on
 both faces from 5 to 98 degrees of phase, and a render at the ramp's top is bit-identical to
-one with none of this in it.
+one with none of this in it. The ramp is in render-buffer pixels, and a hi-res capture draws
+these same nodes into a buffer of its own while one material and one published flux serve
+both -- so `IVRings` decides for the greater of the window's render height and the one
+`IVScreenshotManager` registers in `IVRings.capture_render_height`, the handshake it runs for
+the star cull, the sphere LOD and glow. Its error is then only ever toward the plane: a capture
+shorter than the window keeps the window's decision, and the window shows a taller capture's
+for the few frames of the shot.
 
 A ring's colour has to cross that handoff with its light. The quad draws a body in the tint
 of its catalog `color_b_v`, and a ring system's is not its planet's -- Saturn's rings are
@@ -2024,9 +2030,10 @@ Verified in frame-height units against a 1080-tall render at 100 %: 85, 70 and 5
 scale, a 1440-tall window and 720- and 1440-tall screenshots all land within 0.94–1.03 of its
 light and 2 px (1080-equivalent) of its reach. A capture gets its own height through
 `IVWorldEnvironment.capture_render_height`, the handshake `IVScreenshotManager` already runs
-for the star cull and the sphere LOD, so the live view shows the capture's levels for the few
-frames of a shot. **Compatibility cannot do this**: its glow has no levels, so a halo there
-stays fixed in render pixels (×1.60 of its light at 70 %, ×2.23 at 50 %).
+for the star cull, the sphere LOD and the ring crossfade, so the live view shows the capture's
+levels for the few frames of a shot. **Compatibility cannot do this**: its glow has no
+levels, so a halo there stays fixed in render pixels (×1.60 of its light at 70 %, ×2.23 at
+50 %).
 
 **Captures.** Hi-res screenshots share the environment, so they get glow at their own height
 (above), while stars stay pin-sharp — the PSF is absolute pixels — and a taller render pushes
@@ -2110,6 +2117,8 @@ lever a capped pass cannot offer is one the shader does not need.
 | | `nightside_twilight_angle` | Horizon fade width on the last crescent sliver (close range). |
 | | `adapt_darken_ev_per_second` / `adapt_brighten_ev_per_second`, `snap_ev_threshold` | Adaptation rates and the instant-jump threshold. The rates are in WALL-CLOCK seconds (they describe the viewer's eye), which is why they carry no `IVUnits` factor where `nightside_twilight_angle` and `ambient_starlight_illuminance` do. |
 | | `default_albedo` | Metering albedo for bodies without a table value. |
+| | `auto`, `manual_exposure_ev`, `exposure_adjustment_ev` | Runtime overrides for a GUI: hold the metered result, replace it with a stated EV, or offset either. The defaults (auto, no adjustment) apply the metered result itself. |
+| | `auto_exposure_ev` (read-only) | The metered and adapted result, in EV relative to the authored sky look. Live every frame whether or not `auto` is set, so a control can display it and hand it to manual without a jump. |
 | body tables | `albedo` | V-band geometric albedo: the asset-level target (a map's sphere mean) and, unless overridden, the metering albedo. |
 | | `meter_albedo` | Metering albedo where what the camera sees is not the map alone — a body whose shells add light over it. Earth only. |
 | | `emission_luminance_scale` | Luminance of a full-white emission texel at multiplier 1.0. |
@@ -2119,8 +2128,7 @@ lever a capped pass cannot offer is one the shader does not need.
 | | `capture_render_height` (static) | Render height an off-screen capture is about to use, so its glow levels are shifted for it; `IVScreenshotManager` sets and clears it. Not a tunable. |
 | `IVStarsVisual` | `cull_invisible_bins` | The same for each magnitude bin of the star field. False submits the whole catalog. |
 | | `capture_render_height` (static) | Render height an off-screen capture is about to use; `IVScreenshotManager` sets and clears it. Not a tunable. |
-| | `auto`, `manual_exposure_ev`, `exposure_adjustment_ev` | Runtime overrides for a GUI: hold the metered result, replace it with a stated EV, or offset either. The defaults (auto, no adjustment) apply the metered result itself. |
-| | `auto_exposure_ev` (read-only) | The metered and adapted result, in EV relative to the authored sky look. Live every frame whether or not `auto` is set, so a control can display it and hand it to manual without a jump. |
+| `IVRings` | `capture_render_height` (static) | Render height an off-screen capture is about to use, so the plane/point crossfade is decided for it; `IVScreenshotManager` sets and clears it. Not a tunable. |
 
 ## TODO
 

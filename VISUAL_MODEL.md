@@ -406,8 +406,9 @@ Two obligations fall on it, both discharged rather than assumed:
   every viewport it draws into.** `IVScreenshotManager` renders these same nodes at a size of
   its own, so the ladder takes the greater of the live viewport's render height and the height
   a capture has registered (`IVShellsModel.capture_render_height`) — the same handshake
-  `IVStarsVisual` uses for its bin cull and `IVWorldEnvironment` for glow. Rungs are monotone
-  in that height, so the answer can be too fine but never too coarse.
+  `IVStarsVisual` uses for its bin cull, `IVRings` for its plane/point crossfade and
+  `IVWorldEnvironment` for glow. Rungs are monotone in that height, so the answer can be too
+  fine but never too coarse.
 
 ## Sun occlusion: analytic shadows
 

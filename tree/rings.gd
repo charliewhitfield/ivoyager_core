@@ -78,6 +78,14 @@ const MIN_TRANSMISSION := 0.001
 const PSF_HANDOFF_HIGH_PX := 8.0
 const PSF_HANDOFF_LOW_PX := 3.0
 
+## Render height an off-screen capture is about to use, or 0.0 for none. The plane/point
+## crossfade is decided in pixels and serves every viewport this node draws into, so a capture
+## taller than the window would otherwise show a point where its own pixels resolve the ring:
+## [IVScreenshotManager] registers its render height here, waits a frame, captures and clears
+## it. The crossfade takes the greater of this and the live viewport, so a stale value can only
+## hold light on the plane, never hand it to the point.
+static var capture_render_height := 0.0
+
 
 # All built from table rings.tsv.
 ## Asset file prefix used to locate ring textures.
@@ -230,9 +238,11 @@ func _update_psf_handoff() -> void:
 		return
 	# The ring system's own projected image, in pixels of radius. The ramp's ends are
 	# rasterization limits, so they are pixels of the 3D render buffer, which 3D render
-	# scale shrinks below the window's. pixel_angle mirrors rings.gdshader's vertex(), which
-	# takes it from the same projection matrix and that buffer's VIEWPORT_SIZE.
-	var render_height := viewport.get_visible_rect().size.y * viewport.scaling_3d_scale
+	# scale shrinks below the window's -- and of a capture's, if that is taller (see
+	# capture_render_height). pixel_angle mirrors rings.gdshader's vertex(), which takes it
+	# from the same projection matrix and that buffer's VIEWPORT_SIZE.
+	var render_height := maxf(viewport.get_visible_rect().size.y * viewport.scaling_3d_scale,
+			capture_render_height)
 	var projection := camera.get_camera_projection()
 	var pixel_angle := 2.0 / maxf(render_height * absf(projection.y.y), 1e-9)
 	var outer_pixels := outer_radius / (camera_distance * pixel_angle)
