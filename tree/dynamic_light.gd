@@ -61,6 +61,14 @@ extends DirectionalLight3D
 ## result and so have to apply that multiply themselves; [IVSunOcclusionManager] feeds it to
 ## them per body, beside the star's direction and angular radius.
 static var star_light_energies: Dictionary[StringName, float] = {}
+## False switches off the shadow map of every light that has one, overriding its table row
+## and [member IVCoreSettings.apply_empty_shadow_pass_skip]; the lights still light their size
+## domains. [IVGraphicsManager] sets this from the user's Shadow Resolution option, and frees
+## the atlas along with it; setting it directly leaves an allocated atlas in place. Under the
+## Compatibility renderer a change can stall on shader compiles, as that skip's flips can: the
+## frame's shadowed-light count is a specialization input for every lit shader (see
+## [code]SHADER_COMPILE_PROFILING.md[/code]).
+static var shadow_maps_enabled := true
 
 ## Reach multiple within which local geometry switches an idle shadow map back on.
 const SHADOW_ENABLE_REACH_RATIO := 1.25
@@ -250,12 +258,13 @@ func _process(_delta: float) -> void:
 		var farwarp_start := IVFarwarpManager.farwarp_start
 		if farwarp_start > 0.0:
 			shadow_max_dist = minf(shadow_max_dist, farwarp_start)
-		if _skip_empty_shadow_passes:
-			var enable_shadow := _get_shadow_enabled(shadow_max_dist)
-			if shadow_enabled != enable_shadow: # Light3D's setter is not change-gated
-				shadow_enabled = enable_shadow
-			if !enable_shadow:
-				return
+		var enable_shadow := shadow_maps_enabled
+		if enable_shadow and _skip_empty_shadow_passes:
+			enable_shadow = _get_shadow_enabled(shadow_max_dist)
+		if shadow_enabled != enable_shadow: # Light3D's setter is not change-gated
+			shadow_enabled = enable_shadow
+		if !enable_shadow:
+			return
 		directional_shadow_max_distance = shadow_max_dist
 
 

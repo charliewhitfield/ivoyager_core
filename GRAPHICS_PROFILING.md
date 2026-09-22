@@ -38,7 +38,7 @@ in the rendered image, measured in 8-bit display codes on screenshots taken befo
    - **Star-catalogue depth.** V 11 saves 29-31% in dark-sky views; V 9.5 saves 43-52%.
 3. Of the existing options:
    - **Shadow Resolution** matters on Forward+. 16384 adds up to 49 ms a frame even on the GTX,
-     and 2048 in place of the default 8192 saves 27-39% of an iGPU frame.
+     and 2048 in place of the then-default 8192 saves 27-39% of an iGPU frame.
    - **MSAA** is a modest lever: off saves 5-13% on the iGPU against 2x, and 5-23% on the GTX.
    - **FXAA and TAA** cost rather than save.
    - **Physical Light** saves nothing, and turning it off costs up to 35%.
@@ -127,7 +127,7 @@ Intel figures for the atmosphere views come from runs in the driver's normal sta
 | 2 | **3D render scale**: 100 / 85 / 75 / 50%. Runtime. FSR 1 on Forward+. | 75%: -17 to -28%; 50%: -30 to -66% | 75%: -13 to -36%; 50%: -25 to -64% | Soft lines and HUD text. At 50%, orbit lines turn chunky, and the star field coarsens because star size follows render height. | Add. On a 2x hi-DPI web canvas, 50% simply restores 1x cost. |
 | 3 | **Renderer** (desktop): Auto / Forward+ / Compatibility. Restart. | Compatibility 1.4-8x faster than Forward+ | Mixed: Compatibility faster in 5 of 8 views | Compatibility loses mouse-over identification of orbit lines and asteroids, FXAA and TAA, and local shadow maps. The picture itself matches. | Add, with Auto choosing Compatibility on integrated GPUs. |
 | 4 | **Star catalogue depth**: all (V 15) / V 11 / V 9.5. Restart, or a 0.3-1.1 s rebuild. | V 11: -17 to -29%; V 9.5: -26 to -43% (star-heavy views) | V 11: -28 to -31%; V 9.5: -44 to -52% | None in lit-body views, where exposure hides faint stars. In dark-sky views, V 11 dims the diffuse star glow (about 7 codes over a third of the sky) and V 9.5 is visibly sparser. | Add as a restart option. It also saves memory and load time. |
-| 5 | **Shadow resolution** (existing; Forward+ only in the Planetarium) | vs 8192 on Forward+: 2048 -27 to -39%; 16384 +18 to +88% | 2048: -1 to -10%; 16384: +28 to +387% | Spacecraft-scale self-shadowing only. Eclipses and ring shadows are analytic and unaffected. | Keep. Drop 16384, add Off, and default to 4096. |
+| 5 | **Shadow resolution** (existing; Forward+ only in the Planetarium) | vs 8192 on Forward+: 2048 -27 to -39%; 16384 +18 to +88% | 2048: -1 to -10%; 16384: +28 to +387% | Spacecraft-scale self-shadowing only. Eclipses and ring shadows are analytic and unaffected. | Keep. Drop 16384, add Off, and default to 4096. All three are built. |
 
 ### Moderate relief
 
@@ -303,15 +303,19 @@ ring-plane orbits break into steps.
 Only Forward+ in the Planetarium draws shadow maps, and they serve only spacecraft-scale local
 shadows. Their cost is not small.
 
-- **Default 8192 on the iGPU:** about 20-25 ms a frame in views with no spacecraft anywhere near.
-  2048 saves 27-39% there. Those frames need no map at all, and a skip that removes the passes
-  rather than shrinking them beats that figure (see *Addendum: the empty shadow passes*).
+- **8192, then the default, on the iGPU:** about 20-25 ms a frame in views with no spacecraft
+  anywhere near. 2048 saves 27-39% there. Those frames need no map at all, and a skip that
+  removes the passes rather than shrinking them beats that figure (see *Addendum: the empty
+  shadow passes*).
 - **16384:** a 1 GiB depth atlas at 32 bits. It costs +28% to +387% on the GTX, up to 49 ms a
   frame at the Sun view, and +18% to +88% on the iGPU.
 
-Drop 16384. Add Off, which disables the shadowed lights. Default to 4096. The atlas sizes are 16,
-64, 256 and 1024 MiB. Later runs back 4096 as the default, and find resolution cheap at any size on
-the web renderer (see *Addendum: more shadow and MSAA measurements*).
+Drop 16384. Add Off, which switches off the shadowed lights' maps. Default to 4096. The atlas
+sizes are 16, 64, 256 and 1024 MiB. Later runs back 4096 as the default, and find resolution cheap
+at any size on the web renderer (see *Addendum: more shadow and MSAA measurements*). All three are
+built. Off switches the maps off through `IVDynamicLight.shadow_maps_enabled` and frees the atlas
+(*`directional_shadow_count` stops being a constant* in
+[SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md)).
 
 ### FXAA, TAA and Physical Light
 
@@ -401,7 +405,7 @@ in the built setting helps a machine that cannot compile the limb shader at all.
 - Glow: on / off
 - MSAA: off / 2x / 4x
 - FXAA (Forward+)
-- Shadow resolution (Forward+): off / 2048 / 4096 / 8192
+- Shadow resolution (Forward+): off / 2048 / 4096 / 8192 (built)
 - Frame-rate cap: 30 / 60 / uncapped
 
 **Graphics (requires restart)**
@@ -747,9 +751,11 @@ camera motion. `IVShaderWarmup` declares its own quads through
 `IVDynamicLight.add_local_shadow_geometry()` so that the warm-up keeps compiling the
 configuration the app actually runs.
 
-**Not measured:** the flip's own cost, and whether Godot frees the depth atlas when the count
-returns to zero — which decides whether a re-enable is paid once per session or once per flip.
-Both belong in [SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md) when taken.
+**Not measured:** the flip's own cost, which belongs in
+[SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md) when taken. The other question left
+open here, whether Godot frees the depth atlas when the count returns to zero, is answered there
+from the engine source: it does not, so a re-enable reuses the atlas rather than paying for it per
+flip (*`directional_shadow_count` stops being a constant*).
 
 
 ## Addendum: the quality tiers, built

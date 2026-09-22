@@ -20,17 +20,17 @@
 class_name IVGraphicsManager
 extends Node
 
-## Applies user graphics settings (antialiasing, directional shadow resolution
-## and atmosphere quality) to the rendering server and main window viewport, and
-## publishes the renderer's colour-space convention to shaders.
+## Applies user graphics settings (antialiasing, shadow resolution and atmosphere
+## quality) to the rendering server, the main window viewport and the local
+## shadow maps, and publishes the renderer's colour-space convention to shaders.
 ##
 ## Added by [IVCoreInitializer]. Settings [code]atmosphere_quality[/code],
 ## [code]msaa_3d[/code], [code]fxaa[/code], [code]use_taa[/code] and
-## [code]directional_shadow_size[/code] are defined in [IVSettingsManager] and
+## [code]shadow_resolution[/code] are defined in [IVSettingsManager] and
 ## exposed in [IVOptionsPopup]; this node applies them at startup and re-applies
 ## them live on change. [member atmosphere_quality_settings], [member
-## msaa_settings] and [member shadow_size_settings] are the enumerations backing
-## the three dropdowns.[br][br]
+## msaa_settings] and [member shadow_resolution_settings] are the enumerations
+## backing the three dropdowns.[br][br]
 ##
 ## Renderer support differs: MSAA and atmosphere quality work in all renderers;
 ## FXAA is unavailable in the Compatibility renderer (including web exports); TAA
@@ -71,14 +71,16 @@ var msaa_settings: Dictionary[StringName, int] = {
 	MSAA_8X = 3,
 }
 
-## Enumeration backing the [code]directional_shadow_size[/code] dropdown in
+## Enumeration backing the [code]shadow_resolution[/code] dropdown in
 ## [IVOptionsPopup]. Mapped to a shadow atlas resolution in [method
-## _apply_shadow_size]. Insertion order must equal value order (the popup uses
-## the setting value as the dropdown item index).
-var shadow_size_settings: Dictionary[StringName, int] = {
-	SHADOW_2048 = 0,
-	SHADOW_4096 = 1,
-	SHADOW_8192 = 2,
+## _apply_shadow_resolution]; Off switches the maps off through [member
+## IVDynamicLight.shadow_maps_enabled] and frees the atlas. Insertion order must
+## equal value order (the popup uses the setting value as the dropdown item index).
+var shadow_resolution_settings: Dictionary[StringName, int] = {
+	SHADOW_OFF = 0,
+	SHADOW_2048 = 1,
+	SHADOW_4096 = 2,
+	SHADOW_8192 = 3,
 }
 
 @onready var _window := get_tree().get_root()
@@ -93,7 +95,7 @@ func _ready() -> void:
 	_apply_msaa()
 	_apply_fxaa()
 	_apply_taa()
-	_apply_shadow_size()
+	_apply_shadow_resolution()
 
 
 func _apply_atmosphere_quality() -> void:
@@ -141,15 +143,20 @@ func _apply_taa() -> void:
 	_window.use_taa = enable_taa
 
 
-func _apply_shadow_size() -> void:
+func _apply_shadow_resolution() -> void:
 	if IVGlobal.is_gl_compatibility and not IVCoreSettings.apply_gl_compatibility_shadows:
 		return # single unshadowed light on Compatibility; no shadow map to size
-	var setting: int = IVSettingsManager.get_setting(&"directional_shadow_size")
+	var setting: int = IVSettingsManager.get_setting(&"shadow_resolution")
+	IVDynamicLight.shadow_maps_enabled = setting != 0
 	var size := 8192 # also the size for a stale cached index past the end
 	match setting:
 		0:
-			size = 2048
+			# Godot frees an atlas only when its size changes, not when the last map goes,
+			# so Off parks it at the engine's minimum, a size no option uses.
+			size = 256
 		1:
+			size = 2048
+		2:
 			size = 4096
 	RenderingServer.directional_shadow_atlas_set_size(size, false)
 
@@ -164,5 +171,5 @@ func _settings_listener(setting: StringName, _value: Variant) -> void:
 			_apply_fxaa()
 		&"use_taa":
 			_apply_taa()
-		&"directional_shadow_size":
-			_apply_shadow_size()
+		&"shadow_resolution":
+			_apply_shadow_resolution()

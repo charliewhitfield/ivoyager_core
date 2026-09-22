@@ -255,9 +255,25 @@ the count the app runs. Where a project measures the stalls anyway, the lever is
 shadowed lights into one decision, taking the reachable counts from three to two at the cost of
 the receiver half of the predicate.
 
-The second side effect above becomes a question rather than a saving: if Godot frees the depth
-atlas when the count returns to zero, a re-enable pays that allocation again per flip rather than
-once per session. Not measured -- and the long disable delay is the hedge against it.
+The Shadow Resolution option's Off (`IVDynamicLight.shadow_maps_enabled`) is the one other way
+the count moves: it holds the count at 0 until a resolution is chosen again. That is a user action
+rather than a camera move, and the warm-up covers whichever state the session starts in.
+
+Under the skip, the lazy atlas allocation above is paid once, not per flip. Read from
+`light_storage.cpp` in the 4.7.2 source, for both renderers: nothing frees the depth atlas when
+the count returns to zero. Only `directional_shadow_atlas_set_size()` with a different size frees
+it, and the next directional shadow drawn allocates it again at that size, so a flip reuses the
+atlas it left and a session pays one allocation per size it uses. Under the shadowed stack that
+first allocation lands at startup, craft or no craft, because the table starts both maps live and
+the skip retires them only after its delay.
+
+That is why Off also shrinks the atlas. Holding the count at 0 alone would keep whatever an earlier
+resolution allocated until a restart, so IVGraphicsManager also sets the size to 256 -- the minimum
+of the engine's own project setting, and a size no option uses -- which frees any atlas and
+allocates nothing while no map is drawn. Measured on Forward+ on the GTX 1650 Ti: texture memory
+falls by 64 MiB when 4096 goes Off and by 16 MiB from 2048, and nothing is allocated at 256. Not 0,
+which the engine passes only at teardown: a shadowed directional light drawn at size 0 would have
+no atlas framebuffer to render into, and the Compatibility renderer divides by that size.
 
 
 ## The warm-up

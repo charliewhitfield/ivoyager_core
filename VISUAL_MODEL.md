@@ -595,6 +595,14 @@ Four properties make it safe:
   hidden draws into no map and reads none, and `is_visible_in_tree()` says so at the moment
   the light asks — so a slept spacecraft cannot hold the near light open.
 
+**The user can switch every map off.** `IVDynamicLight.shadow_maps_enabled` false clears
+`shadow_enabled` on every shadowed light whatever the skip would decide. `IVGraphicsManager` sets
+it from the Shadow Resolution option's Off and shrinks the atlas with it, since Godot frees an
+allocated atlas only on a size change (*`directional_shadow_count` stops being a constant* in
+[SHADER_COMPILE_PROFILING.md](SHADER_COMPILE_PROFILING.md)). The lights go on lighting their
+domains, and the analytic shadows are untouched. A change moves the shadowed-light count exactly
+as a flip does, but only when the user makes one.
+
 Under the Compatibility renderer the stack degrades to a single unshadowed light unless
 `IVCoreSettings.apply_gl_compatibility_shadows` (default true) re-enables the multi-light
 path; the historical defects that once forced the fallback — cull masks not respected,
@@ -1039,7 +1047,6 @@ this is the spatial one.
 | | `apply_size_layers` / `size_layers` | Layer bits by body radius — the lighting size domains ([100 km, 0.1 km] → three domains). |
 | | `local_shadow_caster_ceiling` | Dynamic `LOCAL_SHADOW_CASTER` grant range (1e5 km; must cover the largest shadowed `shadow_max_ceiling` in `dynamic_lights.tsv`). |
 | | `apply_empty_shadow_pass_skip` | Opt-in: a shadowed light clears `shadow_enabled` while nothing in reach would draw into its map or read it (*Local shadow maps*). |
-| `IVDynamicLight` | `SHADOW_ENABLE_REACH_RATIO` / `SHADOW_DISABLE_REACH_RATIO` / `SHADOW_DISABLE_DELAY_FRAMES` (constants, 1.25 / 2.0 / 120) | Flip suppression for the skip above. Asymmetric on purpose: on is immediate, off waits. |
 | | `radius_multiplier_visibility_range_end` | Distance cull in body radii (4000 ≈ 0.6 px angular diameter). |
 | | `max_camera_distance` | Camera range limit; also sizes every always-pass `custom_aabb`. |
 | | `plane_mesh_subdivisions` | Ring mesh subdivision, enough for per-vertex farwarp across the ring span. |
@@ -1047,6 +1054,8 @@ this is the spatial one.
 | | `vertecies_per_orbit` / `vertecies_per_trajectory_segment` | State-path knots (500): smoothness base for the rebased line; the pin owns trueness. |
 | | `vertecies_per_conic_mesh` / `vertecies_per_orbit_low_res` | Shared unit conic (4096) for coarse body orbits; low-res loop (100) for SBG orbit lines. |
 | | `stroboscope_frames_per_second` (+ blur settings) | Artificial stable stroboscope for fast rotators at high time speed (0 = off). |
+| `IVDynamicLight` | `SHADOW_ENABLE_REACH_RATIO` / `SHADOW_DISABLE_REACH_RATIO` / `SHADOW_DISABLE_DELAY_FRAMES` (constants, 1.25 / 2.0 / 120) | Flip suppression for the empty-pass skip. Asymmetric on purpose: on is immediate, off waits. |
+| | `shadow_maps_enabled` (static) | False clears every shadow map, whatever the skip decides. `IVGraphicsManager` sets it from the user's Shadow Resolution option (Off). |
 | `dynamic_lights.tsv` | per-row masks, shadow distances, `apply_sun_occlusion` | The light stack: domains, shadow reach, which rows dim by the camera-point sun fraction. |
 | `IVSunOcclusionManager` | `MAX_OCCLUDERS` / `MIN_OCCLUDER_RADIUS` (constants) | Occluder slots (6, matching the shader array) and the sub-km candidate cutoff. |
 | `IVWorldController` | `min_click_radius` | Body-picking screen radius floor (20 px). |

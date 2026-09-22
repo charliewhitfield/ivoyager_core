@@ -86,7 +86,7 @@ var _defaults: Dictionary[StringName, Variant] = {
 	&"msaa_3d" : 1, # 0,1,2,3 = disabled,2x,4x,8x (== Viewport.MSAA_*)
 	&"fxaa" : false, # not available in Compatibility renderer (incl. web)
 	&"use_taa" : false, # Forward+ only; ghosts vertex-shader-positioned orbit lines
-	&"directional_shadow_size" : 2, # 0,1,2 = 2048,4096,8192
+	&"shadow_resolution" : 2, # 0,1,2,3 = off,2048,4096,8192
 }
 
 var _settings: Dictionary[StringName, Variant] = {}

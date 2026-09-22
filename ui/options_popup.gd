@@ -118,7 +118,7 @@ extends PopupPanel
 	],
 	LABEL_GRAPHICS_PERFORMANCE = [
 		[&"LABEL_ATMOSPHERE_QUALITY", &"atmosphere_quality"],
-		[&"LABEL_SHADOW_RESOLUTION", &"directional_shadow_size"],
+		[&"LABEL_SHADOW_RESOLUTION", &"shadow_resolution"],
 		[&"LABEL_MSAA", &"msaa_3d"],
 		[&"LABEL_FXAA", &"fxaa"],
 		[&"LABEL_TAA", &"use_taa"],
@@ -135,7 +135,7 @@ extends PopupPanel
 	gui_size = [&"CoreSettings", &"gui_size_settings"],
 	atmosphere_quality = [&"GraphicsManager", &"atmosphere_quality_settings"],
 	msaa_3d = [&"GraphicsManager", &"msaa_settings"],
-	directional_shadow_size = [&"GraphicsManager", &"shadow_size_settings"],
+	shadow_resolution = [&"GraphicsManager", &"shadow_resolution_settings"],
 	screenshot_aspect = [&"ScreenshotManager", &"aspects"],
 }
 
@@ -181,7 +181,7 @@ extends PopupPanel
 	small_bodies_point_size = &"HINT_SMALL_BODIES_POINT_SIZE",
 	hide_hud_when_close = &"HINT_HIDE_HUD_WHEN_CLOSE",
 	atmosphere_quality = &"HINT_ATMOSPHERE_QUALITY",
-	directional_shadow_size = &"HINT_DIRECTIONAL_SHADOW_SIZE",
+	shadow_resolution = &"HINT_SHADOW_RESOLUTION",
 	msaa_3d = &"HINT_MSAA_3D",
 	fxaa = &"HINT_FXAA",
 	use_taa = &"HINT_USE_TAA",
@@ -192,7 +192,7 @@ extends PopupPanel
 ## texts assume.
 @export var option_web_tooltips: Dictionary[StringName, StringName] = {
 	atmosphere_quality = &"HINT_WEB_ATMOSPHERE_QUALITY",
-	directional_shadow_size = &"HINT_WEB_DIRECTIONAL_SHADOW_SIZE",
+	shadow_resolution = &"HINT_WEB_SHADOW_RESOLUTION",
 	msaa_3d = &"HINT_WEB_MSAA_3D",
 }
 
@@ -289,12 +289,12 @@ func _configure_after_core_inited() -> void:
 		_remove_option(&"physical_light")
 	if IVGlobal.is_gl_compatibility:
 		# FXAA and TAA are unsupported in the Compatibility renderer (incl. web);
-		# the shadow-size option applies only when Compatibility shadows are on
+		# the shadow resolution option applies only when Compatibility shadows are on
 		# (see IVCoreSettings.apply_gl_compatibility_shadows).
 		_remove_option(&"fxaa")
 		_remove_option(&"use_taa")
 		if not IVCoreSettings.apply_gl_compatibility_shadows:
-			_remove_option(&"directional_shadow_size")
+			_remove_option(&"shadow_resolution")
 
 
 func _remove_option(setting: StringName) -> void:

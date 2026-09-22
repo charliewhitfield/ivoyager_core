@@ -19,7 +19,6 @@ HINT_CAMERA_TRANSFER_TIME,Seconds the camera takes to fly to a new target or vie
 HINT_CENTAURS,Show Centaurs
 HINT_COLOR_PICKER,Color Picker
 HINT_DECREASE_FOCAL_LENGTH,Decrease camera focal length
-HINT_DIRECTIONAL_SHADOW_SIZE,"Resolution of shadows cast by spacecraft and other objects\nnear the camera. Higher is sharper, but uses more video\nmemory (8192: 256 MB). Eclipse and ring shadows are\nnot affected.\n\nGPU cost for desktop: LOW for modern GPU; HIGH for older\nor integrated GPU at 8192"
 HINT_EXPOSURE_ADJUSTMENT,Adjust exposure in 1/3 stops
 HINT_EXPOSURE_AUTO,Meter camera exposure automatically
 HINT_EXPOSURE_MANUAL,Set camera exposure in 1/3 stops
@@ -59,6 +58,7 @@ HINT_SELECTION_BACK,Select last
 HINT_SELECTION_FORWARD,Select next
 HINT_SELECTION_UP,Select parent object
 HINT_SET_AND_CLOSE,Set and close
+HINT_SHADOW_RESOLUTION,"Resolution of shadows cast by spacecraft and other objects\nnear the camera, or Off for none. Higher is sharper, but\nuses more video memory (8192: 256 MB). Eclipse and ring\nshadows are not affected.\n\nGPU cost for desktop: LOW for modern GPU; HIGH for older\nor integrated GPU at 8192"
 HINT_SHOW_NAME,Show Name
 HINT_SHOW_ORBIT,Show Orbit
 HINT_SHOW_SYMBOL,Show Symbol
@@ -85,5 +85,5 @@ HINT_VIEW_TOP,View from top
 HINT_VIEW_ZOOM,View at close range
 HINT_VIS_ON_MO_CKBX,Uncheck for visibility\non mouse-over only
 HINT_WEB_ATMOSPHERE_QUALITY,"Detail of the scattering calculation that renders air on Earth,\nVenus, Mars and Titan. Reduced integrates each view ray at\nfewer points: no visible change beyond a slight shift in the\nthin band at the limb.\n\nGPU cost for web: HIGH at Normal, close to a body with air"
-HINT_WEB_DIRECTIONAL_SHADOW_SIZE,"Resolution of shadows cast by spacecraft and other objects\nnear the camera. Higher is sharper, but uses more video\nmemory (8192: 256 MB). Eclipse and ring shadows are\nnot affected.\n\nGPU cost for web: LOW"
 HINT_WEB_MSAA_3D,"Multisample antialiasing: smooths jagged edges on orbit\nlines, ring edges and spacecraft.\n\nGPU cost for web: MODERATE at 2x or 4x; HIGH at 8x"
+HINT_WEB_SHADOW_RESOLUTION,"Resolution of shadows cast by spacecraft and other objects\nnear the camera, or Off for none. Higher is sharper, but\nuses more video memory (8192: 256 MB). Eclipse and ring\nshadows are not affected.\n\nGPU cost for web: LOW"
