@@ -178,6 +178,11 @@ var ivoyager_config: ConfigFile = IVPluginUtils.get_config_with_override(
 		"res://ivoyager_override2.cfg")
 ## Indicates project running with Compatibility renderer. Read only!
 var is_gl_compatibility := RenderingServer.get_current_rendering_method() == "gl_compatibility"
+## The GPU's type from [method RenderingServer.get_video_adapter_type], e.g. for
+## choosing defaults on integrated graphics. Always
+## [constant RenderingDevice.DEVICE_TYPE_OTHER] under the Compatibility renderer,
+## whatever the GPU. Read only!
+var video_adapter_type := RenderingServer.get_video_adapter_type()
 
 
 

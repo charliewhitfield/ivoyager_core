@@ -125,7 +125,7 @@ Intel figures for the atmosphere views come from runs in the driver's normal sta
 |---|---|---|---|---|---|
 | 1 | **Atmosphere quality**: Full / Reduced / Off. Runtime shader swap, or restart. | Reduced -22 to -38%; Off -76 to -95% (atmosphere views) | The shell is 15-39% of the frame | Reduced: none visible. Up to 15 codes on 1-2% of pixels, confined to the limb band. Off: no air at all, and Titan loses its identity. | Built as Normal / Reduced, and a runtime setting rather than a restart one (see *Addendum: the quality tiers, built*). Off is not built. |
 | 2 | **3D render scale**: 100 / 85 / 75 / 50%. Runtime. FSR 1 on Forward+. | 75%: -17 to -28%; 50%: -30 to -66% | 75%: -13 to -36%; 50%: -25 to -64% | Soft lines and HUD text. At 50%, orbit lines turn chunky, and the star field coarsens because star size follows render height. | Built as 100 / 85 / 70 / 50% (see *3D render scale*). On a 2x hi-DPI screen, 50% simply restores 1x cost. |
-| 3 | **Renderer** (desktop): Auto / Forward+ / Compatibility. Restart. | Compatibility 1.4-8x faster than Forward+ | Mixed: Compatibility faster in 5 of 8 views | Compatibility loses mouse-over identification of orbit lines and asteroids, FXAA and TAA, and local shadow maps. The picture itself matches. | Add, with Auto choosing Compatibility on integrated GPUs. |
+| 3 | **Renderer** (desktop): Auto / Forward+ / Compatibility. Restart. | Compatibility 1.4-8x faster than Forward+ | Mixed: Compatibility faster in 5 of 8 views | Compatibility loses mouse-over identification of orbit lines and asteroids, FXAA and TAA, and local shadow maps. The picture itself matches. | Built as Forward+ / Compatibility, with the Planetarium defaulting integrated GPUs to Compatibility (see *The renderer, on desktop*). |
 | 4 | **Star catalogue depth**: all (V 15) / V 11 / V 9.5. Restart, or a 0.3-1.1 s rebuild. | V 11: -17 to -29%; V 9.5: -26 to -43% (star-heavy views) | V 11: -28 to -31%; V 9.5: -44 to -52% | None in lit-body views, where exposure hides faint stars. In dark-sky views, V 11 dims the diffuse star glow (about 7 codes over a third of the sky) and V 9.5 is visibly sparser. | Add as a restart option. It also saves memory and load time. |
 | 5 | **Shadow resolution** (existing; Forward+ only in the Planetarium) | vs 8192 on Forward+: 2048 -27 to -39%; 16384 +18 to +88% | 2048: -1 to -10%; 16384: +28 to +387% | Spacecraft-scale self-shadowing only. Eclipses and ring shadows are analytic and unaffected. | Keep. Drop 16384, add Off, and default to 4096. All three are built. |
 
@@ -262,6 +262,14 @@ What Compatibility gives up on desktop:
   itself there)
 - FXAA and TAA
 - Local shadow maps (already off for Compatibility in the Planetarium)
+
+**Built since** as the user option Renderer (setting `renderer`): Forward+ or Compatibility, in a
+"Graphics (requires restart)" Options section shown on desktop only. IVGraphicsManager writes the
+choice to the file the project names in `application/config/project_settings_override`, so it takes
+effect at the next start. The default by adapter is the project's to set: the Planetarium defaults
+an integrated GPU to Compatibility, and a first run that starts in Forward+ there restarts itself
+into it before init builds anything (`planetarium/preinitializer.gd`). A laptop with both GPUs
+counts as discrete, since Godot picks the discrete one.
 
 
 ## The star field
@@ -421,7 +429,7 @@ in the built setting helps a machine that cannot compile the limb shader at all.
 
 **Graphics (requires restart)**
 
-- Renderer (desktop): Auto / Forward+ / Compatibility
+- Renderer (desktop): Forward+ / Compatibility, default by adapter (built)
 - Atmosphere Off (the tier that omits the limb shader, and the only one needing a restart)
 - Star catalogue: V 15 / V 11 / V 9.5
 - Cloud decks: on / off
@@ -719,7 +727,7 @@ Built into this plugin on 2026-09-19 and measured the same day: a shadow-mapped
 its map or read it, under the opt-in `IVCoreSettings.apply_empty_shadow_pass_skip` (*Local
 shadow maps* in [VISUAL_MODEL.md](VISUAL_MODEL.md)). The Planetarium turns it on, where it
 acts on desktop Forward+ only — that project ships `apply_gl_compatibility_shadows` false,
-so its web renderer has no maps to skip.
+so its Compatibility renderer has no maps to skip.
 
 **Both halves of the predicate earn their place.** A caster in reach is not enough: the map
 also needs a receiver in the light's own `light_cull_mask`. At the ISS, 90 m off the

@@ -30,6 +30,10 @@ extends Node
 ##
 ## Many settings are settable in [IVOptionsPopup]. Other settings can be added
 ## that are "hidden" from user Options and managed by code.[br][br]
+##
+## A setting that takes effect only at startup can register the value the running
+## session actually uses with [method set_running_value]. [method
+## is_restart_pending] then tells whether the current settings need a restart.[br][br]
 
 
 
@@ -88,9 +92,11 @@ var _defaults: Dictionary[StringName, Variant] = {
 	&"fxaa" : false, # not available in Compatibility renderer (incl. web)
 	&"use_taa" : false, # Forward+ only; ghosts vertex-shader-positioned orbit lines
 	&"shadow_resolution" : 2, # 0,1,2,3 = off,2048,4096,8192
+	&"renderer" : 0, # 0,1 = forward_plus,gl_compatibility (at restart); see IVGraphicsManager
 }
 
 var _settings: Dictionary[StringName, Variant] = {}
+var _running_values: Dictionary[StringName, Variant] = {}
 var _cache_handler: IVCacheHandler
 
 
@@ -168,6 +174,24 @@ func is_cache_current() -> bool:
 ## Reloads settings from the cache file, discarding any in-memory changes.
 func restore_from_cache() -> void:
 	_cache_handler.restore_from_cache()
+
+
+## For setting [param key], one that takes effect only at startup, records
+## [param value] as the value the running session actually uses. That can differ
+## from the setting's value at startup, e.g. when the command line overrode it.
+func set_running_value(key: StringName, value: Variant) -> void:
+	assert(_defaults.has(key), "Setting '%s' doesn't exist" % key)
+	_running_values[key] = value
+
+
+## Returns true if any setting registered with [method set_running_value] now
+## differs from the value the running session uses, so that it needs a restart
+## to take effect. Valid after [signal initialized].
+func is_restart_pending() -> bool:
+	for key in _running_values:
+		if _settings[key] != _running_values[key]:
+			return true
+	return false
 
 
 func _on_core_init_preinitialized() -> void:

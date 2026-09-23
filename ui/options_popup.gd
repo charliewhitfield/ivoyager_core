@@ -36,12 +36,13 @@ extends PopupPanel
 ## option_control_properties], and given a tooltip by [member option_tooltips].[br][br]
 ##
 ## A graphics option's tooltip states its GPU cost, which differs by renderer,
-## so tooltips come in two sets: [member option_tooltips] for desktop, and
-## [member option_web_tooltips] for web, whose entries replace the first set's
-## whenever [member IVGlobal.is_gl_compatibility] is true. Core's texts assume
-## that Compatibility means a web export and Forward+ means desktop, which holds
-## in nearly every deployment; a project deployed otherwise should substitute
-## its own texts.
+## so tooltips come in two sets: [member option_tooltips], and [member
+## option_compatibility_tooltips], whose entries replace the first set's whenever
+## [member IVGlobal.is_gl_compatibility] is true.[br][br]
+##
+## A section with no options to show is hidden. While any setting registered with
+## [method IVSettingsManager.set_running_value] differs from the value the running
+## session uses, a warning at the bottom says that a restart is needed.
 
 
 ## Stop the simulator while this popup is open. This setting will be overridden
@@ -74,7 +75,7 @@ extends PopupPanel
 	# column 1
 	[&"LABEL_SAVE_LOAD", &"LABEL_CAMERA", &"LABEL_SCREENSHOTS"],
 	# column 2
-	[&"LABEL_GUI_AND_HUD", &"LABEL_GRAPHICS_PERFORMANCE"],
+	[&"LABEL_GUI_AND_HUD", &"LABEL_GRAPHICS_PERFORMANCE", &"LABEL_GRAPHICS_REQUIRES_RESTART"],
 ]
 
 ## Section keys are the header labels used in [member layout]. Content of each
@@ -124,6 +125,9 @@ extends PopupPanel
 		[&"LABEL_FXAA", &"fxaa"],
 		[&"LABEL_TAA", &"use_taa"],
 	],
+	LABEL_GRAPHICS_REQUIRES_RESTART = [
+		[&"LABEL_RENDERER", &"renderer"],
+	],
 }
 
 ## Option enumerations. Enumerations are enums or enum-like dictionaries
@@ -138,6 +142,7 @@ extends PopupPanel
 	render_scale = [&"GraphicsManager", &"render_scale_settings"],
 	msaa_3d = [&"GraphicsManager", &"msaa_settings"],
 	shadow_resolution = [&"GraphicsManager", &"shadow_resolution_settings"],
+	renderer = [&"GraphicsManager", &"renderer_settings"],
 	screenshot_aspect = [&"ScreenshotManager", &"aspects"],
 }
 
@@ -188,16 +193,16 @@ extends PopupPanel
 	msaa_3d = &"HINT_MSAA_3D",
 	fxaa = &"HINT_FXAA",
 	use_taa = &"HINT_USE_TAA",
+	renderer = &"HINT_RENDERER",
 }
 
 ## Tooltips that replace [member option_tooltips] entries while the Compatibility
-## renderer runs, keyed the same way. See the class description for what Core's
-## texts assume.
-@export var option_web_tooltips: Dictionary[StringName, StringName] = {
-	atmosphere_quality = &"HINT_WEB_ATMOSPHERE_QUALITY",
-	render_scale = &"HINT_WEB_RENDER_SCALE",
-	shadow_resolution = &"HINT_WEB_SHADOW_RESOLUTION",
-	msaa_3d = &"HINT_WEB_MSAA_3D",
+## renderer runs, keyed the same way.
+@export var option_compatibility_tooltips: Dictionary[StringName, StringName] = {
+	atmosphere_quality = &"HINT_COMPATIBILITY_ATMOSPHERE_QUALITY",
+	render_scale = &"HINT_COMPATIBILITY_RENDER_SCALE",
+	shadow_resolution = &"HINT_COMPATIBILITY_SHADOW_RESOLUTION",
+	msaa_3d = &"HINT_COMPATIBILITY_MSAA_3D",
 }
 
 var _enumerations: Dictionary[StringName, Dictionary] = {}
@@ -208,6 +213,7 @@ var _suppress_close := true
 @onready var _restore_defaults: Button = %RestoreDefaultsButton
 @onready var _confirm_changes: Button = %ConfirmChangesButton
 @onready var _cancel: Button = %CancelButton
+@onready var _restart_warning: Label = %RestartWarningLabel
 
 
 
@@ -299,6 +305,8 @@ func _configure_after_core_inited() -> void:
 		_remove_option(&"use_taa")
 		if not IVCoreSettings.apply_gl_compatibility_shadows:
 			_remove_option(&"shadow_resolution")
+	if !IVGraphicsManager.can_set_renderer():
+		_remove_option(&"renderer")
 
 
 func _remove_option(setting: StringName) -> void:
@@ -314,9 +322,12 @@ func _build_content() -> void:
 		_content_container.remove_child(child)
 		child.queue_free()
 	for column_array in layout:
+		var headers := column_array.filter(_has_existing_option)
+		if headers.is_empty():
+			continue
 		var column_vbox := VBoxContainer.new()
 		_content_container.add_child(column_vbox)
-		for header: StringName in column_array:
+		for header: StringName in headers:
 			var subpanel_container := PanelContainer.new()
 			column_vbox.add_child(subpanel_container)
 			var subpanel_vbox := VBoxContainer.new()
@@ -339,12 +350,20 @@ func _build_content() -> void:
 	_on_content_built()
 
 
+func _has_existing_option(header: StringName) -> bool:
+	for option_array: Array in section_content[header]:
+		var setting: StringName = option_array[1]
+		if IVSettingsManager.has_setting(setting):
+			return true
+	return false
+
+
 func _build_item(option_text: StringName, setting: StringName) -> HBoxContainer:
 	# Labels ignore the mouse and value Controls stop the tooltip search at themselves,
 	# so both the row and its value Control need the tooltip.
 	var tooltip: StringName = option_tooltips.get(setting, &"")
 	if IVGlobal.is_gl_compatibility:
-		tooltip = option_web_tooltips.get(setting, tooltip)
+		tooltip = option_compatibility_tooltips.get(setting, tooltip)
 	var setting_hbox := HBoxContainer.new()
 	setting_hbox.tooltip_text = tooltip
 	var label := Label.new()
@@ -439,6 +458,16 @@ func _set_overrides(control: Control, setting: StringName) -> void:
 func _on_content_built() -> void:
 	_restore_defaults.disabled = IVSettingsManager.is_defaults()
 	_confirm_changes.disabled = IVSettingsManager.is_cache_current()
+	_update_restart_warning()
+
+
+func _update_restart_warning() -> void:
+	var is_restart_pending := IVSettingsManager.is_restart_pending()
+	if _restart_warning.visible == is_restart_pending:
+		return
+	_restart_warning.visible = is_restart_pending
+	if !is_restart_pending:
+		size.y = 0 # a popup grows to fit its content, but never shrinks back on its own
 
 
 func _restore_default(setting: StringName) -> void:
@@ -462,6 +491,7 @@ func _on_change(value: Variant, setting: StringName, default_button: Button,
 	default_button.disabled = IVSettingsManager.is_default(setting)
 	_restore_defaults.disabled = IVSettingsManager.is_defaults()
 	_confirm_changes.disabled = IVSettingsManager.is_cache_current()
+	_update_restart_warning()
 
 
 func _on_restore_defaults() -> void:

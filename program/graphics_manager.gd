@@ -22,8 +22,9 @@ extends Node
 
 ## Applies user graphics settings (antialiasing, shadow resolution, atmosphere
 ## quality and 3D render scale) and the screen's display scale to the rendering
-## server, the main window viewport and the local shadow maps, and publishes the
-## renderer's colour-space convention to shaders.
+## server, the main window viewport and the local shadow maps, records the
+## renderer for the next start, and publishes the renderer's colour-space
+## convention to shaders.
 ##
 ## Added by [IVCoreInitializer]. Settings [code]atmosphere_quality[/code],
 ## [code]render_scale[/code], [code]msaa_3d[/code], [code]fxaa[/code],
@@ -31,8 +32,18 @@ extends Node
 ## [IVSettingsManager] and exposed in [IVOptionsPopup]; this node applies them at
 ## startup and re-applies them live on change. [member
 ## atmosphere_quality_settings], [member render_scale_settings], [member
-## msaa_settings] and [member shadow_resolution_settings] are the enumerations
-## backing the four dropdowns.[br][br]
+## msaa_settings], [member shadow_resolution_settings] and [member
+## renderer_settings] are the enumerations backing the five dropdowns.[br][br]
+##
+## Setting [code]renderer[/code] cannot apply live: Godot fixes the renderer at
+## engine start. On change, this node writes it to the file the project names in
+## ProjectSettings [code]application/config/project_settings_override[/code]
+## (e.g. [code]user://override.cfg[/code]), which the engine reads at the next
+## start. A project that names no such file, and any non-desktop build, gets no
+## Renderer option; see [method can_set_renderer]. Switching a first run to a
+## hardware-dependent default is the project's job, since it needs a restart
+## before the rest of init; [method write_rendering_method] and [method
+## get_rendering_method] serve a preinitializer that does so.[br][br]
 ##
 ## Renderer support differs: MSAA, atmosphere quality and render scale work in all
 ## renderers; FXAA is unavailable in the Compatibility renderer (including web
@@ -66,6 +77,9 @@ extends Node
 ## arithmetic in linear, and encode what it writes. Every colour-handling shader
 ## does so through [code]shaders/_display.gdshaderinc[/code]; see that file for
 ## what the global means and what it does not cover.
+
+## Godot's rendering method for each value of setting [code]renderer[/code].
+const RENDERING_METHODS: Array[String] = ["forward_plus", "gl_compatibility"]
 
 ## Enumeration backing the [code]atmosphere_quality[/code] dropdown in
 ## [IVOptionsPopup]. Mapped to the quadrature rule and ring tap cap in [method
@@ -109,6 +123,15 @@ var shadow_resolution_settings: Dictionary[StringName, int] = {
 	SHADOW_8192 = 3,
 }
 
+## Enumeration backing the [code]renderer[/code] dropdown in [IVOptionsPopup].
+## Mapped to a rendering method by [constant RENDERING_METHODS]. Insertion order
+## must equal value order (the popup uses the setting value as the dropdown item
+## index).
+var renderer_settings: Dictionary[StringName, int] = {
+	RENDERER_FORWARD_PLUS = 0,
+	RENDERER_COMPATIBILITY = 1,
+}
+
 @onready var _window := get_tree().get_root()
 
 
@@ -124,6 +147,41 @@ static func get_render_size(viewport: Viewport) -> Vector2:
 	return (pixels * viewport.scaling_3d_scale).floor() # the engine truncates too
 
 
+## Returns true if setting [code]renderer[/code] can take effect in this build: a
+## desktop build whose project names a settings override file for the engine to
+## read at startup. Otherwise [IVOptionsPopup] hides the Renderer option.
+static func can_set_renderer() -> bool:
+	if !OS.has_feature("pc"):
+		return false
+	var is_override_disabled: bool = ProjectSettings.get_setting(
+			"application/config/disable_project_settings_override")
+	var override_path: String = ProjectSettings.get_setting(
+			"application/config/project_settings_override")
+	return !is_override_disabled and !override_path.is_empty()
+
+
+## Returns Godot's rendering method for [param renderer_setting], a value of
+## setting [code]renderer[/code].
+static func get_rendering_method(renderer_setting: int) -> String:
+	# A stale cached index past the end takes the last method, as the popup shows it.
+	return RENDERING_METHODS[clampi(renderer_setting, 0, RENDERING_METHODS.size() - 1)]
+
+
+## Writes [param rendering_method] to the project's settings override file, for the
+## engine to start with next time. Anything else the file holds is kept. Call only
+## if [method can_set_renderer].
+static func write_rendering_method(rendering_method: String) -> Error:
+	var override_path: String = ProjectSettings.get_setting(
+			"application/config/project_settings_override")
+	var config := ConfigFile.new()
+	if FileAccess.file_exists(override_path):
+		var error := config.load(override_path)
+		if error != OK:
+			return error # don't clobber a file we can't read
+	config.set_value("rendering", "renderer/rendering_method", rendering_method)
+	return config.save(override_path)
+
+
 func _ready() -> void:
 	IVSettingsManager.changed.connect(_settings_listener)
 	# The renderer cannot change without a restart, so this is written once and never again.
@@ -135,6 +193,9 @@ func _ready() -> void:
 	_apply_fxaa()
 	_apply_taa()
 	_apply_shadow_resolution()
+	if can_set_renderer():
+		IVSettingsManager.set_running_value(&"renderer",
+				RENDERING_METHODS.find(RenderingServer.get_current_rendering_method()))
 	set_process(false)
 	if !IVCoreSettings.apply_display_scale:
 		return
@@ -278,6 +339,16 @@ func _apply_shadow_resolution() -> void:
 	RenderingServer.directional_shadow_atlas_set_size(size, false)
 
 
+func _write_renderer() -> void:
+	if !can_set_renderer():
+		return
+	var setting: int = IVSettingsManager.get_setting(&"renderer")
+	var error := write_rendering_method(get_rendering_method(setting))
+	if error != OK:
+		push_error("Could not write the renderer to the project settings override: "
+				+ error_string(error))
+
+
 func _settings_listener(setting: StringName, _value: Variant) -> void:
 	match setting:
 		&"atmosphere_quality":
@@ -292,3 +363,5 @@ func _settings_listener(setting: StringName, _value: Variant) -> void:
 			_apply_taa()
 		&"shadow_resolution":
 			_apply_shadow_resolution()
+		&"renderer":
+			_write_renderer()
