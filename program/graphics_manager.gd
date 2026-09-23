@@ -40,10 +40,12 @@ extends Node
 ## ProjectSettings [code]application/config/project_settings_override[/code]
 ## (e.g. [code]user://override.cfg[/code]), which the engine reads at the next
 ## start. A project that names no such file, and any non-desktop build, gets no
-## Renderer option; see [method can_set_renderer]. Switching a first run to a
-## hardware-dependent default is the project's job, since it needs a restart
-## before the rest of init; [method write_rendering_method] and [method
-## get_rendering_method] serve a preinitializer that does so.[br][br]
+## Renderer option; see [method can_set_renderer]. A Forward+ run also records the
+## GPU's type in that file, which a Compatibility run cannot read for itself; see
+## [member IVGlobal.video_adapter_type]. Switching a first run to a hardware-dependent
+## default is the project's job, since it needs a restart before the rest of init;
+## [method write_rendering_method] and [method get_rendering_method] serve a
+## preinitializer that does so.[br][br]
 ##
 ## Renderer support differs: MSAA, atmosphere quality and render scale work in all
 ## renderers; FXAA is unavailable in the Compatibility renderer (including web
@@ -171,6 +173,11 @@ static func get_rendering_method(renderer_setting: int) -> String:
 ## engine to start with next time. Anything else the file holds is kept. Call only
 ## if [method can_set_renderer].
 static func write_rendering_method(rendering_method: String) -> Error:
+	return _write_override_file(rendering_method)
+
+
+# Also records the GPU's type whenever this run can read it.
+static func _write_override_file(rendering_method := "") -> Error:
 	var override_path: String = ProjectSettings.get_setting(
 			"application/config/project_settings_override")
 	var config := ConfigFile.new()
@@ -178,7 +185,12 @@ static func write_rendering_method(rendering_method: String) -> Error:
 		var error := config.load(override_path)
 		if error != OK:
 			return error # don't clobber a file we can't read
-	config.set_value("rendering", "renderer/rendering_method", rendering_method)
+	if rendering_method:
+		config.set_value("rendering", "renderer/rendering_method", rendering_method)
+	if RenderingServer.get_current_rendering_method() != "gl_compatibility":
+		# No section: the engine loads a key outside any section as its full path.
+		config.set_value("", IVGlobal.VIDEO_ADAPTER_TYPE_SETTING,
+				RenderingServer.get_video_adapter_type())
 	return config.save(override_path)
 
 
@@ -196,6 +208,7 @@ func _ready() -> void:
 	if can_set_renderer():
 		IVSettingsManager.set_running_value(&"renderer",
 				RENDERING_METHODS.find(RenderingServer.get_current_rendering_method()))
+		_record_video_adapter_type()
 	set_process(false)
 	if !IVCoreSettings.apply_display_scale:
 		return
@@ -337,6 +350,18 @@ func _apply_shadow_resolution() -> void:
 		2:
 			size = 4096
 	RenderingServer.directional_shadow_atlas_set_size(size, false)
+
+
+func _record_video_adapter_type() -> void:
+	if IVGlobal.is_gl_compatibility:
+		return # can't read it
+	var recorded: int = ProjectSettings.get_setting(IVGlobal.VIDEO_ADAPTER_TYPE_SETTING, -1)
+	if recorded == IVGlobal.video_adapter_type:
+		return
+	var error := _write_override_file()
+	if error != OK:
+		push_error("Could not record the GPU's type in the project settings override: "
+				+ error_string(error))
 
 
 func _write_renderer() -> void:

@@ -126,6 +126,11 @@ const PERSIST_PROCEDURAL := PersistMode.PERSIST_PROCEDURAL
 ## see [IVSunOcclusionManager].
 const LOCAL_SHADOW_CASTER := 0b1_0000_0000
 
+## Project setting in which a Forward+ run records [member video_adapter_type] for
+## a later Compatibility run, in the project's settings override file (written by
+## [IVGraphicsManager]).
+const VIDEO_ADAPTER_TYPE_SETTING := "ivoyager/video_adapter_type"
+
 
 
 ## Maintained by [IVTimekeeper] and [IVSpeedManager]. Holds [0] time,
@@ -178,12 +183,21 @@ var ivoyager_config: ConfigFile = IVPluginUtils.get_config_with_override(
 		"res://ivoyager_override2.cfg")
 ## Indicates project running with Compatibility renderer. Read only!
 var is_gl_compatibility := RenderingServer.get_current_rendering_method() == "gl_compatibility"
-## The GPU's type from [method RenderingServer.get_video_adapter_type], e.g. for
-## choosing defaults on integrated graphics. Always
-## [constant RenderingDevice.DEVICE_TYPE_OTHER] under the Compatibility renderer,
-## whatever the GPU. Read only!
-var video_adapter_type := RenderingServer.get_video_adapter_type()
+## The GPU's type, e.g. for choosing defaults on integrated graphics. The
+## Compatibility renderer reports [constant RenderingDevice.DEVICE_TYPE_OTHER]
+## whatever the GPU, so there this is the type the last Forward+ run recorded (see
+## [constant VIDEO_ADAPTER_TYPE_SETTING]), or DEVICE_TYPE_OTHER if none has, as
+## on the web. Read only!
+var video_adapter_type := _get_video_adapter_type()
 
+
+
+static func _get_video_adapter_type() -> RenderingDevice.DeviceType:
+	if RenderingServer.get_current_rendering_method() != "gl_compatibility":
+		return RenderingServer.get_video_adapter_type()
+	var recorded: int = ProjectSettings.get_setting(VIDEO_ADAPTER_TYPE_SETTING,
+			RenderingDevice.DEVICE_TYPE_OTHER)
+	return recorded as RenderingDevice.DeviceType
 
 
 func _enter_tree() -> void:

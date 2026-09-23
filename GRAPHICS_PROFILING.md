@@ -266,10 +266,11 @@ What Compatibility gives up on desktop:
 **Built since** as the user option Renderer (setting `renderer`): Forward+ or Compatibility, in a
 "Graphics (requires restart)" Options section shown on desktop only. IVGraphicsManager writes the
 choice to the file the project names in `application/config/project_settings_override`, so it takes
-effect at the next start. The default by adapter is the project's to set: the Planetarium defaults
-an integrated GPU to Compatibility, and a first run that starts in Forward+ there restarts itself
-into it before init builds anything (`planetarium/preinitializer.gd`). A laptop with both GPUs
-counts as discrete, since Godot picks the discrete one.
+effect at the next start, and a Forward+ run records the GPU's type there for `IVGlobal`, since the
+Compatibility renderer cannot read it. The default by adapter is the project's to set: the
+Planetarium defaults an integrated GPU to Compatibility, and a first run that starts in Forward+
+there restarts itself into it before init builds anything (`planetarium/preinitializer.gd`). A
+laptop with both GPUs counts as discrete, since Godot picks the discrete one.
 
 
 ## The star field
