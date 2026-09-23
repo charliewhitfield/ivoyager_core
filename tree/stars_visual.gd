@@ -54,6 +54,11 @@ const BINARY_FILE_MAGNITUDES: Array[String] = ["2.0", "2.5", "3.0", "3.5", "4.0"
 		"5.5", "6.0", "6.5", "7.0", "7.5", "8.0", "8.5", "9.0", "9.5", "10.0", "10.5", "11.0",
 		"11.5", "12.0", "12.5", "13.0", "99.9"]
 
+## [member magnitude_cutoff] for each value of user setting [code]star_catalog[/code] (see
+## [member IVGraphicsManager.star_catalog_settings]), each a bin edge in
+## [constant BINARY_FILE_MAGNITUDES]. The lower of the two cutoffs applies.
+const STAR_CATALOG_CUTOFFS: Array[float] = [99.9, 11.0, 9.5]
+
 ## Share of [constant IVPhotometry.ONE_DISPLAY_CODE_LINEAR] a DRAWN bin must fall below to
 ## be hidden, against the whole code a hidden one must reach to come back. Half a code is
 ## the 8-bit rounding boundary and so the real "cannot move a pixel" line; the gap to a
@@ -88,7 +93,10 @@ const _BINARY_VERSION := 2
 ## Loads magnitude bins up to and including this V-magnitude cutoff. Lower it (or
 ## remove bin files from the asset directory) to trade completeness for size. A
 ## project that renders at a fixed fov can drop every bin that fov cannot show;
-## the ivoyager_assets README tabulates where each bin becomes invisible.
+## the ivoyager_assets README tabulates where each bin becomes invisible. User
+## setting [code]star_catalog[/code] can lower it further (see [constant
+## STAR_CATALOG_CUTOFFS]); its Options choices name the full catalog's star counts,
+## which a lower value here makes wrong.
 @export var magnitude_cutoff := 99.9
 
 ## Hides each magnitude bin the current exposure renders below one display code. This is
@@ -220,10 +228,15 @@ func get_drawn_bin_count() -> int:
 
 
 func _build() -> void:
+	var star_catalog: int = IVSettingsManager.get_setting(&"star_catalog")
+	IVSettingsManager.set_running_value(&"star_catalog", star_catalog)
+	# A stale cached index past the end takes the last cutoff, as the popup shows it.
+	var cutoff := minf(magnitude_cutoff,
+			STAR_CATALOG_CUTOFFS[clampi(star_catalog, 0, STAR_CATALOG_CUTOFFS.size() - 1)])
 	var bin_meshes: Array[ArrayMesh] = []
 	var bin_names: Array[String] = []
 	for magnitude_str in BINARY_FILE_MAGNITUDES:
-		if magnitude_str.to_float() > magnitude_cutoff:
+		if magnitude_str.to_float() > cutoff:
 			break
 		var bin_mesh := _build_bin_mesh(magnitude_str)
 		if bin_mesh:

@@ -127,6 +127,7 @@ extends PopupPanel
 	],
 	LABEL_GRAPHICS_REQUIRES_RESTART = [
 		[&"LABEL_RENDERER", &"renderer"],
+		[&"LABEL_STAR_CATALOG", &"star_catalog"],
 	],
 }
 
@@ -143,6 +144,7 @@ extends PopupPanel
 	msaa_3d = [&"GraphicsManager", &"msaa_settings"],
 	shadow_resolution = [&"GraphicsManager", &"shadow_resolution_settings"],
 	renderer = [&"GraphicsManager", &"renderer_settings"],
+	star_catalog = [&"GraphicsManager", &"star_catalog_settings"],
 	screenshot_aspect = [&"ScreenshotManager", &"aspects"],
 }
 
@@ -194,6 +196,7 @@ extends PopupPanel
 	fxaa = &"HINT_FXAA",
 	use_taa = &"HINT_USE_TAA",
 	renderer = &"HINT_RENDERER",
+	star_catalog = &"HINT_STAR_CATALOG",
 }
 
 ## Tooltips that replace [member option_tooltips] entries while the Compatibility

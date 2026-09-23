@@ -32,8 +32,10 @@ extends Node
 ## [IVSettingsManager] and exposed in [IVOptionsPopup]; this node applies them at
 ## startup and re-applies them live on change. [member
 ## atmosphere_quality_settings], [member render_scale_settings], [member
-## msaa_settings], [member shadow_resolution_settings] and [member
-## renderer_settings] are the enumerations backing the five dropdowns.[br][br]
+## msaa_settings], [member shadow_resolution_settings], [member renderer_settings]
+## and [member star_catalog_settings] are the enumerations backing the six
+## dropdowns. [IVStarsVisual] applies setting [code]star_catalog[/code] itself,
+## when it loads the catalog at startup.[br][br]
 ##
 ## Setting [code]renderer[/code] cannot apply live: Godot fixes the renderer at
 ## engine start. On change, this node writes it to the file the project names in
@@ -132,6 +134,16 @@ var shadow_resolution_settings: Dictionary[StringName, int] = {
 var renderer_settings: Dictionary[StringName, int] = {
 	RENDERER_FORWARD_PLUS = 0,
 	RENDERER_COMPATIBILITY = 1,
+}
+
+## Enumeration backing the [code]star_catalog[/code] dropdown in [IVOptionsPopup].
+## Mapped to a magnitude cutoff by [constant IVStarsVisual.STAR_CATALOG_CUTOFFS].
+## Insertion order must equal value order (the popup uses the setting value as the
+## dropdown item index).
+var star_catalog_settings: Dictionary[StringName, int] = {
+	STAR_CATALOG_ALL = 0,
+	STAR_CATALOG_MAG_11 = 1,
+	STAR_CATALOG_MAG_9_5 = 2,
 }
 
 @onready var _window := get_tree().get_root()

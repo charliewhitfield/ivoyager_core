@@ -93,6 +93,7 @@ var _defaults: Dictionary[StringName, Variant] = {
 	&"use_taa" : false, # Forward+ only; ghosts vertex-shader-positioned orbit lines
 	&"shadow_resolution" : 2, # 0,1,2,3 = off,2048,4096,8192
 	&"renderer" : 0, # 0,1 = forward_plus,gl_compatibility (at restart); see IVGraphicsManager
+	&"star_catalog" : 0, # 0,1,2 = all,to V 11,to V 9.5 (at restart); see IVStarsVisual
 }
 
 var _settings: Dictionary[StringName, Variant] = {}

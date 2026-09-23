@@ -126,7 +126,7 @@ Intel figures for the atmosphere views come from runs in the driver's normal sta
 | 1 | **Atmosphere quality**: Full / Reduced / Off. Runtime shader swap, or restart. | Reduced -22 to -38%; Off -76 to -95% (atmosphere views) | The shell is 15-39% of the frame | Reduced: none visible. Up to 15 codes on 1-2% of pixels, confined to the limb band. Off: no air at all, and Titan loses its identity. | Built as Normal / Reduced, and a runtime setting rather than a restart one (see *Addendum: the quality tiers, built*). Off is not built. |
 | 2 | **3D render scale**: 100 / 85 / 75 / 50%. Runtime. FSR 1 on Forward+. | 75%: -17 to -28%; 50%: -30 to -66% | 75%: -13 to -36%; 50%: -25 to -64% | Soft lines and HUD text. At 50%, orbit lines turn chunky, and the star field coarsens because star size follows render height. | Built as 100 / 85 / 70 / 50% (see *3D render scale*). On a 2x hi-DPI screen, 50% simply restores 1x cost. |
 | 3 | **Renderer** (desktop): Auto / Forward+ / Compatibility. Restart. | Compatibility 1.4-8x faster than Forward+ | Mixed: Compatibility faster in 5 of 8 views | Compatibility loses mouse-over identification of orbit lines and asteroids, FXAA and TAA, and local shadow maps. The picture itself matches. | Built as Forward+ / Compatibility, with the Planetarium defaulting integrated GPUs to Compatibility (see *The renderer, on desktop*). |
-| 4 | **Star catalogue depth**: all (V 15) / V 11 / V 9.5. Restart, or a 0.3-1.1 s rebuild. | V 11: -17 to -29%; V 9.5: -26 to -43% (star-heavy views) | V 11: -28 to -31%; V 9.5: -44 to -52% | None in lit-body views, where exposure hides faint stars. In dark-sky views, V 11 dims the diffuse star glow (about 7 codes over a third of the sky) and V 9.5 is visibly sparser. | Add as a restart option. It also saves memory and load time. |
+| 4 | **Star catalogue depth**: all (V 15) / V 11 / V 9.5. Restart, or a 0.3-1.1 s rebuild. | V 11: -17 to -29%; V 9.5: -26 to -43% (star-heavy views) | V 11: -28 to -31%; V 9.5: -44 to -52% | None in lit-body views, where exposure hides faint stars. In dark-sky views, V 11 dims the diffuse star glow (about 7 codes over a third of the sky) and V 9.5 is visibly sparser. | Built as a restart option, its choices named by star count (see *The star field*). It also saves memory and load time. |
 | 5 | **Shadow resolution** (existing; Forward+ only in the Planetarium) | vs 8192 on Forward+: 2048 -27 to -39%; 16384 +18 to +88% | 2048: -1 to -10%; 16384: +28 to +387% | Spacecraft-scale self-shadowing only. Eclipses and ring shadows are analytic and unaffected. | Keep. Drop 16384, add Off, and default to 4096. All three are built. |
 
 ### Moderate relief
@@ -264,7 +264,7 @@ What Compatibility gives up on desktop:
 - Local shadow maps (already off for Compatibility in the Planetarium)
 
 **Built since** as the user option Renderer (setting `renderer`): Forward+ or Compatibility, in a
-"Graphics (requires restart)" Options section shown on desktop only. IVGraphicsManager writes the
+"Graphics (requires restart)" Options section, and on desktop only. IVGraphicsManager writes the
 choice to the file the project names in `application/config/project_settings_override`, so it takes
 effect at the next start, and a Forward+ run records the GPU's type there for `IVGlobal`, since the
 Compatibility renderer cannot read it. The default by adapter is the project's to set: the
@@ -291,6 +291,14 @@ files, so a restart can load fewer.
 Build times are single-threaded GDScript decode on this CPU, and the web's WASM build will take
 longer. In lit-body views the cut is invisible, because exposure already buries those stars. In
 dark-adapted wide views V 11 thins the faint glow and V 9.5 visibly empties the sky.
+
+**Built since** as the user option Star Catalog (setting `star_catalog`), in the "Graphics
+(requires restart)" section, its three choices named by star count: 2.6 million, 940,000 and
+220,000. `IVStarsVisual` loads the lower of that cut and its own `magnitude_cutoff` when it
+builds, so a change takes effect at the next start. Its default is the whole catalogue in every
+configuration. The relief is not re-measured: the figures above are these same cuts, taken
+before the field was split into bins, and in lit-body views the exposure skips now drop most of
+what the cut would have saved (see *Addendum: the exposure skips, built and verified*).
 
 **The glare wing.** `glare_scale` = 0 saves up to a quarter of a dark-sky frame. It is a bigger
 visual change than the catalogue cut, because the wing is what draws the faint end. Two shader
@@ -432,7 +440,7 @@ in the built setting helps a machine that cannot compile the limb shader at all.
 
 - Renderer (desktop): Forward+ / Compatibility, default by adapter (built)
 - Atmosphere Off (the tier that omits the limb shader, and the only one needing a restart)
-- Star catalogue: V 15 / V 11 / V 9.5
+- Star catalogue: V 15 / V 11 / V 9.5, shown as 2.6 million / 940,000 / 220,000 stars (built)
 - Cloud decks: on / off
 
 A first-run preset, chosen from the adapter, could set all of these at once. On an integrated GPU
@@ -637,8 +645,8 @@ The sky crosses at exposure 1.75e-3, which is where the shipped anchor puts it t
 Nothing is skipped at rest, so the dark-adapted sky is untouched — and with physical light
 off, where exposure is pinned at rest, neither predicate can fire at all.
 
-At Earth the cull leaves 11 of 24 bins, which is about 44,000 of 2,551,210 stars still
-submitted: 98 % of the field's vertex work gone in the view that needs it most.
+At Earth the cull leaves 11 of 24 bins, which is 15,641 of 2,551,210 stars still
+submitted: 99.4 % of the field's vertex work gone in the view that needs it most.
 
 ### Relief, so far
 
