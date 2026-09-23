@@ -178,10 +178,11 @@ func _scale_project_sized_window() -> void:
 	if new_size == _window.size:
 		return
 	var client_offset := _window.position - _window.get_position_with_decorations()
-	_window.size = new_size
+	# Position first: a size set first grows the window past the screen edge until it moves.
 	@warning_ignore("integer_division")
 	_window.position = (usable_rect.position + (usable_rect.size - new_size - decorations) / 2
 			+ client_offset)
+	_window.size = new_size
 
 
 # The size Godot opens the window at when no command-line size overrides it.
