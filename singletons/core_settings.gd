@@ -89,10 +89,10 @@ var gui_size_settings: Dictionary[StringName, int] = {
 	GUI_EXTRA_LARGE = 3,
 }
 ## Size multipliers for each of [member gui_size_settings]. The default setting,
-## GUI_MEDIUM, is not 1.0: the base sizes these multiply (in [IVThemeManager] and
-## every [IVControlModResizable]) are the GUI_LARGE setting. Before adjusting,
-## consider effects on font sizing in [IVThemeManager] (font sizes are rounded
-## to the nearest integer after multiplication). See also [IVControlModResizable].
+## GUI_MEDIUM, is not 1.0: the base sizes these multiply (in [IVThemeManager], and
+## in every [IVControlModResizable] and [IVControlModSpacing]) are the GUI_LARGE
+## setting. Before adjusting, consider the rounding: font sizes, margins and
+## spacing are rounded to whole pixels after multiplication.
 var gui_size_multipliers: Array[float] = [0.625, 0.75, 1.0, 1.25]
 ## Scales the 2D GUI and the HUD by the screen's own scale (Windows display scaling, or
 ## the browser's devicePixelRatio), so they keep their size on a hi-DPI screen: see
