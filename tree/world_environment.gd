@@ -126,6 +126,20 @@ static func _shift_glow_levels(levels: Array[float], octaves_finer: float) -> Ar
 	return shifted
 
 
+# Godot (4.7.2) computes glow only through the last level weighted above 0.01 but samples every
+# level above 0.0001, so a trailing weight between the two draws a mip nothing wrote. See
+# Render height in PHOTOMETRIC_MODEL.md.
+static func _pile_uncomputed_tail(levels: Array[float]) -> void:
+	const COMPUTED_ABOVE := 0.011 # Godot's 0.01, clear of rounding in its float32 copy
+	var last_computed := 0 # the pass always writes the first level
+	for level in levels.size():
+		if levels[level] > COMPUTED_ABOVE:
+			last_computed = level
+	for level in range(last_computed + 1, levels.size()):
+		levels[last_computed] += levels[level]
+		levels[level] = 0.0
+
+
 func _ready() -> void:
 	if IVGlobal.is_gl_compatibility:
 		environment.tonemap_exposure = gl_compatibility_exposure
@@ -195,6 +209,7 @@ func _update_glow_levels() -> void:
 	_glow_render_height = render_height
 	var octaves_finer := log(IVBodyPSF.get_reference_viewport_height() / render_height) / log(2.0)
 	var levels := _shift_glow_levels(_glow_levels, octaves_finer)
+	_pile_uncomputed_tail(levels)
 	for level in levels.size():
 		environment.set_glow_level(level, levels[level])
 

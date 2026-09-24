@@ -277,8 +277,12 @@ func _scale_project_sized_window() -> void:
 		return
 	var usable_rect := DisplayServer.screen_get_usable_rect(_window.current_screen)
 	var decorations := _window.get_size_with_decorations() - _window.size
+	var max_size := usable_rect.size - decorations
+	if usable_rect.size == DisplayServer.screen_get_size(_window.current_screen):
+		# Godot on Windows reports a window whose outer rect is the whole screen as fullscreen.
+		max_size.y -= 1
 	var scaled_size := Vector2i((Vector2(_window.size) * _get_display_scale()).round())
-	var new_size := scaled_size.min(usable_rect.size - decorations)
+	var new_size := scaled_size.min(max_size)
 	if new_size == _window.size:
 		return
 	var client_offset := _window.position - _window.get_position_with_decorations()
