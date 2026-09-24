@@ -2035,6 +2035,25 @@ levels for the few frames of a shot. **Compatibility cannot do this**: its glow 
 levels, so a halo there stays fixed in render pixels (×1.60 of its light at 70 %, ×2.23 at
 50 %).
 
+**A tail too faint for the engine to compute draws garbage instead.** In 4.7.2 the glow pass
+computes mips only through the last level weighted above 0.01 (`max_glow_index` in
+`renderer_scene_render_rd.cpp`), but the tonemapper samples every level above 0.0001
+(`gather_glow()` in `tonemap.glsl`). A trailing level weighted between the two is read from
+a mip nothing wrote: uninitialized GPU memory, drawn as saturated red, green, blue and
+magenta blobs and hard-edged black blocks, fixed on screen until the render buffers are next
+reallocated. A split's coarse share runs down to zero, so the shift made such tails as a
+matter of course. On a 3840×2400 screen, fullscreen put 0.0078 on level 6 and the scaled
+startup window 0.0048, with level 5 the last level computed in both. Whether garbage
+showed depended on what a released buffer had left in that memory, so it came and went
+with fullscreen toggles. The built-in screenshot renders into its own buffers, so it never
+showed the live view's garbage. `IVWorldEnvironment` therefore piles any trailing weight at
+or below 0.011 (the engine's 0.01, with margin for its float32 copy) onto the last level the
+pass computes, as the shift already does with weight past the end of the chain. Verified
+2026-09-24 on the GTX 1650 Ti, reading back the root viewport over four fullscreen round
+trips: in each windowed return that showed garbage, zeroing the tail removed all of it and
+restoring it brought back the same image bit for bit; with the tail piled, every return
+rendered bit-identical to the first frame.
+
 **Captures.** Hi-res screenshots share the environment, so they get glow at their own height
 (above), while stars stay pin-sharp — the PSF is absolute pixels — and a taller render pushes
 fainter stars over the threshold, consistent with the fixed-f-number camera the star field
@@ -2132,6 +2151,10 @@ lever a capped pass cannot offer is one the shader does not need.
 
 ## TODO
 
+- **Report the glow threshold mismatch upstream** (*Render height*, above): the pass computes
+  levels above 0.01, the tonemapper samples levels above 0.0001. A 4.6 regression from
+  godotengine/godot#110077; 4.5 computed every level above 0. Once Godot makes them agree,
+  `IVWorldEnvironment._pile_uncomputed_tail()` can go.
 - **Disc photometry: `L(α)`, and the parameter's axis.** `L` ships as a constant, which is
   right where it was anchored (full phase) and progressively too generous as a body swings
   away — the reason `ROCKY_WORLD` had to be hand-tuned down to 0.6 rather than sitting at
