@@ -21,21 +21,22 @@ class_name IVGraphicsManager
 extends Node
 
 ## Applies user graphics settings (antialiasing, shadow resolution, atmosphere
-## quality and 3D render scale) and the screen's display scale to the rendering
-## server, the main window viewport and the local shadow maps, records the
-## renderer for the next start, and publishes the renderer's colour-space
-## convention to shaders.
+## quality, 3D render scale and frame rate cap) and the screen's display scale to
+## the engine, the rendering server, the main window viewport and the local shadow
+## maps, records the renderer for the next start, and publishes the renderer's
+## colour-space convention to shaders.
 ##
 ## Added by [IVCoreInitializer]. Settings [code]atmosphere_quality[/code],
 ## [code]render_scale[/code], [code]msaa_3d[/code], [code]fxaa[/code],
-## [code]use_taa[/code] and [code]shadow_resolution[/code] are defined in
-## [IVSettingsManager] and exposed in [IVOptionsPopup]; this node applies them at
-## startup and re-applies them live on change. [member
-## atmosphere_quality_settings], [member render_scale_settings], [member
-## msaa_settings], [member shadow_resolution_settings], [member renderer_settings]
-## and [member star_catalog_settings] are the enumerations backing the six
-## dropdowns. [IVStarsVisual] applies setting [code]star_catalog[/code] itself,
-## when it loads the catalog at startup.[br][br]
+## [code]use_taa[/code], [code]shadow_resolution[/code] and
+## [code]frame_rate_cap[/code] are defined in [IVSettingsManager] and exposed in
+## [IVOptionsPopup]; this node applies them at startup and re-applies them live on
+## change. [member atmosphere_quality_settings], [member render_scale_settings],
+## [member msaa_settings], [member shadow_resolution_settings], [member
+## frame_rate_cap_settings], [member renderer_settings] and [member
+## star_catalog_settings] are the enumerations backing the seven dropdowns.
+## [IVStarsVisual] applies setting [code]star_catalog[/code] itself, when it loads
+## the catalog at startup.[br][br]
 ##
 ## Setting [code]renderer[/code] cannot apply live: Godot fixes the renderer at
 ## engine start. On change, this node writes it to the file the project names in
@@ -49,12 +50,16 @@ extends Node
 ## [method write_rendering_method] and [method get_rendering_method] serve a
 ## preinitializer that does so.[br][br]
 ##
-## Renderer support differs: MSAA, atmosphere quality and render scale work in all
-## renderers; FXAA is unavailable in the Compatibility renderer (including web
-## exports); TAA is Forward+ only; and directional shadows on Compatibility depend
-## on [member IVCoreSettings.apply_gl_compatibility_shadows] (see
-## [IVDynamicLight]). Unsupported settings are skipped here and hidden by
+## Renderer support differs: MSAA, atmosphere quality, render scale and frame rate
+## cap work in all renderers; FXAA is unavailable in the Compatibility renderer
+## (including web exports); TAA is Forward+ only; and directional shadows on
+## Compatibility depend on [member IVCoreSettings.apply_gl_compatibility_shadows]
+## (see [IVDynamicLight]). Unsupported settings are skipped here and hidden by
 ## [IVOptionsPopup].[br][br]
+##
+## Frame rate cap sets [member Engine.max_fps]. None leaves in place the cap the
+## engine started with, from ProjectSettings [code]application/run/max_fps[/code] or
+## the [code]--max-fps[/code] command-line argument; 60 or 30 replaces it.[br][br]
 ##
 ## Render scale sets the main viewport's [member Viewport.scaling_3d_scale],
 ## upscaling with FSR 1 on Forward+ and bilinear elsewhere; the 2D GUI keeps the
@@ -127,6 +132,16 @@ var shadow_resolution_settings: Dictionary[StringName, int] = {
 	SHADOW_8192 = 3,
 }
 
+## Enumeration backing the [code]frame_rate_cap[/code] dropdown in [IVOptionsPopup].
+## Mapped to [member Engine.max_fps] in [method _apply_frame_rate_cap]. Insertion
+## order must equal value order (the popup uses the setting value as the dropdown
+## item index).
+var frame_rate_cap_settings: Dictionary[StringName, int] = {
+	FRAME_RATE_CAP_NONE = 0,
+	FRAME_RATE_CAP_60 = 1,
+	FRAME_RATE_CAP_30 = 2,
+}
+
 ## Enumeration backing the [code]renderer[/code] dropdown in [IVOptionsPopup].
 ## Mapped to a rendering method by [constant RENDERING_METHODS]. Insertion order
 ## must equal value order (the popup uses the setting value as the dropdown item
@@ -145,6 +160,8 @@ var star_catalog_settings: Dictionary[StringName, int] = {
 	STAR_CATALOG_MAG_11 = 1,
 	STAR_CATALOG_MAG_9_5 = 2,
 }
+
+var _startup_max_fps := Engine.max_fps # from the project settings or the command line
 
 @onready var _window := get_tree().get_root()
 
@@ -217,6 +234,7 @@ func _ready() -> void:
 	_apply_fxaa()
 	_apply_taa()
 	_apply_shadow_resolution()
+	_apply_frame_rate_cap()
 	if can_set_renderer():
 		IVSettingsManager.set_running_value(&"renderer",
 				RENDERING_METHODS.find(RenderingServer.get_current_rendering_method()))
@@ -364,6 +382,17 @@ func _apply_shadow_resolution() -> void:
 	RenderingServer.directional_shadow_atlas_set_size(size, false)
 
 
+func _apply_frame_rate_cap() -> void:
+	var setting: int = IVSettingsManager.get_setting(&"frame_rate_cap")
+	var max_fps := 30 # also the cap for a stale cached index past the end
+	match setting:
+		0:
+			max_fps = _startup_max_fps
+		1:
+			max_fps = 60
+	Engine.max_fps = max_fps
+
+
 func _record_video_adapter_type() -> void:
 	if IVGlobal.is_gl_compatibility:
 		return # can't read it
@@ -400,5 +429,7 @@ func _settings_listener(setting: StringName, _value: Variant) -> void:
 			_apply_taa()
 		&"shadow_resolution":
 			_apply_shadow_resolution()
+		&"frame_rate_cap":
+			_apply_frame_rate_cap()
 		&"renderer":
 			_write_renderer()

@@ -138,7 +138,7 @@ Intel figures for the atmosphere views come from runs in the driver's normal sta
 | 8 | **Star glare wing**: full / off. Runtime. | -11 to -25% (star-heavy views) | -15 to -16%; Forward+ -24% | No change in lit-body views. In dark-sky views half the sky moves (mean 10.5 codes): halos go, and the faint end moves about 3 mag brighter. | Fold into a "Star field" setting with catalogue depth. |
 | 9 | **Milky Way background**: on / off. Runtime. | -10 to -17% | -5 to -13% | None in any lit-body view, where exposure already puts it below one code. In dark-sky views the Milky Way goes (8 codes on 62% of pixels). | Now skipped automatically below half a code (see the addendum). A user toggle is optional. |
 | 10 | **Cloud decks**: on / off. Runtime. | -6 to -7% (Earth views) | -22 to -26%; Forward+ -22 to -38% | Large: Earth and Neptune lose their clouds (19% of pixels in an Earth view). | Lowest tier only. |
-| 11 | **Frame-rate cap**: 30 / 60 / uncapped. Runtime. | Up to -50% energy when a frame beats the cap | Same | Motion smoothness only. No help when a frame already misses the cap. | Add for laptops and batteries. It's a one-liner. |
+| 11 | **Frame-rate cap**: 30 / 60 / uncapped. Runtime. | Up to -50% energy when a frame beats the cap | Same | Motion smoothness only. No help when a frame already misses the cap. | Built as None / 60 / 30 fps (see *Smaller levers*). |
 
 ### Low relief, or better made automatic
 
@@ -374,6 +374,13 @@ indistinguishable from 256x128, and 64x32 flecks the rim. That indistinguishabil
 row above reads as a licence to default to 128x64, and it does not survive a closer view — see
 *Addendum: the sphere LOD ladder*.
 
+**Frame-rate cap.** Built as the user option Frame Rate Cap (setting `frame_rate_cap`): None, 60
+or 30 fps, applied live as `Engine.max_fps`. None leaves the engine at the cap it started with,
+which in the Planetarium is none, so the display's refresh rate bounds it. Godot holds a cap in
+software — a sleep on the desktop, skipped animation frames in a browser — rather than by
+presenting on every second refresh, so 30 on a 60 Hz display may not pace evenly. Neither that
+nor the energy saved is measured.
+
 
 ## Free wins: relief with no visual change
 
@@ -434,7 +441,7 @@ in the built setting helps a machine that cannot compile the limb shader at all.
 - MSAA: off / 2x / 4x
 - FXAA (Forward+)
 - Shadow resolution (Forward+): off / 2048 / 4096 / 8192 (built)
-- Frame-rate cap: 30 / 60 / uncapped
+- Frame-rate cap: none / 60 / 30 fps (built)
 
 **Graphics (requires restart)**
 

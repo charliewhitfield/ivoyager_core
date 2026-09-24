@@ -92,6 +92,7 @@ var _defaults: Dictionary[StringName, Variant] = {
 	&"fxaa" : false, # not available in Compatibility renderer (incl. web)
 	&"use_taa" : false, # Forward+ only; ghosts vertex-shader-positioned orbit lines
 	&"shadow_resolution" : 2, # 0,1,2,3 = off,2048,4096,8192
+	&"frame_rate_cap" : 0, # 0,1,2 = none,60,30 fps; see IVGraphicsManager
 	&"renderer" : 0, # 0,1 = forward_plus,gl_compatibility (at restart); see IVGraphicsManager
 	&"star_catalog" : 0, # 0,1,2 = all,to V 11,to V 9.5 (at restart); see IVStarsVisual
 }

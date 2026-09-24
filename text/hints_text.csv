@@ -26,6 +26,7 @@ HINT_DECREASE_FOCAL_LENGTH,Decrease camera focal length
 HINT_EXPOSURE_ADJUSTMENT,Adjust exposure in 1/3 stops
 HINT_EXPOSURE_AUTO,Meter camera exposure automatically
 HINT_EXPOSURE_MANUAL,Set camera exposure in 1/3 stops
+HINT_FRAME_RATE_CAP,"Maximum number of frames drawn per second. A cap saves\npower, heat and battery life whenever the GPU could draw\nfaster, at some cost to smooth motion. It changes nothing\nwhere frames are already slower. None draws as often as\nthe display refreshes.\n\nGPU cost: HIGH at None on a display faster than 60 Hz"
 HINT_FXAA,"Fast approximate antialiasing: a screen filter that smooths\njagged edges but softens the whole image, most noticeably\nat lower screen resolutions.\n\nGPU cost: LOW"
 HINT_GUI_SIZE,Size of text and controls in GUI panels;\nalso scales names and symbols in the 3D view
 HINT_HIDE_HUD_WHEN_CLOSE,"Hide a body's name, symbol and orbit when the camera is close to it"
