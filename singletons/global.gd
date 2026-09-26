@@ -79,9 +79,9 @@ signal confirmation_required(text: StringName, action: Callable, stop_sim: bool,
 signal main_menu_requested()
 ## Emit from anywhere to close [IVMainMenuBasePopup].
 signal close_main_menu_requested()
-## Emit from anywhere for [IVOptionsPopup].
+## Emit from anywhere to open [IVOptionsPopup], or to close it if it's open.
 signal options_requested()
-## Emit from anywhere for [IVHotkeysPopup].
+## Emit from anywhere to open [IVHotkeysPopup], or to close it if it's open.
 signal hotkeys_requested()
 ## Emit from anywhere to require closing of all "admin" popups (main menu, options, etc.).
 signal close_admin_popups_required()

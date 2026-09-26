@@ -48,6 +48,8 @@ func _on_confirmation_requested(text: StringName, action: Callable, stop_sim := 
 		title_txt := &"LABEL_PLEASE_CONFIRM", ok_txt := &"BUTTON_OK", cancel_txt := &"BUTTON_CANCEL"
 		) -> void:
 	if visible:
+		if action == _action:
+			return # already asking this, e.g., after a second click on the button that asked
 		push_warning("Confirmation requested when already open")
 		# Discard/overwrite existing dialog. Avoid edge case permanent stop.
 		if _stop_sim and !stop_sim:

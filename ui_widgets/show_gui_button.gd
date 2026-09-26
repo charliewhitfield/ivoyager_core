@@ -24,7 +24,8 @@ extends Button
 ##
 ## Place it outside [member show_hide_ui], which would hide it too. While that
 ## GUI is hidden, the button appears for [member show_seconds] after each
-## pointer move, or stays on a touchscreen, which has no pointer to move.
+## pointer move, or stays on a touchscreen, which has no pointer to move. A
+## tooltip names the key of the toggle action.
 
 
 ## The [IVShowHideUI] this button serves.
@@ -61,6 +62,10 @@ func _input(event: InputEvent) -> void:
 
 func _pressed() -> void:
 	show_hide_ui.show_hide_gui(false, true)
+
+
+func _get_tooltip(_at_position: Vector2) -> String:
+	return IVInputMapManager.append_action_key(tr(tooltip_text), show_hide_ui.user_toggle_action)
 
 
 func _on_visibility_toggled(is_show: bool) -> void:

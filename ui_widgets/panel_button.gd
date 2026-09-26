@@ -55,13 +55,7 @@ func _shortcut_input(event: InputEvent) -> void:
 
 
 func _get_tooltip(_at_position: Vector2) -> String:
-	var tooltip := tr(tooltip_text)
-	if !tooltip or !input_action or !InputMap.has_action(input_action):
-		return tooltip
-	for event in InputMap.action_get_events(input_action):
-		if event is InputEventKey:
-			return "%s (%s)" % [tooltip, event.as_text()]
-	return tooltip
+	return IVInputMapManager.append_action_key(tr(tooltip_text), input_action)
 
 
 func _on_toggled(toggled_on: bool) -> void:

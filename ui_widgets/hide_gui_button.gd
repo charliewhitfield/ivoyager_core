@@ -23,8 +23,13 @@ extends Button
 ## Button widget that hides the GUI.
 ##
 ## Emits [signal IVGlobal.show_hide_gui_requested], which [IVShowHideUI]
-## handles. Pair it with an [IVShowGUIButton], which brings the GUI back.
+## handles. Pair it with an [IVShowGUIButton], which brings the GUI back. A
+## tooltip names the key of the default [member IVShowHideUI.user_toggle_action].
 
 
 func _pressed() -> void:
 	IVGlobal.show_hide_gui_requested.emit(false, false)
+
+
+func _get_tooltip(_at_position: Vector2) -> String:
+	return IVInputMapManager.append_action_key(tr(tooltip_text), &"toggle_all_gui")

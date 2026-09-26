@@ -42,12 +42,20 @@ extends PopupPanel
 ##
 ## A section with no options to show is hidden. While any setting registered with
 ## [method IVSettingsManager.set_running_value] differs from the value the running
-## session uses, a warning at the bottom says that a restart is needed.
+## session uses, a warning at the bottom says that a restart is needed.[br][br]
+##
+## [signal IVGlobal.options_requested] opens this popup, or closes it as Cancel
+## does if it's open. See [member modal] for the two ways it can work.
 
 
 ## Stop the simulator while this popup is open. This setting will be overridden
 ## if [member IVCoreSettings.popops_can_stop_sim] == false.
 @export var stop_sim := true
+## If true (default), the rest of the GUI and the view don't respond until this
+## popup closes. Set false for a popup that stays open while the user works
+## elsewhere, which its button or hotkey then closes.
+@export var modal := true:
+	set = set_modal
 ## Column width multiplied by [member IVCoreSettings.gui_size_multipliers] (minimum).
 @export var column_base_width := 320
 
@@ -245,6 +253,20 @@ func open() -> void:
 	popup_centered()
 
 
+## Opens this popup, or closes it as its Cancel button does if it's open.
+func toggle() -> void:
+	if visible:
+		_on_cancel()
+	else:
+		open()
+
+
+func set_modal(value: bool) -> void:
+	modal = value
+	exclusive = value
+	popup_window = value
+
+
 ## Add an options section at specified position. (This might be easier than
 ## adding in the Editor.) Adds at end of column if [param section_index] is
 ## greater than the number of existing column sections.
@@ -279,7 +301,7 @@ func add_option(section_name: StringName, option_name: StringName, setting: Stri
 
 
 func _configure_after_core_inited() -> void:
-	IVGlobal.options_requested.connect(open)
+	IVGlobal.options_requested.connect(toggle)
 	IVSettingsManager.changed.connect(_settings_listener)
 	IVGlobal.close_admin_popups_required.connect(hide)
 	close_requested.connect(_on_close_requested)

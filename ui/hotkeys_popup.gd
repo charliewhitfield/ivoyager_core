@@ -29,6 +29,9 @@ extends PopupPanel
 ## properties. Columns and section headers are defined in [member layout] and
 ## section content is defined in [member section_content].[br][br]
 ##
+## [signal IVGlobal.hotkeys_requested] opens this popup, or closes it as Cancel
+## does if it's open. See [member modal] for the two ways it can work.[br][br]
+##
 ## TODO: "Views" will have hotkeys too, which can be edited in the view button's
 ## IVViewEdit but possibly also in their own section here.
 ## Implementation is confusing because views can be persisted via
@@ -41,6 +44,11 @@ extends PopupPanel
 ## Stop the simulator while this popup is open. This setting will be overridden
 ## if [member IVCoreSettings.popops_can_stop_sim] == false.
 @export var stop_sim := true
+## If true (default), the rest of the GUI and the view don't respond until this
+## popup closes. Set false for a popup that stays open while the user works
+## elsewhere, which its button or hotkey then closes.
+@export var modal := true:
+	set = set_modal
 
 ## Column width multiplied by [member IVCoreSettings.gui_size_multipliers] (minimum).
 @export var column_base_width := 320
@@ -172,7 +180,7 @@ func _shortcut_input(event: InputEvent) -> void:
 
 func _configure_after_core_inited() -> void:
 	_input_map_manager = IVGlobal.program[&"InputMapManager"]
-	IVGlobal.hotkeys_requested.connect(open)
+	IVGlobal.hotkeys_requested.connect(toggle)
 	IVGlobal.close_admin_popups_required.connect(hide)
 	close_requested.connect(_on_close_requested)
 	popup_hide.connect(_on_popup_hide)
@@ -207,6 +215,20 @@ func open() -> void:
 	_build_content()
 	size = Vector2i.ZERO
 	popup_centered()
+
+
+## Opens this popup, or closes it as its Cancel button does if it's open.
+func toggle() -> void:
+	if visible:
+		_on_cancel()
+	else:
+		open()
+
+
+func set_modal(value: bool) -> void:
+	modal = value
+	exclusive = value
+	popup_window = value
 
 
 
@@ -329,6 +351,7 @@ func _on_popup_hide() -> void:
 		show.call_deferred()
 		return
 	_suppress_close = true
+	_hotkey_dialog.hide() # a popup that isn't modal can close while it waits for a key
 	for child in _content_container.get_children():
 		_content_container.remove_child(child)
 		child.queue_free()
