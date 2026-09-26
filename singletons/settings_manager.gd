@@ -79,6 +79,8 @@ var _defaults: Dictionary[StringName, Variant] = {
 	# UI & HUD display
 	&"language" : 0, # see IVLanguageManager
 	&"gui_size" : 1, # see IVCoreSettings.gui_size_settings
+	&"gui_fade_while_dragging" : true, # see IVControlModFade
+	&"gui_fade_when_idle" : true, # see IVControlModFade
 	&"label3d_names_size_percent" : 100,
 	&"body_symbol_size_percent" : 100, # % of IVThemeManager GUI-scaled symbol_base_size (IVBodyPositionVisual)
 	&"small_bodies_symbol_size_percent" : 40, # % of IVThemeManager GUI-scaled symbol_base_size (shaped symbols)
