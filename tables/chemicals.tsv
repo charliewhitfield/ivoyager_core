@@ -1,43 +1,43 @@
-	en.wikipedia
-Type	STRING
-Prefix/CHEM_	
-ALUMINUM	Aluminium
-AMMONIA	Ammonia
-AMMONIA_ICE	Ammonia
-AMMONIUM_HYDROSULFIDE_ICE	Ammonium_hydrosulfide
-ARGON	Argon
-ATOMIC_HYDROGEN	Hydrogen_atom
-ATOMIC_OXYGEN	Allotropes_of_oxygen#Atomic_oxygen
-CALCIUM	Calcium
-CARBON	Carbon
-CARBON_DIOXIDE	Carbon_dioxide
-CARBON_MONOXIDE	Carbon_monoxide
-CARBONYL_SULFIDE	Carbonyl_sulfide
-ETHANE	Ethane
-HELIUM	Helium
-HYDROGEN	Hydrogen
-HYDROGEN_CHLORIDE	Hydrogen_chloride
-HYDROGEN_DEUTERIDE	Hydrogen_deuteride
-HYDROGEN_FLUORIDE	Hydrogen_fluoride
-HYDROGEN_SULFIDE	Hydrogen_sulfide
-IRON	Iron
-KRYPTON	Krypton
-MAGNESIUM	Magnesium
-METHANE	Methane
-METHANE_HYDRATE_ICE	Methane_clathrate
-METHANE_ICE	Methane
-NEON	Neon
-NITRIC_OXIDE	Nitric_oxide
-NITROGEN	Nitrogen
-OXYGEN	Oxygen
-POTASSIUM	Potassium
-RADON	Radon
-SEMIHEAVY_WATER	Semiheavy_water
-SILICON	Silicon
-SODIUM	Sodium
-SULFUR	Sulfur
-SULFUR_DIOXIDE	Sulfur_dioxide
-WATER	Water
-WATER_ICE	Ice
-WATER_VAPOR	Water_vapor
-XENON	Xenon
+	en.wikipedia	de.wikipedia
+Type	STRING	STRING
+Prefix/CHEM_		
+ALUMINUM	Aluminium	Aluminium
+AMMONIA	Ammonia	Ammoniak
+AMMONIA_ICE	Ammonia	Ammoniak
+AMMONIUM_HYDROSULFIDE_ICE	Ammonium_hydrosulfide	Ammoniumhydrogensulfid
+ARGON	Argon	Argon
+ATOMIC_HYDROGEN	Hydrogen_atom	Wasserstoffatom
+ATOMIC_OXYGEN	Allotropes_of_oxygen#Atomic_oxygen	Allotrope_Formen_von_Sauerstoff
+CALCIUM	Calcium	Calcium
+CARBON	Carbon	Kohlenstoff
+CARBON_DIOXIDE	Carbon_dioxide	Kohlenstoffdioxid
+CARBON_MONOXIDE	Carbon_monoxide	Kohlenstoffmonoxid
+CARBONYL_SULFIDE	Carbonyl_sulfide	Carbonylsulfid
+ETHANE	Ethane	Ethan
+HELIUM	Helium	Helium
+HYDROGEN	Hydrogen	Wasserstoff
+HYDROGEN_CHLORIDE	Hydrogen_chloride	Chlorwasserstoff
+HYDROGEN_DEUTERIDE	Hydrogen_deuteride	
+HYDROGEN_FLUORIDE	Hydrogen_fluoride	Fluorwasserstoff
+HYDROGEN_SULFIDE	Hydrogen_sulfide	Schwefelwasserstoff
+IRON	Iron	Eisen
+KRYPTON	Krypton	Krypton
+MAGNESIUM	Magnesium	Magnesium
+METHANE	Methane	Methan
+METHANE_HYDRATE_ICE	Methane_clathrate	Methanhydrat
+METHANE_ICE	Methane	Methan
+NEON	Neon	Neon
+NITRIC_OXIDE	Nitric_oxide	Stickstoffmonoxid
+NITROGEN	Nitrogen	Stickstoff
+OXYGEN	Oxygen	Sauerstoff
+POTASSIUM	Potassium	Kalium
+RADON	Radon	Radon
+SEMIHEAVY_WATER	Semiheavy_water	Halbschweres_Wasser
+SILICON	Silicon	Silicium
+SODIUM	Sodium	Natrium
+SULFUR	Sulfur	Schwefel
+SULFUR_DIOXIDE	Sulfur_dioxide	Schwefeldioxid
+WATER	Water	Wasser
+WATER_ICE	Ice	Eis
+WATER_VAPOR	Water_vapor	Wasserdampf
+XENON	Xenon	Xenon
