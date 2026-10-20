@@ -81,6 +81,7 @@ static var translations: Array[String] = [
 	"res://addons/ivoyager_core/text/entities_text.de.translation",
 	"res://addons/ivoyager_core/text/gui_text.de.translation",
 	"res://addons/ivoyager_core/text/hints_text.de.translation",
+	"res://addons/ivoyager_core/text/keyboard_text.de.translation",
 	"res://addons/ivoyager_core/text/long_text.de.translation",
 	"res://addons/ivoyager_units/text/units_numbers_text.de.translation",
 ]
