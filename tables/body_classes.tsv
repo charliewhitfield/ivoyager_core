@@ -1,16 +1,16 @@
-	en.wikipedia
-Type	STRING
-Prefix/BODY_CLASS_	
-G_STAR	G-type_main-sequence_star
-TERRESTRIAL_PLANET	Terrestrial_planet
-GAS_GIANT	Gas_giant
-ICE_GIANT	Ice_giant
-DWARF_PLANET	Dwarf_planet
-NATURAL_SATELLITE	Natural_satellite
-ASTEROID	Asteroid
-C_ASTEROID	C-type_asteroid
-S_ASTEROID	S-type_asteroid
-M_ASTEROID	M-type_asteroid
-V_ASTEROID	V-type_asteroid
-COMET	Comet
-SPACECRAFT	Spacecraft
+	en.wikipedia	de.wikipedia
+Type	STRING	STRING
+Prefix/BODY_CLASS_		
+G_STAR	G-type_main-sequence_star	Gelber_Zwerg
+TERRESTRIAL_PLANET	Terrestrial_planet	Erdähnlicher_Himmelskörper
+GAS_GIANT	Gas_giant	Gasplanet
+ICE_GIANT	Ice_giant	Eisriese_(Astronomie)
+DWARF_PLANET	Dwarf_planet	Zwergplanet
+NATURAL_SATELLITE	Natural_satellite	Mond_des_Sonnensystems
+ASTEROID	Asteroid	Asteroid
+C_ASTEROID	C-type_asteroid	
+S_ASTEROID	S-type_asteroid	
+M_ASTEROID	M-type_asteroid	
+V_ASTEROID	V-type_asteroid	
+COMET	Comet	Komet
+SPACECRAFT	Spacecraft	Raumschiff
