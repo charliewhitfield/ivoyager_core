@@ -1,275 +1,276 @@
-id,en
-ATMOSPHERE_MIN,Minimum
-ATMOSPHERE_NORMAL,Normal
-ATMOSPHERE_OFF,Off
-ATMOSPHERE_REDUCED,Reduced
-BUTTON_BACK,Back
-BUTTON_CANCEL,Cancel
-BUTTON_CANCEL_CHANGES,Cancel Changes
-BUTTON_CONFIRM_CHANGES,Confirm Changes
-BUTTON_DELETE,Delete
-BUTTON_ECLIPTIC,Ecliptic
-BUTTON_EXIT,Exit
-BUTTON_FULL_SCREEN,Full Screen
-BUTTON_GROUND,Ground
-BUTTON_HIDE_GUI,Hide GUI
-BUTTON_HIDE_ALL_HUDS,HIDE ALL
-BUTTON_HOTKEYS,Hotkeys
-BUTTON_HUDS,HUDs
-BUTTON_KEEP_CURRENT,Keep Current
-BUTTON_LOAD,Load
-BUTTON_MINIMIZE,Minimize
-BUTTON_OK,OK
-BUTTON_OPTIONS,Options
-BUTTON_ORBIT,Orbit
-BUTTON_POINT_SYMBOL,• (point)
-BUTTON_QUIT,Quit
-BUTTON_RESTORE_DEFAULT,Restore Default
-BUTTON_RESTORE_DEFAULTS,Restore Defaults
-BUTTON_RESUME,Resume
-BUTTON_RUN_WITHOUT_UPDATE,Run without update
-BUTTON_SAVE,Save
-BUTTON_SAVE_AS,Save As
-BUTTON_SAVE_CURRENT,Save Current
-BUTTON_SET,Set
-BUTTON_SHOW_ALL_HUDS,SHOW
-BUTTON_SHOW_GUI,Show GUI
-BUTTON_START,Start
-BUTTON_UPDATE,Update
-BUTTON_USE_RECOMMENDED,Use Recommended
-CKBX_CAMERA_LOCK,Camera Lock
-CKBX_COLORS,Colors
-CKBX_GAME_SPEED,Game Speed
-CKBX_LOCK_PRESENT,"Lock \""Present\"""
-CKBX_LONGITUDE,Longitude
-CKBX_PRESENT,Present
-CKBX_ORIENTATION,Orientation
-CKBX_SELECTION,Selection
-CKBX_TIME_SLASH_SPEED,Time / Speed
-CKBX_UP,Up
-CKBX_VISIBILITIES,Visibilities
-CONFIDENCE_NO,No
-CONFIDENCE_DOUBTFUL,Doubtful
-CONFIDENCE_UNKNOWN,Unknown
-CONFIDENCE_PROBABLY,Probably
-CONFIDENCE_YES,Yes
-FRAME_RATE_CAP_30,30 fps
-FRAME_RATE_CAP_60,60 fps
-FRAME_RATE_CAP_NONE,None
-ASPECT_1_1,1:1 (crop)
-ASPECT_10_16,10:16 (crop)
-ASPECT_16_9,16:9 (crop)
-ASPECT_2_35_1,2.35:1 (crop)
-ASPECT_3_2,3:2 (crop)
-ASPECT_4_3,4:3 (crop)
-ASPECT_5_4,5:4 (crop)
-ASPECT_9_16,9:16 (crop)
-ASPECT_PRESERVE,Preserve
-GUI_LARGE,Large
-GUI_MEDIUM,Medium
-GUI_SMALL,Small
-LABEL_ABSOLUTE_MAGNITUDE,Absolute Magnitude
-LABEL_ASPECT,Aspect
-LABEL_ADMIN,Admin
-LABEL_AGE,Age
-LABEL_ALBEDO,Albedo
-LABEL_APHELION,Aphelion
-LABEL_APOAPSIS,Apoapsis
-LABEL_APOGEE,Apogee
-LABEL_APPEND_DATE,Append Date
-LABEL_ASTEROIDS,Asteroids
-LABEL_ASTEROIDS_VISITED,Asteroids (visited)
-LABEL_ATMOSPHERE,Atmosphere
-LABEL_ATMOSPHERE_COMPOSITION_BY_VOLUME,Atmosphere Composition (by vol)
-LABEL_ATMOSPHERE_QUALITY,Atmosphere Quality
-LABEL_AUTOSAVE_TIME_MIN,Autosave Time (min)
-LABEL_AVERAGE_ORBITAL_SPEED,Ave Orbital Speed
-LABEL_AXIAL_TILT_TO_ECLIPTIC,Axial Tilt (to Ecliptic)
-LABEL_AXIAL_TILT_TO_ORBIT,Axial Tilt (to Orbit)
-LABEL_BACK,Back
-LABEL_BASE_NAME,Base Name
-LABEL_CAMERA,Camera
-LABEL_CAMERA_TRACKING,Camera Tracking
-LABEL_CLASSIFICATION,Classification
-LABEL_COLOR_B_V,Color (B-V)
-LABEL_CUSTOM1,Custom1
-LABEL_DIST_GALACTIC_CORE,Dist Galactic Core
-LABEL_DOWN,Down
-LABEL_DWARF_PLANETS,Dwarf Planets
-LABEL_ECCENTRICITY,Eccentricity
-LABEL_EDIT_ELLIPSIS,Edit...
-LABEL_EQUATORIAL_RADIUS,Equatorial Radius
-LABEL_ESCAPE_VELOCITY,Escape Velocity
-LABEL_EV_AUTO,EV Auto
-LABEL_EXIT_WITHOUT_SAVING,Exit without saving?
-LABEL_FADE_GUI_WHEN_IDLE,Fade GUI When Idle
-LABEL_FADE_GUI_WHILE_DRAGGING,Fade GUI While Dragging
-LABEL_FILE_DIALOG,File Dialog
-LABEL_FL,FL
-LABEL_FOCAL_LENGTH,Focal Length
-LABEL_FORWARD,Forward
-LABEL_FRAME_RATE_CAP,Frame Rate Cap
-LABEL_FXAA,Fast Approx. AA (FXAA)
-LABEL_GALACTIC_PERIOD,Galactic Period
-LABEL_GLOW,Glow
-LABEL_GRAPHICS_PERFORMANCE,Graphics
-LABEL_GRAPHICS_RESTART_REQUIRED,*One or more Graphics settings require restart to take effect.
-LABEL_GRAPHICS_SETTINGS,Graphics Settings
-LABEL_GUI,GUI
-LABEL_GUI_AND_HUD,GUI & HUD
-LABEL_GUI_SIZE,GUI Size
-LABEL_HIDE_HUDS_WHEN_CLOSE,Hide HUDs When Close
-LABEL_HOTKEYS,Hotkeys
-LABEL_HYDROSTATIC_EQUILIBRIUM,Hydrostatic Eq
-LABEL_INCLINATION,Inclination
-LABEL_JUPITER_TROJANS,Jupiter Trojans
-LABEL_KEY_RATE_IN_OUT,Key Rate: In/Out
-LABEL_KEY_RATE_PITCH_YAW,Key Rate: Pitch/Yaw
-LABEL_KEY_RATE_ROLL,Key Rate: Roll
-LABEL_KEY_RATE_TANGENTIAL,Key Rate: Tangential
-LABEL_KN_PLANETS,Known Planets
-LABEL_KN_DWF_PLANETS,Known Dwarf Planets
-LABEL_KN_MINOR_PLANETS,Known Minor Planets
-LABEL_KN_COMETS,Known Comets
-LABEL_LANGUAGE,Language
-LABEL_LAST,Last
-LABEL_LAST_ANY_MOON,Last Moon (All)
-LABEL_LAST_NAV_MOON,Last Moon (in Nav Panel)
-LABEL_LAST_PLANET,Last Planet
-LABEL_LOAD_FILE,Load File
-LABEL_LUMINOSITY,Luminosity
-LABEL_MASS,Mass
-LABEL_MEAN_DENSITY,Mean Density
-LABEL_MEAN_RADIUS,Mean Radius
-LABEL_METALLICITY,Metallicity (Z)
-LABEL_MOONS_NON_PMO,Moons (non-PMO)
-LABEL_MOONS_PMO,Moons (PMO)
-LABEL_MOUSE_INVERT_IN_OUT,Invert Mouse Wheel
-LABEL_MOUSE_RATE_IN_OUT,Mouse Rate: In/Out
-LABEL_MOUSE_RATE_PITCH_YAW,Mouse Rate: Pitch/Yaw
-LABEL_MOUSE_RATE_ROLL,Mouse Rate: Roll
-LABEL_MOUSE_RATE_TANGENTIAL,Mouse Rate: Tangential
-LABEL_MOVE_DOWN,Move Down
-LABEL_MOVE_IN,Move In
-LABEL_MOVE_LEFT,Move Left
-LABEL_MOVE_OUT,Move Out
-LABEL_MOVE_RIGHT,Move Right
-LABEL_MOVE_UP,Move Up
-LABEL_MSAA,Antialiasing (MSAA)
-LABEL_NAMES,Names
-LABEL_NAMES_SIZE,Names Size
-LABEL_NAT_SATELLITES,Natural Satellites
-LABEL_NEW_ELLIPSIS,New...
-LABEL_NEXT,Next
-LABEL_NEXT_ANY_MOON,Next Moon (All)
-LABEL_NEXT_NAV_MOON,Next Moon (in Nav Panel)
-LABEL_NEXT_PLANET,Next Planet
-LABEL_NON_PMOS,Non-PMOs
-LABEL_OPTIONS,Options
-LABEL_ORBITAL_CHARACTERISTICS,Orbital Characteristics
-LABEL_ORBITAL_PERIOD,Orbital Period
-LABEL_PAUSE_ON_LOAD,Pause on Load
-LABEL_PERIAPSIS,Periapsis
-LABEL_PERIGEE,Perigee
-LABEL_PERIHELION,Perihelion
-LABEL_PHOTOSPHERE_COMPOSITION_BY_MASS,Photosphere Composition (by mass)
-LABEL_PHYSICAL_CHARACTERISTICS,Physical Characteristics
-LABEL_PHYSICAL_LIGHT,Physical Light
-LABEL_PITCH_DOWN,Pitch Down
-LABEL_PITCH_UP,Pitch Up
-LABEL_PLANETARY_MASS_OBJECTS,Planetary-Mass Objects
-LABEL_PLANETS,Planets
-LABEL_PLEASE_CONFIRM,Please Confirm...
-LABEL_SMALL_BODIES_POINT_SIZE,Small Bodies Point Size
-LABEL_SMALL_BODIES_SYMBOL_SIZE,Small Bodies Symbol Size
-LABEL_POINTS,Points
-LABEL_POLAR_RADIUS,Polar Radius
-LABEL_PRESS_A_KEY_TO_ADD,Press a key to add...
-LABEL_PRESS_A_KEY_TO_CHANGE,Press a key to change...
-LABEL_Q_CANCEL_HOTKEY_CHANGES,Cancel hotkey changes?
-LABEL_Q_CANCEL_OPTION_CHANGES,Cancel option changes?
-LABEL_QUICKLOAD,Quickload
-LABEL_QUICKSAVE,Quicksave
-LABEL_QUIT,Quit
-LABEL_QUIT_WITHOUT_SAVING,Quit without saving?
-LABEL_RECENTER,Recenter
-LABEL_RENDERER,Renderer
-LABEL_RENDER_SCALE,3D Render Scale
-LABEL_REVERSE_TIME,Reverse Time
-LABEL_ROLL_LEFT,Roll Left
-LABEL_ROLL_RIGHT,Roll Right
-LABEL_ROTATION_PERIOD,Rotation Period
-LABEL_SAVE_AND_QUIT,Save & Quit
-LABEL_SAVE_AS,Save As
-LABEL_SAVE_LOAD,Save/Load
-LABEL_SELECT_SUN,Select Sun
-LABEL_SELECTION,Selection
-LABEL_SCREENSHOTS,Screenshots
-LABEL_SEMI_MAJOR_AXIS,Semi-Major Axis
-LABEL_SHADOW_RESOLUTION,Shadow Resolution
-LABEL_SHOW_HIDE_ALL_GUI,Show/Hide All GUI
-LABEL_SHOW_HIDE_ALL_HUDS,Show/Hide All HUDs
-LABEL_SLOW_DOWN,Slow Down
-LABEL_SPACECRAFT,Spacecraft
-LABEL_SPEED_UP,Speed Up
-LABEL_STAR_CATALOG,Star Catalog
-LABEL_STELLAR_CLASSIFICATION,Stellar Classification
-LABEL_SURFACE_GRAVITY,Surface Gravity
-LABEL_SURFACE_PRESSURE,Surface Pressure
-LABEL_SURFACE_TEMP_MAX,Surface Temp (Max)
-LABEL_SURFACE_TEMP_MEAN,Surface Temp (Mean)
-LABEL_SURFACE_TEMP_MIN,Surface Temp (Min)
-LABEL_SYMBOLS,Symbols
-LABEL_SYMBOLS_SIZE,Symbols Size
-LABEL_TAA,Temporal AA (experimental)
-LABEL_TEMP_AT_1_BAR,Temp (at 1 bar)
-LABEL_TEMP_AT_10TH_BAR,Temp (at 0.1 bar)
-LABEL_TEMP_AT_HALF_BAR,Temp (at 0.5 bar)
-LABEL_TEMP_CENTER,Temp (Center)
-LABEL_TEMP_CORONA,Temp (Corona)
-LABEL_TEMP_PHOTOSPHERE,Temp (Photosphere)
-LABEL_TERRESTRIAL_TIME_CLOCK,Terrestrial Time (TT) Clock
-LABEL_TIME,Time
-LABEL_TAKE_SCREENSHOT,Take Screenshot
-LABEL_TOGGLE_FULLSCREEN,Toggle Full Screen
-LABEL_TOGGLE_PAUSE,Toggle Pause
-LABEL_TRACE_ATMOSPHERE_COMPOSITION_BY_VOLUME,Trace Atmosphere Composition (by vol)
-LABEL_TRACE_PRESSURE,Trace Pressure
-LABEL_TRACE_PRESSURE_HIGH,Trace Pressure (High)
-LABEL_TRACE_PRESSURE_LOW,Trace Pressure (Low)
-LABEL_TRANSFER_TIME,Transfer Time (sec)
-LABEL_UP,Up
-LABEL_UPDATE_RESTART_Q,Update and Restart?
-LABEL_VELOCITY_VS_CMB,Velocity vs CMB
-LABEL_VELOCITY_VS_NEAR_STARS,Velocity vs Near Stars
-LABEL_VIEW1,View1
-LABEL_WIDTH,Width
-LABEL_YAW_LEFT,Yaw Left
-LABEL_YAW_RIGHT,Yaw Right
-LANGUAGE_AUTOMATIC,Automatic
-LANGUAGE_EN,English (en)
-MSAA_2X,2x
-MSAA_4X,4x
-MSAA_8X,8x
-MSAA_DISABLED,Disabled
-RENDERER_COMPATIBILITY,Compatibility
-RENDERER_FORWARD_PLUS,Forward+
-RENDER_SCALE_100,100%
-RENDER_SCALE_50,50%
-RENDER_SCALE_70,70%
-RENDER_SCALE_85,85%
-SHADOW_2048,2048
-SHADOW_4096,4096
-SHADOW_8192,8192
-SHADOW_OFF,Off
-STAR_CATALOG_ALL,2.6 million
-STAR_CATALOG_MAG_11,"940,000"
-STAR_CATALOG_MAG_9_5,"220,000"
-TXT_ECLIPTIC,Ecliptic
-TXT_KEY_RESERVED_CONSTRUCTOR,%s\n(Reserved)
-TXT_KEY_USED_BY_CONSTRUCTOR,%s\n(Used by %s)
-TXT_KNOWN,Known
-TXT_ORBIT_CONSTRUCTOR,%s (orbit)
-TXT_PAUSED,Paused
-TXT_TRACE,trace
-TXT_VARIABLE,Variable
+id,en,de
+ATMOSPHERE_MIN,Minimum,Minimum
+ATMOSPHERE_NORMAL,Normal,Normal
+ATMOSPHERE_OFF,Off,Aus
+ATMOSPHERE_REDUCED,Reduced,Reduziert
+BUTTON_BACK,Back,Zurück
+BUTTON_CANCEL,Cancel,Abbrechen
+BUTTON_CANCEL_CHANGES,Cancel Changes,Änderungen verwerfen
+BUTTON_CONFIRM_CHANGES,Confirm Changes,Übernehmen
+BUTTON_DELETE,Delete,Löschen
+BUTTON_ECLIPTIC,Ecliptic,Ekliptik
+BUTTON_EXIT,Exit,Verlassen
+BUTTON_FULL_SCREEN,Full Screen,Vollbild
+BUTTON_GROUND,Ground,Boden
+BUTTON_HIDE_GUI,Hide GUI,GUI aus
+BUTTON_HIDE_ALL_HUDS,HIDE ALL,ALLE AUS
+BUTTON_HOTKEYS,Hotkeys,Tasten
+BUTTON_HUDS,HUDs,HUDs
+BUTTON_KEEP_CURRENT,Keep Current,Beibehalten
+BUTTON_LOAD,Load,Laden
+BUTTON_MINIMIZE,Minimize,Verkleinern
+BUTTON_OK,OK,OK
+BUTTON_OPTIONS,Options,Optionen
+BUTTON_ORBIT,Orbit,Bahn
+BUTTON_POINT_SYMBOL,• (point),• (Punkt)
+BUTTON_QUIT,Quit,Beenden
+BUTTON_RESTORE_DEFAULT,Restore Default,Standard
+BUTTON_RESTORE_DEFAULTS,Restore Defaults,Standardwerte
+BUTTON_RESUME,Resume,Fortsetzen
+BUTTON_RUN_WITHOUT_UPDATE,Run without update,Ohne Update starten
+BUTTON_SAVE,Save,Speichern
+BUTTON_SAVE_AS,Save As,Speichern unter
+BUTTON_SAVE_CURRENT,Save Current,Aktuelle speichern
+BUTTON_SET,Set,Setzen
+BUTTON_SHOW_ALL_HUDS,SHOW,ZEIGEN
+BUTTON_SHOW_GUI,Show GUI,GUI zeigen
+BUTTON_START,Start,Start
+BUTTON_UPDATE,Update,Aktualisieren
+BUTTON_USE_RECOMMENDED,Use Recommended,Empfohlene verwenden
+CKBX_CAMERA_LOCK,Camera Lock,Kamera folgt
+CKBX_COLORS,Colors,Farben
+CKBX_GAME_SPEED,Game Speed,Spieltempo
+CKBX_LOCK_PRESENT,"Lock \""Present\""",„Jetzt“ fixieren
+CKBX_LONGITUDE,Longitude,Längengrad
+CKBX_PRESENT,Present,Jetzt
+CKBX_ORIENTATION,Orientation,Ausrichtung
+CKBX_SELECTION,Selection,Auswahl
+CKBX_TIME_SLASH_SPEED,Time / Speed,Zeit / Tempo
+CKBX_UP,Up,Oben
+CKBX_VISIBILITIES,Visibilities,Sichtbarkeiten
+CONFIDENCE_NO,No,Nein
+CONFIDENCE_DOUBTFUL,Doubtful,Zweifelhaft
+CONFIDENCE_UNKNOWN,Unknown,Unbekannt
+CONFIDENCE_PROBABLY,Probably,Wahrscheinlich
+CONFIDENCE_YES,Yes,Ja
+FRAME_RATE_CAP_30,30 fps,30 fps
+FRAME_RATE_CAP_60,60 fps,60 fps
+FRAME_RATE_CAP_NONE,None,Keine
+ASPECT_1_1,1:1 (crop),1:1 (Zuschnitt)
+ASPECT_10_16,10:16 (crop),10:16 (Zuschnitt)
+ASPECT_16_9,16:9 (crop),16:9 (Zuschnitt)
+ASPECT_2_35_1,2.35:1 (crop),"2,35:1 (Zuschnitt)"
+ASPECT_3_2,3:2 (crop),3:2 (Zuschnitt)
+ASPECT_4_3,4:3 (crop),4:3 (Zuschnitt)
+ASPECT_5_4,5:4 (crop),5:4 (Zuschnitt)
+ASPECT_9_16,9:16 (crop),9:16 (Zuschnitt)
+ASPECT_PRESERVE,Preserve,Beibehalten
+GUI_LARGE,Large,Groß
+GUI_MEDIUM,Medium,Mittel
+GUI_SMALL,Small,Klein
+LABEL_ABSOLUTE_MAGNITUDE,Absolute Magnitude,Absolute Helligkeit
+LABEL_ASPECT,Aspect,Seitenverhältnis
+LABEL_ADMIN,Admin,Allgemein
+LABEL_AGE,Age,Alter
+LABEL_ALBEDO,Albedo,Albedo
+LABEL_APHELION,Aphelion,Aphel
+LABEL_APOAPSIS,Apoapsis,Apoapsis
+LABEL_APOGEE,Apogee,Apogäum
+LABEL_APPEND_DATE,Append Date,Datum anhängen
+LABEL_ASTEROIDS,Asteroids,Asteroiden
+LABEL_ASTEROIDS_VISITED,Asteroids (visited),Asteroiden (besucht)
+LABEL_ATMOSPHERE,Atmosphere,Atmosphäre
+LABEL_ATMOSPHERE_COMPOSITION_BY_VOLUME,Atmosphere Composition (by vol),Atmosphäre (nach Volumen)
+LABEL_ATMOSPHERE_QUALITY,Atmosphere Quality,Atmosphärenqualität
+LABEL_AUTOSAVE_TIME_MIN,Autosave Time (min),Autospeichern (min)
+LABEL_AVERAGE_ORBITAL_SPEED,Ave Orbital Speed,Mittl. Bahngeschw.
+LABEL_AXIAL_TILT_TO_ECLIPTIC,Axial Tilt (to Ecliptic),Achsneigung (z. Ekliptik)
+LABEL_AXIAL_TILT_TO_ORBIT,Axial Tilt (to Orbit),Achsneigung (z. Bahn)
+LABEL_BACK,Back,Zurück
+LABEL_BASE_NAME,Base Name,Basisname
+LABEL_CAMERA,Camera,Kamera
+LABEL_CAMERA_TRACKING,Camera Tracking,Kameraführung
+LABEL_CLASSIFICATION,Classification,Klassifikation
+LABEL_COLOR_B_V,Color (B-V),Farbindex (B-V)
+LABEL_CUSTOM1,Custom1,Eigene1
+LABEL_DIST_GALACTIC_CORE,Dist Galactic Core,Abst. galakt. Zentrum
+LABEL_DOWN,Down,Runter
+LABEL_DWARF_PLANETS,Dwarf Planets,Zwergplaneten
+LABEL_ECCENTRICITY,Eccentricity,Exzentrizität
+LABEL_EDIT_ELLIPSIS,Edit...,Bearbeiten...
+LABEL_EQUATORIAL_RADIUS,Equatorial Radius,Äquatorradius
+LABEL_ESCAPE_VELOCITY,Escape Velocity,Fluchtgeschwindigkeit
+LABEL_EV_AUTO,EV Auto,EV Auto
+LABEL_EXIT_WITHOUT_SAVING,Exit without saving?,Ohne Speichern verlassen?
+LABEL_FADE_GUI_WHEN_IDLE,Fade GUI When Idle,GUI bei Inaktivität ausblenden
+LABEL_FADE_GUI_WHILE_DRAGGING,Fade GUI While Dragging,GUI beim Ziehen abblenden
+LABEL_FILE_DIALOG,File Dialog,Dateidialog
+LABEL_FL,FL,BW
+LABEL_FOCAL_LENGTH,Focal Length,Brennweite
+LABEL_FORWARD,Forward,Vorwärts
+LABEL_FRAME_RATE_CAP,Frame Rate Cap,Bildratenlimit
+LABEL_FXAA,Fast Approx. AA (FXAA),Schnelles AA (FXAA)
+LABEL_GALACTIC_PERIOD,Galactic Period,Galaktisches Jahr
+LABEL_GLOW,Glow,Leuchteffekt
+LABEL_GRAPHICS_PERFORMANCE,Graphics,Grafik
+LABEL_GRAPHICS_RESTART_REQUIRED,*One or more Graphics settings require restart to take effect.,*Eine oder mehrere Grafikeinstellungen werden erst nach einem Neustart wirksam.
+LABEL_GRAPHICS_SETTINGS,Graphics Settings,Grafikeinstellungen
+LABEL_GUI,GUI,GUI
+LABEL_GUI_AND_HUD,GUI & HUD,GUI & HUD
+LABEL_GUI_SIZE,GUI Size,GUI-Größe
+LABEL_HIDE_HUDS_WHEN_CLOSE,Hide HUDs When Close,HUDs aus der Nähe ausblenden
+LABEL_HOTKEYS,Hotkeys,Tastenkürzel
+LABEL_HYDROSTATIC_EQUILIBRIUM,Hydrostatic Eq,Hydrostat. Gleichgew.
+LABEL_INCLINATION,Inclination,Bahnneigung
+LABEL_JUPITER_TROJANS,Jupiter Trojans,Jupiter-Trojaner
+LABEL_KEY_RATE_IN_OUT,Key Rate: In/Out,Tastentempo: Nah/Fern
+LABEL_KEY_RATE_PITCH_YAW,Key Rate: Pitch/Yaw,Tastentempo: Nicken/Gieren
+LABEL_KEY_RATE_ROLL,Key Rate: Roll,Tastentempo: Rollen
+LABEL_KEY_RATE_TANGENTIAL,Key Rate: Tangential,Tastentempo: Tangential
+LABEL_KN_PLANETS,Known Planets,Bekannte Planeten
+LABEL_KN_DWF_PLANETS,Known Dwarf Planets,Bek. Zwergplaneten
+LABEL_KN_MINOR_PLANETS,Known Minor Planets,Bek. Kleinplaneten
+LABEL_KN_COMETS,Known Comets,Bekannte Kometen
+LABEL_LANGUAGE,Language,Sprache
+LABEL_LAST,Last,Vorherige
+LABEL_LAST_ANY_MOON,Last Moon (All),Vorheriger Mond (alle)
+LABEL_LAST_NAV_MOON,Last Moon (in Nav Panel),Vorheriger Mond (Navigation)
+LABEL_LAST_PLANET,Last Planet,Vorheriger Planet
+LABEL_LOAD_FILE,Load File,Datei laden
+LABEL_LUMINOSITY,Luminosity,Leuchtkraft
+LABEL_MASS,Mass,Masse
+LABEL_MEAN_DENSITY,Mean Density,Mittlere Dichte
+LABEL_MEAN_RADIUS,Mean Radius,Mittlerer Radius
+LABEL_METALLICITY,Metallicity (Z),Metallizität (Z)
+LABEL_MOONS_NON_PMO,Moons (non-PMO),Monde (nicht PMO)
+LABEL_MOONS_PMO,Moons (PMO),Monde (PMO)
+LABEL_MOUSE_INVERT_IN_OUT,Invert Mouse Wheel,Mausrad umkehren
+LABEL_MOUSE_RATE_IN_OUT,Mouse Rate: In/Out,Maustempo: Nah/Fern
+LABEL_MOUSE_RATE_PITCH_YAW,Mouse Rate: Pitch/Yaw,Maustempo: Nicken/Gieren
+LABEL_MOUSE_RATE_ROLL,Mouse Rate: Roll,Maustempo: Rollen
+LABEL_MOUSE_RATE_TANGENTIAL,Mouse Rate: Tangential,Maustempo: Tangential
+LABEL_MOVE_DOWN,Move Down,Nach unten
+LABEL_MOVE_IN,Move In,Annähern
+LABEL_MOVE_LEFT,Move Left,Nach links
+LABEL_MOVE_OUT,Move Out,Entfernen
+LABEL_MOVE_RIGHT,Move Right,Nach rechts
+LABEL_MOVE_UP,Move Up,Nach oben
+LABEL_MSAA,Antialiasing (MSAA),Kantenglättung (MSAA)
+LABEL_NAMES,Names,Namen
+LABEL_NAMES_SIZE,Names Size,Namensgröße
+LABEL_NAT_SATELLITES,Natural Satellites,Natürliche Satelliten
+LABEL_NEW_ELLIPSIS,New...,Neu...
+LABEL_NEXT,Next,Nächste
+LABEL_NEXT_ANY_MOON,Next Moon (All),Nächster Mond (alle)
+LABEL_NEXT_NAV_MOON,Next Moon (in Nav Panel),Nächster Mond (Navigation)
+LABEL_NEXT_PLANET,Next Planet,Nächster Planet
+LABEL_NON_PMOS,Non-PMOs,Nicht-PMOs
+LABEL_OPTIONS,Options,Optionen
+LABEL_ORBITAL_CHARACTERISTICS,Orbital Characteristics,Bahneigenschaften
+LABEL_ORBITAL_PERIOD,Orbital Period,Umlaufzeit
+LABEL_PAUSE_ON_LOAD,Pause on Load,Nach dem Laden pausieren
+LABEL_PERIAPSIS,Periapsis,Periapsis
+LABEL_PERIGEE,Perigee,Perigäum
+LABEL_PERIHELION,Perihelion,Perihel
+LABEL_PHOTOSPHERE_COMPOSITION_BY_MASS,Photosphere Composition (by mass),Photosphäre (nach Masse)
+LABEL_PHYSICAL_CHARACTERISTICS,Physical Characteristics,Physikalische Eigenschaften
+LABEL_PHYSICAL_LIGHT,Physical Light,Physikalisches Licht
+LABEL_PITCH_DOWN,Pitch Down,Nach unten neigen
+LABEL_PITCH_UP,Pitch Up,Nach oben neigen
+LABEL_PLANETARY_MASS_OBJECTS,Planetary-Mass Objects,Objekte planetarer Masse
+LABEL_PLANETS,Planets,Planeten
+LABEL_PLEASE_CONFIRM,Please Confirm...,Bitte bestätigen...
+LABEL_SMALL_BODIES_POINT_SIZE,Small Bodies Point Size,Punktgröße Kleinkörper
+LABEL_SMALL_BODIES_SYMBOL_SIZE,Small Bodies Symbol Size,Symbolgröße Kleinkörper
+LABEL_POINTS,Points,Punkte
+LABEL_POLAR_RADIUS,Polar Radius,Polradius
+LABEL_PRESS_A_KEY_TO_ADD,Press a key to add...,Taste zum Hinzufügen drücken...
+LABEL_PRESS_A_KEY_TO_CHANGE,Press a key to change...,Taste zum Ändern drücken...
+LABEL_Q_CANCEL_HOTKEY_CHANGES,Cancel hotkey changes?,Änderungen an Tastenkürzeln verwerfen?
+LABEL_Q_CANCEL_OPTION_CHANGES,Cancel option changes?,Änderungen an Optionen verwerfen?
+LABEL_QUICKLOAD,Quickload,Schnellladen
+LABEL_QUICKSAVE,Quicksave,Schnellspeichern
+LABEL_QUIT,Quit,Beenden
+LABEL_QUIT_WITHOUT_SAVING,Quit without saving?,Ohne Speichern beenden?
+LABEL_RECENTER,Recenter,Zentrieren
+LABEL_RENDERER,Renderer,Renderer
+LABEL_RENDER_SCALE,3D Render Scale,3D-Renderskalierung
+LABEL_REVERSE_TIME,Reverse Time,Zeit umkehren
+LABEL_ROLL_LEFT,Roll Left,Nach links rollen
+LABEL_ROLL_RIGHT,Roll Right,Nach rechts rollen
+LABEL_ROTATION_PERIOD,Rotation Period,Rotationsperiode
+LABEL_SAVE_AND_QUIT,Save & Quit,Speichern & beenden
+LABEL_SAVE_AS,Save As,Speichern unter
+LABEL_SAVE_LOAD,Save/Load,Speichern/Laden
+LABEL_SELECT_SUN,Select Sun,Sonne auswählen
+LABEL_SELECTION,Selection,Auswahl
+LABEL_SCREENSHOTS,Screenshots,Screenshots
+LABEL_SEMI_MAJOR_AXIS,Semi-Major Axis,Große Halbachse
+LABEL_SHADOW_RESOLUTION,Shadow Resolution,Schattenauflösung
+LABEL_SHOW_HIDE_ALL_GUI,Show/Hide All GUI,Gesamte GUI ein/aus
+LABEL_SHOW_HIDE_ALL_HUDS,Show/Hide All HUDs,Alle HUDs ein/aus
+LABEL_SLOW_DOWN,Slow Down,Langsamer
+LABEL_SPACECRAFT,Spacecraft,Raumfahrzeuge
+LABEL_SPEED_UP,Speed Up,Schneller
+LABEL_STAR_CATALOG,Star Catalog,Sternkatalog
+LABEL_STELLAR_CLASSIFICATION,Stellar Classification,Spektralklasse
+LABEL_SURFACE_GRAVITY,Surface Gravity,Fallbeschleunigung
+LABEL_SURFACE_PRESSURE,Surface Pressure,Oberflächendruck
+LABEL_SURFACE_TEMP_MAX,Surface Temp (Max),Oberfl.-Temp. (max)
+LABEL_SURFACE_TEMP_MEAN,Surface Temp (Mean),Oberfl.-Temp. (mittel)
+LABEL_SURFACE_TEMP_MIN,Surface Temp (Min),Oberfl.-Temp. (min)
+LABEL_SYMBOLS,Symbols,Symbole
+LABEL_SYMBOLS_SIZE,Symbols Size,Symbolgröße
+LABEL_TAA,Temporal AA (experimental),Temporales AA (experimentell)
+LABEL_TEMP_AT_1_BAR,Temp (at 1 bar),Temp. (bei 1 bar)
+LABEL_TEMP_AT_10TH_BAR,Temp (at 0.1 bar),"Temp. (bei 0,1 bar)"
+LABEL_TEMP_AT_HALF_BAR,Temp (at 0.5 bar),"Temp. (bei 0,5 bar)"
+LABEL_TEMP_CENTER,Temp (Center),Temp. (Zentrum)
+LABEL_TEMP_CORONA,Temp (Corona),Temp. (Korona)
+LABEL_TEMP_PHOTOSPHERE,Temp (Photosphere),Temp. (Photosphäre)
+LABEL_TERRESTRIAL_TIME_CLOCK,Terrestrial Time (TT) Clock,Uhr in Terrestrischer Zeit (TT)
+LABEL_TIME,Time,Zeit
+LABEL_TAKE_SCREENSHOT,Take Screenshot,Screenshot aufnehmen
+LABEL_TOGGLE_FULLSCREEN,Toggle Full Screen,Vollbild umschalten
+LABEL_TOGGLE_PAUSE,Toggle Pause,Pause umschalten
+LABEL_TRACE_ATMOSPHERE_COMPOSITION_BY_VOLUME,Trace Atmosphere Composition (by vol),Spurengase (nach Volumen)
+LABEL_TRACE_PRESSURE,Trace Pressure,Spurendruck
+LABEL_TRACE_PRESSURE_HIGH,Trace Pressure (High),Spurendruck (hoch)
+LABEL_TRACE_PRESSURE_LOW,Trace Pressure (Low),Spurendruck (niedrig)
+LABEL_TRANSFER_TIME,Transfer Time (sec),Flugzeit (s)
+LABEL_UP,Up,Hoch
+LABEL_UPDATE_RESTART_Q,Update and Restart?,Aktualisieren und neu starten?
+LABEL_VELOCITY_VS_CMB,Velocity vs CMB,Geschw. ggü. CMB
+LABEL_VELOCITY_VS_NEAR_STARS,Velocity vs Near Stars,Geschw. ggü. nahen Sternen
+LABEL_VIEW1,View1,Ansicht1
+LABEL_WIDTH,Width,Breite
+LABEL_YAW_LEFT,Yaw Left,Nach links schwenken
+LABEL_YAW_RIGHT,Yaw Right,Nach rechts schwenken
+LANGUAGE_AUTOMATIC,Automatic,Automatisch
+LANGUAGE_EN,English (en),English (en)
+LANGUAGE_DE,Deutsch (de),Deutsch (de)
+MSAA_2X,2x,2x
+MSAA_4X,4x,4x
+MSAA_8X,8x,8x
+MSAA_DISABLED,Disabled,Aus
+RENDERER_COMPATIBILITY,Compatibility,Compatibility
+RENDERER_FORWARD_PLUS,Forward+,Forward+
+RENDER_SCALE_100,100%,100 %
+RENDER_SCALE_50,50%,50 %
+RENDER_SCALE_70,70%,70 %
+RENDER_SCALE_85,85%,85 %
+SHADOW_2048,2048,2048
+SHADOW_4096,4096,4096
+SHADOW_8192,8192,8192
+SHADOW_OFF,Off,Aus
+STAR_CATALOG_ALL,2.6 million,"2,6 Millionen"
+STAR_CATALOG_MAG_11,"940,000",940.000
+STAR_CATALOG_MAG_9_5,"220,000",220.000
+TXT_ECLIPTIC,Ecliptic,Ekliptik
+TXT_KEY_RESERVED_CONSTRUCTOR,%s\n(Reserved),%s\n(reserviert)
+TXT_KEY_USED_BY_CONSTRUCTOR,%s\n(Used by %s),%s\n(belegt durch %s)
+TXT_KNOWN,Known,Bekannt
+TXT_ORBIT_CONSTRUCTOR,%s (orbit),%s (Bahn)
+TXT_PAUSED,Paused,Pausiert
+TXT_TRACE,trace,Spuren
+TXT_VARIABLE,Variable,Variabel

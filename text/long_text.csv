@@ -1,12 +1,12 @@
-id,en
+id,en,de
 TXT_GRAPHICS_RESET_AFTER_FAILED_START,"The last start didn't finish, so the graphics settings
-are back to those recommended for this device."
-TXT_GRAPHICS_RESET_REQUESTED,The graphics settings are back to those recommended for this device.
-TXT_GRAPHICS_RESTART_TO_FINISH,Some graphics settings take effect only after a restart.
+are back to those recommended for this device.","Der letzte Start wurde nicht abgeschlossen, daher gelten wieder die\nfür dieses Gerät empfohlenen Grafikeinstellungen."
+TXT_GRAPHICS_RESET_REQUESTED,The graphics settings are back to those recommended for this device.,Es gelten wieder die für dieses Gerät empfohlenen Grafikeinstellungen.
+TXT_GRAPHICS_RESTART_TO_FINISH,Some graphics settings take effect only after a restart.,Einige Grafikeinstellungen werden erst nach einem Neustart wirksam.
 TXT_PBD_LONG,"Pale Blue Dot\n\nEarth as seen by Voyager 1 from a distance of 6.4 billion kilometers.\n\nLook again at that dot. That's here. That's home. That's us. On it everyone you love, everyone you know, everyone you ever heard of, every human being who ever was, lived out their lives. The aggregate of our joy and suffering, thousands of confident religions, ideologies, and economic doctrines, every hunter and forager, every hero and coward, every creator and destroyer of civilization, every king and peasant, every young couple in love, every mother and father, hopeful child, inventor and explorer, every teacher of morals, every corrupt politician, every superstar, every supreme leader, every saint and sinner in the history of our species lived there -- on a mote of dust suspended in a sunbeam.
-     --Carl Sagan, 1994"
-TXT_PBD_SHORT,Pale Blue Dot\n\nEarth as seen by Voyager 1 from a distance of 6.4 billion kilometers
-TXT_PWA_UPDATE_AVAILABLE,\n   A Planetarium update is available!   \n\n   Press 'Update' to download and run the new version.   \n   Press 'Run without update' to keep using the old version.   \n
+     --Carl Sagan, 1994",
+TXT_PBD_SHORT,Pale Blue Dot\n\nEarth as seen by Voyager 1 from a distance of 6.4 billion kilometers,"Pale Blue Dot\n\nDie Erde, von Voyager 1 aus 6,4 Milliarden Kilometern Entfernung gesehen"
+TXT_PWA_UPDATE_AVAILABLE,\n   A Planetarium update is available!   \n\n   Press 'Update' to download and run the new version.   \n   Press 'Run without update' to keep using the old version.   \n,\n   Ein Update des Planetariums ist verfügbar!   \n\n   „Aktualisieren“ lädt die neue Version und startet sie.   \n   „Ohne Update starten“ verwendet weiter die alte Version.   \n
 TXT_Q_USE_RECOMMENDED_GRAPHICS,"The simulation is running slowly.
-Switch to the graphics settings recommended for this device?"
-TXT_VALID_3000BC_3000AD,Approximate planet positions are [url=https://ssd.jpl.nasa.gov/planets/approx_pos.html]valid from 3000 BC to 3000 AD[/url].
+Switch to the graphics settings recommended for this device?",Die Simulation läuft langsam.\nZu den für dieses Gerät empfohlenen Grafikeinstellungen wechseln?
+TXT_VALID_3000BC_3000AD,Approximate planet positions are [url=https://ssd.jpl.nasa.gov/planets/approx_pos.html]valid from 3000 BC to 3000 AD[/url].,Ungefähre Planetenpositionen sind [url=https://ssd.jpl.nasa.gov/planets/approx_pos.html]von 3000 v. Chr. bis 3000 n. Chr. gültig[/url].

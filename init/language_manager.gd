@@ -62,11 +62,12 @@ extends RefCounted
 static var language_settings: Dictionary[StringName, int] = {
 	LANGUAGE_AUTOMATIC = 0,
 	LANGUAGE_EN = 1,
+	LANGUAGE_DE = 2,
 }
 ## Language codes of the languages offered, in [member language_settings] order
 ## after LANGUAGE_AUTOMATIC. Automatic selects the system language if it is
 ## here, otherwise the first code.
-static var language_codes: Array[String] = ["en"]
+static var language_codes: Array[String] = ["en", "de"]
 ## Translation files added to [TranslationServer] at init: I, Voyager Core's and
 ## the Units plugin's. Read once, so modify it in a preinitializer.
 static var translations: Array[String] = [
@@ -77,6 +78,11 @@ static var translations: Array[String] = [
 	"res://addons/ivoyager_core/text/keyboard_text.en.translation",
 	"res://addons/ivoyager_core/text/long_text.en.translation",
 	"res://addons/ivoyager_units/text/units_numbers_text.en.translation",
+	"res://addons/ivoyager_core/text/entities_text.de.translation",
+	"res://addons/ivoyager_core/text/gui_text.de.translation",
+	"res://addons/ivoyager_core/text/hints_text.de.translation",
+	"res://addons/ivoyager_core/text/long_text.de.translation",
+	"res://addons/ivoyager_units/text/units_numbers_text.de.translation",
 ]
 
 
