@@ -1,77 +1,77 @@
 id,en,de
 KEY_ALT,Alt,Alt
-KEY_AMPERSAND,Ampersand,&
-KEY_APOSTROPHE,Apostrophe,'
-KEY_ASCIICIRCUM,AsciiCircum,^
-KEY_ASCIITILDE,AsciiTilde,~
-KEY_ASTERISK,Asterisk,*
-KEY_AT,At,@
-KEY_BACKSLASH,BackSlash,\\
+KEY_AMPERSAND,&,&
+KEY_APOSTROPHE,','
+KEY_ASCIICIRCUM,^,^
+KEY_ASCIITILDE,~,~
+KEY_ASTERISK,*,*
+KEY_AT,@,@
+KEY_BACKSLASH,\\,\\
 KEY_BACKSPACE,Backspace,Rücktaste
-KEY_BAR,Bar,|
-KEY_BRACELEFT,BraceLeft,{
-KEY_BRACERIGHT,BraceRight,}
-KEY_BRACKETLEFT,BracketLeft,[
-KEY_BRACKETRIGHT,BracketRight,]
-KEY_CAPSLOCK,CapsLock,Feststell
-KEY_COLON,Colon,:
+KEY_BAR,|,|
+KEY_BRACELEFT,{,{
+KEY_BRACERIGHT,},}
+KEY_BRACKETLEFT,[,[
+KEY_BRACKETRIGHT,],]
+KEY_CAPSLOCK,Caps Lock,Feststell
+KEY_COLON,:,:
 KEY_COMMA,Comma,Komma
 KEY_COMMAND,Command,Befehl
 KEY_CTRL,Ctrl,Strg
 KEY_DELETE,Delete,Entf
-KEY_DOLLAR,Dollar,$
+KEY_DOLLAR,$,$
 KEY_DOWN,Down,Pfeil unten
 KEY_END,End,Ende
 KEY_ENTER,Enter,Eingabe
-KEY_EQUAL,Equal,=
-KEY_ESCAPE,Escape,Esc
-KEY_EXCLAM,Exclam,!
-KEY_GREATER,Greater,>
+KEY_EQUAL,=,=
+KEY_ESCAPE,Esc,Esc
+KEY_EXCLAM,!,!
+KEY_GREATER,>,>
 KEY_HOME,Home,Pos1
 KEY_INSERT,Insert,Einfg
-KEY_KP_0,Kp 0,Num 0
-KEY_KP_1,Kp 1,Num 1
-KEY_KP_2,Kp 2,Num 2
-KEY_KP_3,Kp 3,Num 3
-KEY_KP_4,Kp 4,Num 4
-KEY_KP_5,Kp 5,Num 5
-KEY_KP_6,Kp 6,Num 6
-KEY_KP_7,Kp 7,Num 7
-KEY_KP_8,Kp 8,Num 8
-KEY_KP_9,Kp 9,Num 9
-KEY_KP_ADD,Kp Add,Num +
-KEY_KP_DIVIDE,Kp Divide,Num /
-KEY_KP_ENTER,Kp Enter,Num Eingabe
-KEY_KP_MULTIPLY,Kp Multiply,Num *
-KEY_KP_PERIOD,Kp Period,"Num ,"
-KEY_KP_SUBTRACT,Kp Subtract,Num -
+KEY_KP_0,Num 0,Num 0
+KEY_KP_1,Num 1,Num 1
+KEY_KP_2,Num 2,Num 2
+KEY_KP_3,Num 3,Num 3
+KEY_KP_4,Num 4,Num 4
+KEY_KP_5,Num 5,Num 5
+KEY_KP_6,Num 6,Num 6
+KEY_KP_7,Num 7,Num 7
+KEY_KP_8,Num 8,Num 8
+KEY_KP_9,Num 9,Num 9
+KEY_KP_ADD,Num +,Num +
+KEY_KP_DIVIDE,Num /,Num /
+KEY_KP_ENTER,Num Enter,Num Eingabe
+KEY_KP_MULTIPLY,Num *,Num *
+KEY_KP_PERIOD,Num .,"Num ,"
+KEY_KP_SUBTRACT,Num -,Num -
 KEY_LEFT,Left,Pfeil links
-KEY_LESS,Less,<
+KEY_LESS,<,<
 KEY_MENU,Menu,Menü
 KEY_META,Meta,Meta
 KEY_MINUS,Minus,Minus
-KEY_NUMBERSIGN,NumberSign,#
-KEY_NUMLOCK,NumLock,Num-Taste
+KEY_NUMBERSIGN,#,#
+KEY_NUMLOCK,Num Lock,Num-Taste
 KEY_OPTION,Option,Wahl
-KEY_PAGEDOWN,PageDown,Bild ab
-KEY_PAGEUP,PageUp,Bild auf
-KEY_PARENLEFT,ParenLeft,(
-KEY_PARENRIGHT,ParenRight,)
+KEY_PAGEDOWN,Page Down,Bild ab
+KEY_PAGEUP,Page Up,Bild auf
+KEY_PARENLEFT,(,(
+KEY_PARENRIGHT,),)
 KEY_PAUSE,Pause,Pause
-KEY_PERCENT,Percent,%
+KEY_PERCENT,%,%
 KEY_PERIOD,Period,Punkt
 KEY_PLUS,Plus,Plus
-KEY_PRINT,Print,Druck
-KEY_QUESTION,Question,?
-KEY_QUOTEDBL,QuoteDbl,""""
-KEY_QUOTELEFT,QuoteLeft,`
+KEY_PRINT,Print Screen,Druck
+KEY_QUESTION,?,?
+KEY_QUOTEDBL,"""",""""
+KEY_QUOTELEFT,`,`
 KEY_RIGHT,Right,Pfeil rechts
-KEY_SCROLLLOCK,ScrollLock,Rollen
-KEY_SEMICOLON,Semicolon,;
+KEY_SCROLLLOCK,Scroll Lock,Rollen
+KEY_SEMICOLON,;,;
 KEY_SHIFT,Shift,Umschalt
-KEY_SLASH,Slash,/
+KEY_SLASH,/,/
 KEY_SPACE,Space,Leertaste
 KEY_TAB,Tab,Tab
-KEY_UNDERSCORE,UnderScore,_
+KEY_UNDERSCORE,_,_
 KEY_UP,Up,Pfeil oben
 KEY_WINDOWS,Windows,Windows
