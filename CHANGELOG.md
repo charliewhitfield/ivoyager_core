@@ -16,7 +16,7 @@ Under development using Godot 4.7.2.
 * Widgets name themselves through Godot's accessibility properties, repeated ones declare `AUTOMATION_KEY`, and IVSpeedButtons, IVTrackCkbxs, IVTimeSetter and IVFocalLengthControl declare a value interface (`get_automation_value()`, `set_automation_value()`, `get_automation_options()`), with new text keys `LABEL_CAMERA_TRACKING` and `LABEL_FOCAL_LENGTH`.
 * `IVCamera.get_focal_length()`, `IVSmallBodiesGroup.get_member_name()`, `get_member_position()` and `get_primary()`, `IVOptionsPopup.get_option_enumeration()` and `IVViewButton.view_name`.
 * `IVSettingsManager.get_setting_keys()` lists every registered setting.
-* German translation: a `de` column in Core's text CSVs, which IVLanguageManager offers as "Deutsch (de)".
+* German translation: a `de` column in Core's text CSVs, which IVLanguageManager offers as "Deutsch (de)", and German Wikipedia page titles (`de.wikipedia`) in Core's tables, which IVWikiManager uses when a project loads that field.
 
 ### Changed
 * [API breaking] New IVBodyProximityMonitor replaces IVSleepManager and its `hide_on_sleep`, and takes over HUD visibility and mouse targets from `IVBody._process` (see *Proximity sleep* in [GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md)). A `can_sleep` body now sleeps only while it neither draws anything nor shows a HUD the user has switched on; a project driving its own camera holds its target awake with `pin_awake()`. A project that removed `SleepManager` to turn sleep off sets new `IVCoreSettings.apply_body_sleep` false instead; the monitor itself must stay, since without it no HUD shows and nothing can be hovered.

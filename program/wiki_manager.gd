@@ -56,13 +56,15 @@ var open_external_page := false
 var windowed_on_external_url := true
 ## Table column field names indexed by language codes.
 var table_fields: Dictionary[StringName, StringName] = {
-	en = &"en.wikipedia"
+	en = &"en.wikipedia",
+	de = &"de.wikipedia",
 }
 ## External URL format strings indexed by language codes. Page title will be
 ## inserted at "%s". Used only if [member open_external_page] == true. If used,
 ## this dictionary must have the same keys as [member table_fields].
 var external_url_formats: Dictionary[StringName, String] = {
-	en = "https://en.wikipedia.org/wiki/%s"
+	en = "https://en.wikipedia.org/wiki/%s",
+	de = "https://de.wikipedia.org/wiki/%s",
 }
 ## Language of the page used where the current language has none. Its field in
 ## [member table_fields] must be loaded.
