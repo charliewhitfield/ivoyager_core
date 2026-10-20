@@ -6,10 +6,10 @@ uid="uid://4nfo6vgwxu6j"
 
 [deps]
 
-files=["res://addons/ivoyager_core/text/long_text.en.translation"]
+files=["res://addons/ivoyager_core/text/long_text.en.translation", "res://addons/ivoyager_core/text/long_text.de.translation"]
 
 source_file="res://addons/ivoyager_core/text/long_text.csv"
-dest_files=["res://addons/ivoyager_core/text/long_text.en.translation"]
+dest_files=["res://addons/ivoyager_core/text/long_text.en.translation", "res://addons/ivoyager_core/text/long_text.de.translation"]
 
 [params]
 
