@@ -1,41 +1,41 @@
-id,en
-CHEM_ALUMINUM,Aluminum
-CHEM_AMMONIA,Ammonia
-CHEM_AMMONIA_ICE,Ammonia Ice
-CHEM_AMMONIUM_HYDROSULFIDE_ICE,Ammonium Hydrosulfide Ice
-CHEM_ARGON,Argon
-CHEM_ATOMIC_HYDROGEN,Atomic Hydrogen
-CHEM_ATOMIC_OXYGEN,Atomic Oxygen
-CHEM_CALCIUM,Calcium
-CHEM_CARBON,Carbon
-CHEM_CARBON_DIOXIDE,Carbon Dioxide
-CHEM_CARBON_MONOXIDE,Carbon Monoxide
-CHEM_CARBONYL_SULFIDE,Carbonyl Sulfide
-CHEM_ETHANE,Ethane
-CHEM_HELIUM,Helium
-CHEM_HYDROGEN,Hydrogen
-CHEM_HYDROGEN_CHLORIDE,Hydrogen Chloride
-CHEM_HYDROGEN_DEUTERIDE,Hydrogen Deuteride
-CHEM_HYDROGEN_FLUORIDE,Hydrogen Fluoride
-CHEM_HYDROGEN_SULFIDE,Hydrogen Sulfide
-CHEM_IRON,Iron
-CHEM_KRYPTON,Krypton
-CHEM_MAGNESIUM,Magnesium
-CHEM_METHANE,Methane
-CHEM_METHANE_HYDRATE_ICE,Methane Hydrate Ice
-CHEM_METHANE_ICE,Methane Ice
-CHEM_NEON,Neon
-CHEM_NITRIC_OXIDE,Nitric Oxide
-CHEM_NITROGEN,Nitrogen
-CHEM_OXYGEN,Oxygen
-CHEM_POTASSIUM,Potassium
-CHEM_RADON,Radon
-CHEM_SEMIHEAVY_WATER,Semiheavy Water
-CHEM_SILICON,Silicon
-CHEM_SODIUM,Sodium
-CHEM_SULFUR,Sulfur
-CHEM_SULFUR_DIOXIDE,Sulfur Dioxide
-CHEM_WATER,Water
-CHEM_WATER_ICE,Water Ice
-CHEM_WATER_VAPOR,Water Vapor
-CHEM_XENON,Xenon
+id,en,de
+CHEM_ALUMINUM,Aluminum,Aluminium
+CHEM_AMMONIA,Ammonia,Ammoniak
+CHEM_AMMONIA_ICE,Ammonia Ice,Ammoniakeis
+CHEM_AMMONIUM_HYDROSULFIDE_ICE,Ammonium Hydrosulfide Ice,Ammoniumhydrogensulfid-Eis
+CHEM_ARGON,Argon,Argon
+CHEM_ATOMIC_HYDROGEN,Atomic Hydrogen,Atomarer Wasserstoff
+CHEM_ATOMIC_OXYGEN,Atomic Oxygen,Atomarer Sauerstoff
+CHEM_CALCIUM,Calcium,Calcium
+CHEM_CARBON,Carbon,Kohlenstoff
+CHEM_CARBON_DIOXIDE,Carbon Dioxide,Kohlendioxid
+CHEM_CARBON_MONOXIDE,Carbon Monoxide,Kohlenmonoxid
+CHEM_CARBONYL_SULFIDE,Carbonyl Sulfide,Carbonylsulfid
+CHEM_ETHANE,Ethane,Ethan
+CHEM_HELIUM,Helium,Helium
+CHEM_HYDROGEN,Hydrogen,Wasserstoff
+CHEM_HYDROGEN_CHLORIDE,Hydrogen Chloride,Chlorwasserstoff
+CHEM_HYDROGEN_DEUTERIDE,Hydrogen Deuteride,Wasserstoffdeuterid
+CHEM_HYDROGEN_FLUORIDE,Hydrogen Fluoride,Fluorwasserstoff
+CHEM_HYDROGEN_SULFIDE,Hydrogen Sulfide,Schwefelwasserstoff
+CHEM_IRON,Iron,Eisen
+CHEM_KRYPTON,Krypton,Krypton
+CHEM_MAGNESIUM,Magnesium,Magnesium
+CHEM_METHANE,Methane,Methan
+CHEM_METHANE_HYDRATE_ICE,Methane Hydrate Ice,Methanhydrat
+CHEM_METHANE_ICE,Methane Ice,Methaneis
+CHEM_NEON,Neon,Neon
+CHEM_NITRIC_OXIDE,Nitric Oxide,Stickstoffmonoxid
+CHEM_NITROGEN,Nitrogen,Stickstoff
+CHEM_OXYGEN,Oxygen,Sauerstoff
+CHEM_POTASSIUM,Potassium,Kalium
+CHEM_RADON,Radon,Radon
+CHEM_SEMIHEAVY_WATER,Semiheavy Water,Halbschweres Wasser
+CHEM_SILICON,Silicon,Silizium
+CHEM_SODIUM,Sodium,Natrium
+CHEM_SULFUR,Sulfur,Schwefel
+CHEM_SULFUR_DIOXIDE,Sulfur Dioxide,Schwefeldioxid
+CHEM_WATER,Water,Wasser
+CHEM_WATER_ICE,Water Ice,Wassereis
+CHEM_WATER_VAPOR,Water Vapor,Wasserdampf
+CHEM_XENON,Xenon,Xenon
