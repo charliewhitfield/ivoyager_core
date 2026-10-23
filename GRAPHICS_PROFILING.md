@@ -1214,7 +1214,8 @@ window was 1920x1080 at display scale 1, the tiers Reduced on the GTX and Low on
   the GTX, so a difference under about 0.3 ms is read from the in-frame timers, not from the step.
 - **The editor's debug binary spends a quarter to three quarters longer** on the same script work
   than a release export. The release export ran the probe with `debug_only=false` under
-  `[assistant]` in `ivoyager_override2.cfg`, written before exporting, since the pck embeds it.
+  `[assistant_server]` in `ivoyager_override2.cfg`, written before exporting, since the pck
+  embeds it.
 
 ### Compile time
 
