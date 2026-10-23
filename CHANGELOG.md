@@ -45,6 +45,7 @@ Under development using Godot 4.7.2.
 * IVWikiManager asserted on a language in `table_fields` whose page-title field the project hadn't loaded, and gave no page where the current language lacked a title though `has_page()` promised a fallback. Both now get the `fallback_language_code` page.
 * Composition data: Venus's sulfur dioxide was misspelled, a stray comma split Mars's semiheavy water (HDO) into two species, and Mars's xenon was rounded to 0.1 ppm from NASA's 0.08.
 * `TXT_PWA_UPDATE_AVAILABLE` told the user to press 'Continue', a button the web update prompt doesn't have.
+* An editor start printed a burst of `Unrecognized UID` and `Failed to create an autoload` errors: the editor plugin re-added its autoloads while the editor's first file scan had emptied the UID database. It now waits for the scan to end.
 
 
 ## [v0.2.2] - 2026-10-15

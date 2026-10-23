@@ -62,6 +62,11 @@ func _enter_tree() -> void:
 	
 	IVPluginUtils.print_plugin_name_and_version("ivoyager_core", " - https://ivoyager.dev")
 	_process_ivoyager_cofig_files()
+	# The editor's first file scan empties the UID database until it ends, and an
+	# autoload added meanwhile fails to load every autoload from its UID.
+	var filesystem := EditorInterface.get_resource_filesystem()
+	while filesystem.is_scanning():
+		await get_tree().process_frame
 	_add_autoloads()
 	_add_shader_globals()
 	_handle_assets_update()
