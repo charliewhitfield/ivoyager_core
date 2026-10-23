@@ -22,6 +22,8 @@ extends Node
 
 ## Builds [IVView] instances from table data (default views), and provides API
 ## for user-created views that are persisted via gamesave or cache.
+##
+## [method get_view_description] says in words what the user sees now.
 
 const PERSIST_MODE := IVGlobal.PERSIST_PROPERTIES_ONLY
 const PERSIST_PROPERTIES: Array[StringName] = [
@@ -34,6 +36,7 @@ const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"set_view",
 	&"has_view",
 	&"get_names_in_collection",
+	&"get_view_description",
 ]
 const AUTOMATION_USER_PROPERTIES: Array[StringName] = [
 	&"table_views",
@@ -215,13 +218,135 @@ func get_names_in_collection(collection_name: String, is_cached: bool) -> Array[
 	return group
 
 
+## Returns what the user sees now as text in the user's language, a line each:
+## the selection, the camera's distance and tracking, the bodies in view,
+## largest first, and the date, time and speed. For an assistant and a screen
+## reader alike.
+func get_view_description() -> String:
+	var lines := PackedStringArray()
+	var top_ui: Node = IVGlobal.program.get(&"TopUI")
+	if top_ui and &"selection_manager" in top_ui:
+		var selection_manager: IVSelectionManager = top_ui.get(&"selection_manager")
+		if selection_manager and selection_manager.has_selection():
+			lines.append("%s: %s" % [tr(&"LABEL_SELECTION"), selection_manager.get_gui_name()])
+	var camera_3d := get_viewport().get_camera_3d()
+	if camera_3d is IVCamera:
+		var camera: IVCamera = camera_3d
+		lines.append(_describe_camera(camera))
+		lines.append(_describe_bodies_in_view(camera))
+	lines.append(_describe_time())
+	return "\n".join(lines)
+
+
 ## Whether an automation client may use [param member] now: a view applies only
 ## to a started simulator.
 func is_automation_available(member: StringName) -> bool:
-	if member == &"set_table_view" or member == &"set_view":
+	if member == &"set_table_view" or member == &"set_view" or member == &"get_view_description":
 		return IVStateManager.started
 	return true
 
+
+
+func _describe_camera(camera: IVCamera) -> String:
+	const TRACK_GROUND := IVCamera.CameraFlags.CAMERAFLAGS_TRACK_GROUND
+	const TRACK_ORBIT := IVCamera.CameraFlags.CAMERAFLAGS_TRACK_ORBIT
+	const TRACK_ECLIPTIC := IVCamera.CameraFlags.CAMERAFLAGS_TRACK_ECLIPTIC
+	var text := tr(&"LABEL_CAMERA") + ": "
+	var target := camera.target
+	if target:
+		var distance := camera.global_position.distance_to(target.global_position)
+		text += tr(&"TXT_DISTANCE_FROM_CONSTRUCTOR") % [
+				IVQFormat.dynamic_unit(distance, &"length_m_km_au", 3), tr(target.name)]
+	var tracking := &""
+	if camera.flags & TRACK_GROUND:
+		tracking = &"BUTTON_GROUND"
+	elif camera.flags & TRACK_ORBIT:
+		tracking = &"BUTTON_ORBIT"
+	elif camera.flags & TRACK_ECLIPTIC:
+		tracking = &"BUTTON_ECLIPTIC"
+	if tracking:
+		text += "; %s: %s" % [tr(&"LABEL_CAMERA_TRACKING"), tr(tracking)]
+	return text
+
+
+func _describe_bodies_in_view(camera: IVCamera) -> String:
+	const MAX_NAMED := 8
+	const MIN_PERCENT_FRACTION := 0.01
+	var planes := camera.get_frustum()
+	planes.remove_at(1) # the far plane: farwarp draws bodies beyond it
+	var view_angle := deg_to_rad(camera.fov)
+	var camera_position := camera.global_position
+	var in_view: Array[Array] = [] # see _is_hidden()
+	for body: IVBody in IVBody.bodies.values():
+		var center := body.global_position
+		var is_outside := false
+		for plane in planes:
+			if plane.distance_to(center) > body.mean_radius:
+				is_outside = true
+				break
+		if is_outside:
+			continue
+		var offset := center - camera_position
+		var distance := offset.length()
+		var angular_radius := PI / 2.0
+		if distance > body.mean_radius:
+			angular_radius = asin(body.mean_radius / distance)
+		in_view.append([2.0 * angular_radius / view_angle, body, offset / distance,
+				angular_radius, distance])
+	in_view.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
+	var names := PackedStringArray()
+	var n_visible := 0
+	for entry in in_view:
+		if _is_hidden(entry, in_view):
+			continue
+		n_visible += 1
+		if n_visible > MAX_NAMED:
+			continue
+		var fraction: float = entry[0]
+		var body: IVBody = entry[1]
+		var body_name := tr(body.name)
+		if fraction >= MIN_PERCENT_FRACTION:
+			var percent := roundi(minf(fraction, 1.0) * 100.0)
+			body_name += " (%s)" % (tr(&"TXT_PERCENT_OF_VIEW_CONSTRUCTOR") % percent)
+		names.append(body_name)
+	if n_visible > MAX_NAMED:
+		names.append(tr(&"TXT_AND_MORE_CONSTRUCTOR") % (n_visible - MAX_NAMED))
+	return "%s: %s" % [tr(&"LABEL_IN_VIEW"), ", ".join(names)]
+
+
+# Whether a nearer body's disc covers all of [param entry]'s. Each entry of
+# [param in_view], largest first, is [fraction of the view's height, body,
+# direction from the camera, angular radius, distance].
+func _is_hidden(entry: Array, in_view: Array[Array]) -> bool:
+	const MIN_DISC_FRACTION := 0.001
+	var direction: Vector3 = entry[2]
+	var angular_radius: float = entry[3]
+	var distance: float = entry[4]
+	for disc in in_view:
+		var disc_fraction: float = disc[0]
+		if disc_fraction < MIN_DISC_FRACTION:
+			return false
+		var disc_distance: float = disc[4]
+		if disc_distance >= distance:
+			continue
+		var disc_direction: Vector3 = disc[2]
+		var disc_angular_radius: float = disc[3]
+		if direction.angle_to(disc_direction) + angular_radius < disc_angular_radius:
+			return true
+	return false
+
+
+func _describe_time() -> String:
+	var timekeeper: IVTimekeeper = IVGlobal.program[&"Timekeeper"]
+	var speed_manager: IVSpeedManager = IVGlobal.program[&"SpeedManager"]
+	var date := IVGlobal.date
+	var clock := IVGlobal.clock
+	var text := "%s: %d-%02d-%02d %02d:%02d %s; %s%s" % [tr(&"LABEL_TIME"), date[0], date[1],
+			date[2], clock[0], clock[1], "TT" if timekeeper.terrestrial_time_clock else "UT",
+			"-" if speed_manager.reversed_time else "", tr(speed_manager.get_speed_name())]
+	if IVStateManager.paused_by_user:
+		text += "; " + tr(&"TXT_PAUSED").to_lower()
+	return text
 
 
 func _clear_procedural() -> void:
