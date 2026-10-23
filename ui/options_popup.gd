@@ -49,6 +49,9 @@ extends PopupPanel
 ## The popup grows with its content up to [member max_screen_proportion] of the
 ## view, and the options scroll beyond that.[br][br]
 ##
+## A section may also end in buttons that open something of the project's own,
+## added by [method add_button].[br][br]
+##
 ## [signal IVGlobal.options_requested] opens this popup, or closes it as Cancel
 ## does if it's open. See [member modal] for the two ways it can work.
 
@@ -231,6 +234,10 @@ const AUTOMATION_USER_METHODS: Array[StringName] = [&"get_option_enumeration"]
 	msaa_3d = &"HINT_COMPATIBILITY_MSAA_3D",
 }
 
+## Buttons at the end of a section, by section key: each is
+## [code][button_text, action, tooltip][/code]. Add them with [method add_button].
+var section_buttons: Dictionary[StringName, Array] = {}
+
 var _enumerations: Dictionary[StringName, Dictionary] = {}
 var _option_names: Dictionary[StringName, HBoxContainer] = {} # built rows' name and restart mark
 var _suppress_close := true
@@ -314,6 +321,20 @@ func add_option(section_name: StringName, option_name: StringName, setting: Stri
 	var section := section_content[section_name]
 	option_index = mini(section.size(), option_index)
 	section.insert(option_index, [option_name, setting])
+
+
+## Add a button at the end of section [param section_name] that calls
+## [param action], such as opening a project's own popup. Texts are translation
+## keys. The action runs with this popup open, which suits a popup that isn't
+## [member modal]. Use [method add_section] first if the section doesn't already
+## exist.
+func add_button(section_name: StringName, button_text: StringName, action: Callable,
+		tooltip := &"") -> void:
+	assert(section_content.has(section_name),
+			"Section '%s' doesn't exist; use add_section() first" % section_name)
+	if !section_buttons.has(section_name):
+		section_buttons[section_name] = []
+	section_buttons[section_name].append([button_text, action, tooltip])
 
 
 ## Returns the names of setting [param setting]'s values by value, as this popup
@@ -407,6 +428,14 @@ func _build_content() -> void:
 					continue
 				var setting_hbox := _build_item(option_text, setting)
 				subpanel_vbox.add_child(setting_hbox)
+			for button_array: Array in section_buttons.get(header, []):
+				var button := Button.new()
+				subpanel_vbox.add_child(button)
+				button.text = button_array[0]
+				button.tooltip_text = button_array[2]
+				button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+				var action: Callable = button_array[1]
+				button.pressed.connect(action)
 		var mod_resizable := IVControlModResizable.create(Vector2(column_base_width, 0))
 		column_vbox.add_child(mod_resizable)
 	_on_content_built()
@@ -447,6 +476,8 @@ func _clear_content() -> void:
 
 
 func _has_existing_option(header: StringName) -> bool:
+	if section_buttons.get(header):
+		return true
 	for option_array: Array in section_content[header]:
 		var setting: StringName = option_array[1]
 		if IVSettingsManager.has_setting(setting):
