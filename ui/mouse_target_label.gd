@@ -29,10 +29,7 @@ extends Label
 ## This is NOT a widget. It can't be added after core init.
 
 
-const AUTOMATION_PROPERTIES: Array[StringName] = [
-	&"text",
-	&"visible",
-]
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [&"text", &"visible"]
 
 
 ## A small offest puts the label above the mouse cursor. This is graphically

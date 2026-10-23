@@ -28,14 +28,14 @@ const PERSIST_PROPERTIES: Array[StringName] = [
 	&"gamesave_views",
 ]
 
-const AUTOMATION_METHODS: Array[StringName] = [
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"set_table_view",
 	&"has_table_view",
 	&"set_view",
 	&"has_view",
 	&"get_names_in_collection",
 ]
-const AUTOMATION_PROPERTIES: Array[StringName] = [
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [
 	&"table_views",
 	&"cached_views",
 	&"gamesave_views",

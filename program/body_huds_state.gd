@@ -69,7 +69,7 @@ const PERSIST_PROPERTIES: Array[StringName] = [
 	&"symbol_types",
 ]
 
-const AUTOMATION_METHODS: Array[StringName] = [
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"set_huds_hidden",
 	&"is_name_visible",
 	&"is_symbol_visible",
@@ -77,6 +77,13 @@ const AUTOMATION_METHODS: Array[StringName] = [
 	&"set_name_visibility",
 	&"set_symbol_visibility",
 	&"set_orbit_visibility",
+	&"get_color",
+	&"set_color",
+	&"get_symbol_type",
+	&"set_symbol_type",
+]
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [&"huds_hidden"]
+const AUTOMATION_METHODS: Array[StringName] = [
 	&"set_all_names_visibility",
 	&"set_all_symbols_visibility",
 	&"set_all_orbits_visibility",
@@ -85,13 +92,8 @@ const AUTOMATION_METHODS: Array[StringName] = [
 	&"set_orbit_visible_flags",
 	&"set_default_visibilities",
 	&"hide_all",
-	&"get_color",
-	&"set_color",
-	&"get_symbol_type",
-	&"set_symbol_type",
 ]
 const AUTOMATION_PROPERTIES: Array[StringName] = [
-	&"huds_hidden",
 	&"name_visible_flags",
 	&"symbol_visible_flags",
 	&"orbit_visible_flags",

@@ -53,9 +53,7 @@ extends PopupPanel
 ## does if it's open. See [member modal] for the two ways it can work.
 
 
-const AUTOMATION_METHODS: Array[StringName] = [
-	&"get_option_enumeration",
-]
+const AUTOMATION_USER_METHODS: Array[StringName] = [&"get_option_enumeration"]
 
 
 ## Stop the simulator while this popup is open. This setting will be overridden

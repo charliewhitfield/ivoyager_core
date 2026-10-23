@@ -126,22 +126,24 @@ const PERSIST_PROPERTIES: Array[StringName] = [
 	&"_transform",
 ]
 
-const AUTOMATION_METHODS: Array[StringName] = [
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"set_focal_length",
 	&"get_focal_length",
 	&"set_field_of_view",
 	&"change_camera_lock",
 	&"set_up_lock",
 ]
-const AUTOMATION_PROPERTIES: Array[StringName] = [
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [
 	&"target",
 	&"flags",
-	&"disabled_flags",
 	&"is_camera_lock",
+	&"fov",
+]
+const AUTOMATION_PROPERTIES: Array[StringName] = [
+	&"disabled_flags",
 	&"view_position",
 	&"view_rotations",
 	&"perspective_radius",
-	&"fov",
 ]
 
 

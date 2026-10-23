@@ -229,7 +229,7 @@ const PERSIST_PROPERTIES: Array[StringName] = [
 const _SHELLS_REACH_RADII := 2.0
 
 const AUTOMATION_KEY: Array[StringName] = [&"name"]
-const AUTOMATION_METHODS: Array[StringName] = [
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"has_orbit",
 	&"get_orbit",
 	&"get_position_vector",
@@ -248,7 +248,7 @@ const AUTOMATION_METHODS: Array[StringName] = [
 	&"get_hud_name",
 	&"get_characteristic",
 ]
-const AUTOMATION_PROPERTIES: Array[StringName] = [
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [
 	&"flags",
 	&"mean_radius",
 	&"gravitational_parameter",
@@ -258,8 +258,8 @@ const AUTOMATION_PROPERTIES: Array[StringName] = [
 	&"begin",
 	&"end",
 	&"within_lifespan",
-	&"global_position",
 ]
+const AUTOMATION_PROPERTIES: Array[StringName] = [&"global_position"]
 
 
 ## Set this script to generate a subclass in place of IVBody in create methods.

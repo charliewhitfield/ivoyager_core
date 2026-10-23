@@ -103,22 +103,21 @@ const NULL_INT_ARRAY: Array[int] = []
 const PERSIST_MODE := IVGlobal.PERSIST_PROPERTIES_ONLY
 const PERSIST_PROPERTIES: Array[StringName] = [&"_time"]
 
-const AUTOMATION_METHODS: Array[StringName] = [
-	&"set_time",
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"set_time_from_date_clock_elements",
 	&"set_operating_system_time_sync",
-	&"synchronize_with_operating_system",
 	&"get_time_at_date_clock_elements",
 	&"get_julian_date",
 	&"is_valid_gregorian_date",
 ]
-const AUTOMATION_PROPERTIES: Array[StringName] = [
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [
 	&"time",
 	&"julian_day_number",
-	&"clock_time",
 	&"terrestrial_time_clock",
 	&"operating_system_time_sync",
 ]
+const AUTOMATION_METHODS: Array[StringName] = [&"set_time", &"synchronize_with_operating_system"]
+const AUTOMATION_PROPERTIES: Array[StringName] = [&"clock_time"]
 
 
 ## If true, [member clock_time] indicates Terrestrial Time (TT), otherwise,
