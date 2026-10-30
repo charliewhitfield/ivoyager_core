@@ -30,6 +30,7 @@ Under development using Godot 4.7.2.
 * [API breaking] An IVSelectionData value format Callable can return any number of `[row label, value text]` rows, in place of one `[labels, values]` row.
 * `IVTimekeeper.set_time_from_date_clock_elements()` and `IVSelectionManager.select_by_name()` return whether they acted, and the former no longer sets a time from an invalid date.
 * `IVSettingsManager.change_setting()` gives a number the setting's own type, int or float.
+* Core runs without ivoyager_assets, where it raised thousands of script errors: IVThemeManager falls back to Godot's own font, a body's 2D texture is null, and rings without a texture are not added (new `IVRings.is_applicable()`).
 
 ### Removed
 * [API breaking] 171 text keys that nothing in Core displays, from `gui_text.csv`, `hints_text.csv` and `long_text.csv`, with their rows in `wiki_extras.tsv`. A project that displayed one adds it to its own translation.

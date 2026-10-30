@@ -156,6 +156,18 @@ var _handed_off := false # the plane's instance hidden by the handoff gate (cull
 var _applied_plane_light_fraction := NAN # change gate; NAN forces the first write
 
 
+## Returns whether [param body] gets rings: it has them in its table row and
+## [IVAssetPreloader] found their texture. Threadsafe once assets are preloaded.
+static func is_applicable(body: IVBody) -> bool:
+	if !body.has_rings():
+		return false
+	var row := IVTableData.db_find_in_array(&"rings", &"bodies", body.name)
+	assert(row != -1, "Could not find row in rings.tsv for %s" % body.name)
+	var rings_name := IVTableData.get_db_entity_name(&"rings", row)
+	var asset_preloader: IVAssetPreloader = IVGlobal.program[&"AssetPreloader"]
+	return asset_preloader.get_rings_texture_array(rings_name) != null
+
+
 func _init(body: IVBody) -> void:
 	# threadsafe
 	name = &"Rings"

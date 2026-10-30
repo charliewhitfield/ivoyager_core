@@ -94,7 +94,7 @@ func _finish(body: IVBody) -> void:
 	if body.has_light():
 		_get_dynamic_light(body, children)
 		_get_omni_lights(body, children)
-	if body.has_rings():
+	if IVRings.is_applicable(body):
 		_get_rings(body, body_visual_nodes)
 	
 	_deffered_finish.call_deferred(body, children, siblings, body_visual_nodes)

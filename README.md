@@ -30,7 +30,7 @@ Classes declare what an automation client may read and call — `AUTOMATION_*` c
 
 * ivoyager_tables (plugin) - See [repository](https://github.com/ivoyager/ivoyager_tables) for installation instructions.
 * ivoyager_units (plugin) - See [repository](https://github.com/ivoyager/ivoyager_units) for installation instructions.
-* ivoyager_assets (non-Git-tracked assets) - The Core plugin will download this for you! Just press "Download" at the editor prompt. Alternatively, go [here](https://github.com/ivoyager/asset_downloads).
+* ivoyager_assets (non-Git-tracked assets) - The Core plugin will download this for you! Just press "Download" at the editor prompt. Alternatively, go [here](https://github.com/ivoyager/asset_downloads). Core runs without them, with no surface maps, models, rings, star field or asteroids, and with Godot's own font.
 
 See [changelog](https://github.com/ivoyager/ivoyager_core/blob/master/CHANGELOG.md) for current version requirements.
 

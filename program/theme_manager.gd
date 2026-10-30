@@ -69,6 +69,8 @@ static var override_theme_path := ""
 ## are not set.
 static var fallback_theme_path := "res://addons/ivoyager_core/resources/ivoyager_theme.tres"
 static var override_font_path := ""
+## Font used if [member override_font_path] and ProjectSettings/gui/theme/custom_font are not
+## set. If this file doesn't exist (ivoyager_assets absent), Godot's own fallback font is used.
 static var fallback_font_path := "res://addons/ivoyager_assets/fonts/Roboto-NotoSansSymbols-merged.ttf"
 ## Names of the theme constants that are lengths in pixels, which follow "gui_size"
 ## (see class description). These are the constants Godot scales when it builds its
@@ -150,7 +152,7 @@ static func get_main_theme() -> Theme:
 
 
 ## Returns Font specified by [member override_font_path], ProjectSettings/gui/theme/custom_font,
-## or [member fallback_font_path], in that order of precedence.
+## [member fallback_font_path], or Godot's own fallback font, in that order of precedence.
 static func get_main_font() -> Font:
 	var main_font: Font
 	if override_font_path:
@@ -162,6 +164,8 @@ static func get_main_font() -> Font:
 		main_font = load(project_theme_path)
 		assert(main_font, "ProjectSettings/gui/theme/custom_font is not a valid font file")
 		return main_font
+	if !ResourceLoader.exists(fallback_font_path):
+		return ThemeDB.fallback_font
 	main_font = load(fallback_font_path)
 	assert(main_font, "IVThemeInitializer.fallback_font_path is not a valid font file")
 	return main_font
