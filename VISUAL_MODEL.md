@@ -736,7 +736,8 @@ lazy-model and resource initializers and the shader warm-up. The finishers stay 
 nothing, because the system tree is ready only once they have passed every body, and
 `IVGraphicsManager` and `IVScreenshotManager` stay, inert, because the options popup lists
 their settings. What is left is the simulation, the GUI, the camera, selection and the
-persisted HUD state, so a headless test drives the GUI a user sees. With nothing to keep
+persisted HUD state, so a headless test drives the GUI a user sees, at the frame rate of a
+common monitor (`headless_fps`, 60) rather than Godot's own headless pace. With nothing to keep
 visible, `IVBodyProximityMonitor` sleeps every `can_sleep` body that is not held awake, and
 sets no HUD or mouse target; a sleeping body's getters stay valid. A project sets it false to
 keep the visuals in a headless run, as a test of the visuals themselves would.
@@ -1266,6 +1267,7 @@ this is the spatial one.
 |---|---|---|
 | `IVCamera` | `NEAR_MULTIPLIER` / `FAR_MULTIPLIER` (constants, 0.1 / 1e6) | Depth planes as multiples of camera-to-parent distance. Ratio hard-capped ~1e7 (float32 plane extraction); do not raise. |
 | `IVCoreSettings` | `headless_mode` | Builds none of the visuals here, nor the managers and assets that serve them (*Culling, visibility and lifecycle*). True by default with `--headless` or the dummy renderer. |
+| | `headless_fps` | The frame rate in headless mode (60, a common monitor's); 0 leaves Godot's headless pace, about 145. |
 | | `apply_farwarp` | Enables the compression system (manager, shader global, HUD symbol placement). |
 | | `farwarp_start_ratio` | T as a multiple of camera-to-parent distance (1e4). Must stay well under `FAR_MULTIPLIER`; 1e4 leaves 100× headroom while the compressed universe spans < ~29× T. |
 | | `apply_body_psf` | Enables the per-body PSF quad ([IVBodyPSF]). Off, those bodies take the fixed distance cull like any other and their discs do not fade. |

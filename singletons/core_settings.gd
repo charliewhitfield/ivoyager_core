@@ -68,6 +68,9 @@ var use_threads := true
 ## preinitializer. See [i]Culling, visibility and lifecycle[/i] in VISUAL_MODEL.md.
 var headless_mode := (DisplayServer.get_name() == "headless"
 		or RenderingServer.get_current_rendering_driver_name() == "dummy")
+## Frame rate in [member headless_mode], set as [member Engine.max_fps]: what a windowed
+## run gets on the most common monitors. 0 leaves Godot's own headless pace, about 145.
+var headless_fps := 60
 
 ## If true (default), [IVTimekeeper] will set [member Engine.time_scale] to
 ## follow changes in game speed. Note that ivoyager_core almost never uses
