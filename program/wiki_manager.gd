@@ -42,6 +42,8 @@ extends RefCounted
 ## To implement an internal wiki, connect to [signal wiki_requested]. You'll
 ## likely want to create and specify new page title field(s) in your data tables.
 
+const AUTOMATION_USER_METHODS: Array[StringName] = [&"open_page", &"has_page"]
+
 
 ## Connect to implement an internal wiki mechanic. (I, Voyager Core emits but
 ## does not connect to this signal.) [param page_title] is the fallback language's
@@ -87,17 +89,19 @@ func has_page(entity_name: StringName) -> bool:
 	return _wiki_page_titles.has(entity_name) or _fallback_page_titles.has(entity_name)
 
 
-## Emits [signal wiki_requested] for [param entity_name] and, if
-## [member open_external_page] is enabled, opens the matching external URL via
-## [method OS.shell_open]. No-op if the entity has no known page title.
-func open_page(entity_name: StringName) -> void:
+## Opens the wiki page of [param entity_name], such as a body's name
+## ([code]"PLANET_MARS"[/code]), in the user's language where it has one, as the
+## GUI's wiki links do: emits [signal wiki_requested] and, if
+## [member open_external_page] is enabled, opens the external page (Wikipedia)
+## in the user's browser. Returns false, doing nothing, if the entity has no page.
+func open_page(entity_name: StringName) -> bool:
 	var page_title: String = _wiki_page_titles.get(entity_name, "")
 	var url_format := _external_url_format
 	if !page_title:
 		page_title = _fallback_page_titles.get(entity_name, "")
 		url_format = _fallback_url_format
 	if !page_title:
-		return
+		return false
 	wiki_requested.emit(page_title)
 	if open_external_page:
 		var url := url_format % page_title
@@ -105,6 +109,7 @@ func open_page(entity_name: StringName) -> void:
 		if windowed_on_external_url:
 			IVGlobal.get_tree().get_root().mode = Window.MODE_WINDOWED
 		OS.shell_open(url)
+	return true
 
 
 func _configure() -> void:

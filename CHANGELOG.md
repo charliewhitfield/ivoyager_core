@@ -16,7 +16,8 @@ Under development using Godot 4.7.2.
 * Widgets name themselves through Godot's accessibility properties, repeated ones declare `AUTOMATION_KEY`, and IVSpeedButtons, IVTrackCkbxs, IVTimeSetter and IVFocalLengthControl declare a value interface (`get_automation_value()`, `set_automation_value()`, `get_automation_options()`), with new text keys `LABEL_CAMERA_TRACKING` and `LABEL_FOCAL_LENGTH`.
 * `IVCamera.get_focal_length()`, `IVSmallBodiesGroup.get_member_name()`, `get_member_position()` and `get_primary()`, `IVOptionsPopup.get_option_enumeration()` and `IVViewButton.view_name`.
 * `IVSettingsManager.get_setting_keys()` lists every registered setting.
-* `IVOptionsPopup.add_button()` puts a project's button, such as one that opens its own popup, at the end of an options section.
+* `IVOptionsPopup.add_button()` puts a project's button, such as one that opens its own popup, in an options section, with a style and the choice to close the popup first when it has no changes to confirm.
+* `IVWikiManager.open_page()` is a user method an assistant may call, and returns whether the entity has a page.
 * `IVSelectionData.get_body_data()` gives the data panel's rows for any body as text, and `IVViewManager.get_view_description()` says what the user sees: the selection, the camera, the bodies in view, the date, time and speed. Both are in the user's language, for a user's assistant or a screen reader.
 
 ### Changed
