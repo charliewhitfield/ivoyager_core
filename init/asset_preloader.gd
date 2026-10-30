@@ -25,7 +25,10 @@ extends RefCounted
 ##
 ## In typical setup, loading will commence right after splash screen is shown,
 ## on [signal IVStateManager.core_initialized]. When finished, emits [signal
-## IVStateManager.assets_preloaded].
+## IVStateManager.assets_preloaded].[br][br]
+##
+## In [member IVCoreSettings.headless_mode] no asset file is loaded: every body gets the
+## resources a run without ivoyager_assets gives it, and no rings get any.
 
 # VRAM color formats a normal map must never have (would mean it was imported as
 # sRGB color, not as a Normal Map). Load-time push_warning only.
@@ -322,6 +325,12 @@ func read_material_fields(table: StringName, row: int,
 
 
 func _on_core_inited() -> void:
+	if IVCoreSettings.headless_mode:
+		for search: Array[String] in [models_search, meshes_search, maps_search,
+				cubemaps_search, bodies_2d_search, rings_search]:
+			search.clear()
+		for key in asset_paths:
+			asset_paths[key] = ""
 	var start_msec := Time.get_ticks_msec()
 	if use_thread and IVCoreSettings.use_threads:
 		WorkerThreadPool.add_task(_load_resources.bind(start_msec))
@@ -969,8 +978,9 @@ func _load_rings_resources() -> void:
 		var texture_array: TextureLayered = IVFiles.find_and_load_resource(rings_search,
 				file_prefix)
 		if !texture_array:
-			push_warning("IVAssetPreloader: no rings texture '%s.*' found; '%s' will not be"
-					% [file_prefix, rings_name] + " drawn")
+			if !rings_search.is_empty(): # empty is a choice of no rings, as in headless mode
+				push_warning("IVAssetPreloader: no rings texture '%s.*' found; '%s' will not"
+						% [file_prefix, rings_name] + " be drawn")
 			_rings_resources[rings_name] = [null, null, null]
 			continue
 		assert(texture_array.get_layers() == 3,

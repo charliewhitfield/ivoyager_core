@@ -1828,13 +1828,14 @@ func lazy_model_init() -> void:
 
 
 ## Builds a new [IVBodyVisual] for this body without adopting it, or [code]null[/code] if the
-## body has [member BodyFlags.BODYFLAGS_DISABLE_MODEL_SPACE]. This body's own visual is
+## body has [member BodyFlags.BODYFLAGS_DISABLE_MODEL_SPACE] or the run is in
+## [member IVCoreSettings.headless_mode]. This body's own visual is
 ## [member body_visual]; use this only to stage a second, throwaway one outside the simulation
 ## (an icon capture, a thumbnail). The caller owns it, and must call
 ## [method IVBodyVisual.set_static_preview] on it as soon as it is in the tree — an unattended
 ## copy animates, and a star's copy reaches back into this body.
 func make_body_visual() -> IVBodyVisual:
-	if flags & BodyFlags.BODYFLAGS_DISABLE_MODEL_SPACE:
+	if flags & BodyFlags.BODYFLAGS_DISABLE_MODEL_SPACE or IVCoreSettings.headless_mode:
 		return null
 	var triaxial_size := _resolve_triaxial_size()
 	if replacement_body_visual_class:

@@ -42,7 +42,8 @@ extends WorldEnvironment
 ## [member starmap_background_file_prefix]) and oriented by [member sky_rotation].
 ## The default Environment omits it because the Core plugin is stand-alone without
 ## assets; a missing file simply leaves the black clear-color background. Discrete
-## stars are drawn separately by [IVStarsVisual].[br][br]
+## stars are drawn separately by [IVStarsVisual]. In [member IVCoreSettings.headless_mode]
+## no panorama is added, and nothing here is updated per frame.[br][br]
 ##
 ## Glow halos keep the share of the frame they are authored for at any render height
 ## (window size, 3D render scale or capture): this node reads the Environment's glow
@@ -283,6 +284,9 @@ func _update_starmap_skip() -> void:
 # A fixed scene node's _ready() precedes core init, so IVGlobal.program is empty there
 # (the same reason IVStarsVisual defers its build); this signal is well after it.
 func _on_asset_preloader_finished() -> void:
+	if IVCoreSettings.headless_mode:
+		set_process(false)
+		return
 	if !add_starmap:
 		return
 	_add_starmap_sky()

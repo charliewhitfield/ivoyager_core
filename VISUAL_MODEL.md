@@ -726,6 +726,21 @@ name render at `HUD_RENDER_PRIORITY` (20), above the highest shell priority, bec
 transparent surfaces sort by priority before depth and a HUD at 0 blends under its
 planet's cloud deck.
 
+**Headless mode.** Where nothing can be drawn, in a run with `--headless` or on the dummy
+renderer, `IVCoreSettings.headless_mode` builds none of this document's machinery, so a test
+or server run spends nothing on it: no body models, PSF quads, rings, lights, HUD symbols,
+labels or orbit lines, star field, starmap or small-body points. `IVAssetPreloader` loads no
+file, and the objects that serve only those visuals are not made: the farwarp, sun-occlusion
+and exposure managers, the fragment identifier, the graphics rescue, the PSF settings, the
+lazy-model and resource initializers and the shader warm-up. The finishers stay and add
+nothing, because the system tree is ready only once they have passed every body, and
+`IVGraphicsManager` and `IVScreenshotManager` stay, inert, because the options popup lists
+their settings. What is left is the simulation, the GUI, the camera, selection and the
+persisted HUD state, so a headless test drives the GUI a user sees. With nothing to keep
+visible, `IVBodyProximityMonitor` sleeps every `can_sleep` body that is not held awake, and
+sets no HUD or mouse target; a sleeping body's getters stay valid. A project sets it false to
+keep the visuals in a headless run, as a test of the visuals themselves would.
+
 ## Orbit and trajectory lines
 
 `IVPathVisual` renders a body's orbit or trajectory in three tiers, all farwarp-aware
@@ -1250,7 +1265,8 @@ this is the spatial one.
 | Where | Setting | What it does |
 |---|---|---|
 | `IVCamera` | `NEAR_MULTIPLIER` / `FAR_MULTIPLIER` (constants, 0.1 / 1e6) | Depth planes as multiples of camera-to-parent distance. Ratio hard-capped ~1e7 (float32 plane extraction); do not raise. |
-| `IVCoreSettings` | `apply_farwarp` | Enables the compression system (manager, shader global, HUD symbol placement). |
+| `IVCoreSettings` | `headless_mode` | Builds none of the visuals here, nor the managers and assets that serve them (*Culling, visibility and lifecycle*). True by default with `--headless` or the dummy renderer. |
+| | `apply_farwarp` | Enables the compression system (manager, shader global, HUD symbol placement). |
 | | `farwarp_start_ratio` | T as a multiple of camera-to-parent distance (1e4). Must stay well under `FAR_MULTIPLIER`; 1e4 leaves 100× headroom while the compressed universe spans < ~29× T. |
 | | `apply_body_psf` | Enables the per-body PSF quad ([IVBodyPSF]). Off, those bodies take the fixed distance cull like any other and their discs do not fade. |
 | | `apply_analytic_shadows` | Enables the analytic shadow terms and the camera-fraction light dimming. Off, astronomical shadows are absent entirely (maps don't serve them); the ambient feed continues regardless. |
