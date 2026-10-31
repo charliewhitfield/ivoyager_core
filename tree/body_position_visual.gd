@@ -111,7 +111,7 @@ func _ready() -> void:
 	# name label child
 	_name_label.render_priority = HUD_RENDER_PRIORITY
 	_name_label.outline_render_priority = HUD_RENDER_PRIORITY - 1 # halo behind the glyph
-	_name_label.font = theme_manager.get_main_font()
+	_name_label.font = theme_manager.get_label3d_names_font()
 	_name_label.billboard = StandardMaterial3D.BILLBOARD_ENABLED
 	_name_label.fixed_size = true
 	_name_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER

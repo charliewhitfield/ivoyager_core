@@ -130,12 +130,10 @@ func _init(sbg: IVSmallBodiesGroup) -> void:
 	shader_material.set_shader_parameter(&"broadcast_id", broadcast_id)
 	material_override = shader_material
 
-	# ArrayMesh construction. A group can be empty if its binaries are missing or predate
-	# the current format, in which case there is nothing to draw; add_surface_from_arrays()
-	# rejects a zero-vertex surface, so skip it and leave 'mesh' unset.
-	if number == 0:
-		push_warning("No small bodies loaded for '%s'; drawing no points" % sbg.sbg_alias)
-	else:
+	# ArrayMesh construction. A group is empty if its binaries are missing or predate the
+	# current format (IVBinaryAsteroidsBuilder warns); add_surface_from_arrays() rejects a
+	# zero-vertex surface, so leave 'mesh' unset.
+	if number > 0:
 		var points_mesh := ArrayMesh.new()
 		var arrays := [] # packed arrays
 		arrays.resize(Mesh.ARRAY_MAX)
