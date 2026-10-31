@@ -44,12 +44,8 @@ signal visibility_toggled(is_show: bool)
 ## set to support GUI nodes that have save/load persistence.
 const PERSIST_MODE := IVGlobal.PERSIST_PROPERTIES_ONLY
 
-const AUTOMATION_METHODS: Array[StringName] = [
-	&"show_hide_gui",
-]
-const AUTOMATION_PROPERTIES: Array[StringName] = [
-	&"visible",
-]
+const AUTOMATION_USER_METHODS: Array[StringName] = [&"show_hide_gui"]
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [&"visible"]
 
 
 ## Set to &"" to disable user key toggle.

@@ -42,7 +42,8 @@ extends MeshInstance3D
 ## Authored as a fixed node under [code]Universe[/code] (no PERSIST_MODE), so it
 ## rides the [IVCamera] origin shift automatically, builds once, and survives
 ## system rebuilds. No-ops with a warning if no binaries resolve (e.g. when
-## ivoyager_assets is absent).[br][br]
+## ivoyager_assets is absent), and builds nothing in [member
+## IVCoreSettings.headless_mode].[br][br]
 ##
 ## Note: Godot Editor shows a scene warning for missing mesh. This node holds none by
 ## design, so you can ignore the warning.
@@ -230,6 +231,8 @@ func get_drawn_bin_count() -> int:
 
 
 func _build() -> void:
+	if IVCoreSettings.headless_mode:
+		return
 	var star_catalog: int = IVSettingsManager.get_setting(&"star_catalog")
 	IVSettingsManager.set_running_value(&"star_catalog", star_catalog)
 	# A stale cached index past the end takes the last cutoff, as the popup shows it.

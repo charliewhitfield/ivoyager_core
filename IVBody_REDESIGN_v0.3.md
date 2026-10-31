@@ -266,8 +266,10 @@ something anyone can rely on without thinking about it, and that is the objectio
   comments are nearly incomprehensible: one of them warns against setting `global_position`
   because that "would re-do the large-magnitude float32 cancellation." To understand the code
   or even the comments requires you to hold the whole error chain in your head. (Caveat: the
-  change below removes most of this difficulty but not all of it. The level-of-detail mechanics
-  are still needed after the 32-bit issues are removed.)
+  change below removes the shared-rounding half of this, which is most of what makes it hard
+  to read, but not the need for the tier. §2.4 places node origins, and a line of astronomical
+  extent is a mesh whose vertices still round at its frame's magnitude, so close-up precision
+  still needs them rebased near the camera, along with the level-of-detail mechanics; §9.5.)
 - **Farwarp's assembly rule.** `update_farwarp()` must build its result camera-relatively and
   carries a standing warning never to derive it by offsetting true-scale positions — the
   rounding of the large terms swamps the small result.
@@ -345,15 +347,18 @@ viewer inside a scene cannot leave it. A camera that does leave — walking out 
 flying away — hands the anchor off, which is continuous on screen (§2.5).
 
 *What it buys.* Rounding `f64(body − anchor)` to f32 leaves an absolute error proportional to
-distance *from the anchor* — a constant angular error of ~1.2e-7 rad (0.025") for every object
-at every distance, about 1/6500 of a pixel at the reference view, so long as the camera sits
-near the anchor. That is what the parenting/shared-error scheme achieves locally, made global,
-automatic, and local to reason about. Note what this does to the apparent conflict with
-parenting: shared error only matters because there *is* large error to share, and here there is
-not, so the mechanism this seems to violate is the one it makes unnecessary. Both standing
-defects in [VISUAL_MODEL.md](VISUAL_MODEL.md)'s TODO share this root: a single f64 subtraction
-rounded once has no chain to churn and no lattice to sit on, so it plausibly subsumes both —
-worth testing against high-speed registration before claiming it.
+distance *from the anchor* — a constant angular error of ~1.2e-7 rad (0.025") for every node
+placed this way, at every distance, about 1/6500 of a pixel at the reference view, so long as
+the camera sits near the anchor. That is what the parenting/shared-error scheme achieves
+locally, made global, automatic, and local to reason about. Note what this does to the
+apparent conflict with parenting: shared error only matters because there *is* large error to
+share, and here there is not, so the mechanism this seems to violate is the one it makes
+unnecessary. Both standing defects in [VISUAL_MODEL.md](VISUAL_MODEL.md)'s TODO share this
+root: a single f64 subtraction rounded once has no chain to churn and no lattice to sit on, so
+it plausibly subsumes both — worth testing against high-speed registration before claiming it.
+The guarantee is for a node's origin and for geometry small against its distance. A mesh of
+astronomical extent — an orbit line drawn in its primary's frame — still rounds each vertex at
+that frame's magnitude (§9.5).
 
 *And the anchor form is the better fix for the defect that motivated it.* Anchored at the
 camera, orbiting the camera around the ISS drags the station through Godot's world-anchored
@@ -844,7 +849,7 @@ var is_intrinsic: bool
 - Reparenting stays the body's job (scene ops). After applying: emit `positioner_changed`
   (and `parent_changed` if reparented) — the stable connection points for `IVPathVisual`,
   which survive positioner replacement (listeners never connect to the positioner directly
-  across a swap).
+  across a swap). A path visual with no body has no swap to survive (§9.6).
 - `IVTrajectory.end_remove` becomes a transition with `replacement = final IVOrbit`.
 - A scripted launch is the same mechanism driven by project code:
   `body.set_positioner_and_parent(ascent_trajectory, planet)`.
@@ -857,6 +862,12 @@ var is_intrinsic: bool
   **moves to `IVPositioner`** (with `get_orbit_display`'s mesh lookup moving all the way out
   into `IVPathVisual` — meshes are display resources and don't belong below the visual layer).
   `IVPathVisual` talks to `body.positioner`, typed; the body stays out of it (§9.5).
+- The facade must answer for a positioner no body has attached, because a path visual can be
+  built from one alone (§9.6). `IVTrajectory` already resolves its frames from its segment
+  primaries and LCA; a detached `IVOrbit` resolves its frame from `parent_name`. One facade
+  question is about a follower rather than the path: `is_showing_orbit` asks whether the
+  segment active now is a marked parking or capture orbit, which is the swap a craft makes on
+  entering one, and a visual with no body never asks it.
 
 
 ## 7. IVRotator — orientation over time
@@ -1238,12 +1249,70 @@ Jupiter and Saturn.
 (`get_fragment_data/get_fragment_text` move to it; the mouse-over label duck-calls whatever
 object the fragment resolves to, so nothing upstream changes), selects its own conic display
 mesh from `IVGlobal.resources` using `IVOrbit`'s unit-transform getters, and reads path frames
-and state paths from `body.positioner` (typed). Its three drawing tiers are
-[VISUAL_MODEL.md](VISUAL_MODEL.md) *Orbit and trajectory lines*; §2.4 retires the rebased tier's
-reason for existing but not the Hermite tier or the render-frame pin, and that removal is its
-own effort, not a prerequisite here. If orbit-line click-to-select is ever wanted,
+and state paths from `body.positioner` (typed). If orbit-line click-to-select is ever wanted,
 `IVPathVisual` implements `get_selection_body()` — a hook `IVSelectionManager` already probes
 first.
+
+Its three drawing tiers are [VISUAL_MODEL.md](VISUAL_MODEL.md) *Orbit and trajectory lines*,
+and §2.4 retires half of the rebased tier. The reparent under the camera-body exists to share
+that body's f32 chain rounding, and with every node placed from f64 there is none to share. The
+vertex rebase stays. §2.4 places node origins, and a line drawn in its frame body still rounds
+each vertex at that frame's magnitude — in the Sun's frame, the same ~16 km near Earth that
+§2.3 measures — so close-up precision still needs the vertices rebased near the camera and the
+mesh placed from f64. What changes is that this becomes plain precision rather than matched
+error, which the code and its comments can then say. The Hermite tier and the render-frame pin
+stay as they are. Simplifying the tier is its own effort, not a prerequisite here.
+
+### 9.6 Paths with no body: trajectory plans
+
+A project may need to draw a trajectory that no body follows: a plan for a craft not yet built,
+shown while it is designed. Nothing in the physical model stands in the way — `IVTrajectory`
+holds its segment primaries and its LCA and has never referred to the craft — so the case is
+entirely `IVPathVisual`'s, and v0.3 supports it by making the body optional:
+
+```gdscript
+IVPathVisual.new(positioner: IVPositioner, body: IVBody = null)
+```
+
+v0.2's visual reaches its body for three different things, and they part cleanly:
+
+- **The path.** Frames, state paths, the conic display and the camera-focus test. §6.4 moves
+  all of it to the positioner and requires it to answer detached, so this part needs a
+  positioner and nothing else. In trajectory mode the focus test is already a trajectory
+  question (is the camera at the primary of the segment active now?), and it gates the rebased
+  and Hermite tiers, which rebase near the camera and never on the path's body — so a plan is
+  precise up close on the same terms as a craft's path.
+- **The follower.** Two things exist only because a body is on the line. One is the swap: the
+  visual draws a trajectory whole, its transfer segments patched into one polyline in the LCA
+  frame, and changes to a closed conic only for the parking and capture segments
+  `IVTrajectory` marks (`visual_orbits`, `end_remove`), and only while a body is in one — in
+  the LCA frame such an orbit would smear along its primary's path. The other is the pin,
+  which bends the line through the body. With no body nothing is ever in a segment and there
+  is nothing to pass through, so the visual stays on the polyline and the pin stays off. A plan
+  therefore draws whole, and its marked parking orbits draw nothing; a project that wants them
+  shown gives each its own visual, built from that segment's `IVOrbit` in its primary's frame.
+- **Identity and HUD policy.** Color and the group switch read `flags` through
+  `IVBodyHUDsState`; §9.2's visibility policy is per body and fed by §9.4's monitor; sleep and
+  lifespan hide the body's subtree; the mouse-over text names the body. A plan has none of
+  these, so the project supplies its color, its mouse-over label and its visibility. Whether a
+  plan also answers Hide All and the orbit group switches is Q13.
+
+Having no body brings two obligations of its own:
+
+- **The frame must stay awake.** The visual is drawn under its path frame, and a frame that
+  sleeps is hidden — and under §2.4 unplaced — with its subtree. A body-less visual holds its
+  frame awake through `IVBodyProximityMonitor.pin_awake()` (§9.4) while it is shown and
+  releases it with `unpin_awake()`. Only a plan whose LCA is a moon can meet this.
+- **Edits arrive at the visual, not through a body.** §6.3's listener rule exists to survive a
+  positioner swap, and there is none here. A plan edit is a new `IVTrajectory` set on the
+  visual; otherwise the visual listens to its positioner's own `changed`.
+
+*Why v0.3.* In v0.2 `IVOrbit` and `IVTrajectory` share no base, so a body-less visual would
+need a second data source beside the body facade, threaded through the rebase and pin code this
+redesign rewrites. Until then a project can draw a plan's coarse line itself: a
+`MeshInstance3D` under `IVTrajectory.get_lca()`, built from `get_display_state_paths()`, with
+`IVGlobal.resources[&"path_shader"]` and `IVPathVisual`'s always-pass `custom_aabb`. That is
+the coarse tier — right from afar, ~16 km per au off at close range.
 
 
 ## 10. Attributes (was characteristics)
@@ -1356,7 +1425,7 @@ static func create(
 | `IVTrajectory` | `extends IVPositioner`; absorbs body's segment multiplexing; emits transitions (§6.3) |
 | `IVBodyVisual` | in scope: self-driving rotation + stroboscope; constructor takes (name, geometry, rotator); shadow-caster self-management |
 | `IVBodyPositionVisual` | computes own farwarp position + HUD visibility (was `_body.farwarp_position`, `huds_visible`, signal); already `top_level` — §2.4 makes it the ordinary case rather than the exception; reports its own name and symbol as mouse targets (v0.2, §9.4) |
-| `IVPathVisual` | reads `body.positioner` (typed) for frames/paths; owns fragment identity; picks display meshes itself; own HUD visibility. §2.4 retires its rebased tier's reason for existing (separate effort; Hermite tier and pin stay) |
+| `IVPathVisual` | built from a positioner and an optional body (§9.6); reads the positioner (typed) for frames/paths; owns fragment identity; picks display meshes itself; own HUD visibility. §2.4 retires the rebased tier's reparenting, not its vertex rebase (§9.5; separate effort; Hermite tier and pin stay) |
 | `IVBodyFinisher` | same role; appends to `display_nodes`; `has_orbit()` → positioner check |
 | `IVSelectionManager` | unchanged (its duck protocol is the contract; body keeps the entry points) |
 | `IVCamera` | probes unchanged; `origin_shifting` and its `-=` line are deleted by §2.4; it serves as the Planetarium's frame anchor, publishing its own per-frame f64 absolute translation (§2.5: a project supplies one instead) |
@@ -1426,6 +1495,10 @@ v0.3 per the ground rules.
   badly. A distance-gated hybrid is the obvious third answer and the obvious new complexity.
   Camera-anchoring is proposed for v0.3; §2.5 is unaffected either way, since a project
   anchors at its own scene.
+- **Q13 — A plan's HUD switches.** A path visual with no body (§9.6) has no `flags`, so
+  `IVBodyHUDsState`'s group switches and colors do not reach it. Should a plan still hide with
+  Hide All, and does it join an orbit group's switch through a flags value the project gives
+  it, or answer to the project alone?
 
 ## 15. Deferred / out of scope for v0.3
 
@@ -1442,10 +1515,11 @@ v0.3 per the ground rules.
   [PHOTOMETRIC_MODEL.md](PHOTOMETRIC_MODEL.md) both carry multi-star audits whose body-side
   ask is per-body star ranking in place of `body.star`; this redesign neither provides nor
   blocks it.
-- Removing `IVPathVisual`'s rebased tier and `IVCamera.origin_shifting` once §2.4 ships and is
-  verified against the two [VISUAL_MODEL.md](VISUAL_MODEL.md) TODO defects. The deletions are
-  the payoff, but they are separate work with their own acceptance checks, and nothing in this
-  redesign requires them to happen first.
+- Removing `IVCamera.origin_shifting`, and the reparenting in `IVPathVisual`'s rebased tier,
+  once §2.4 ships and is verified against the two [VISUAL_MODEL.md](VISUAL_MODEL.md) TODO
+  defects. The tier's vertex rebase stays (§9.5). The deletions are the payoff, but they are
+  separate work with their own acceptance checks, and nothing in this redesign requires them
+  to happen first.
 - Collisions at astronomical scale (still out of scope for ivoyager_core; geometry's surface
   queries are a prerequisite a project could build on). A project's *local* collisions are
   Godot's own and need nothing from us — §2.5.
@@ -1574,3 +1648,12 @@ Compiled from exhaustive sweep of `ui_widgets/`, `ui_components/`, `ui/`,
   giving a direct disc hit priority over a padded one, because a body in front of another must
   stay selectable. `IVWorldController` settles one target per frame by surface depth, with
   depth-tested HUD hits over discs (§9.4).
+- 2026-10-31 — **Path visuals with no body (§9.6)**, for a project that draws trajectory plans
+  for craft not yet built. `IVPathVisual` is built from a positioner and an optional body, and
+  §6.4's facade must answer for a detached positioner. With no body the visual draws the
+  trajectory whole, never swaps to a parking or capture conic and has no pin; the project
+  supplies color, label and visibility (Q13). Deferred to v0.3, since v0.2's orbit and
+  trajectory share no base. In the same pass, the claim that §2.4 retires the rebased tier was
+  corrected (§§2.3, 2.4, 9.5, 13, 15): it retires the reparent that shares chain rounding, but a
+  line in a far frame still rounds its vertices at that frame's magnitude, so the vertex rebase
+  stays.

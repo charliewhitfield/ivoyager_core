@@ -49,21 +49,21 @@ const PERSIST_PROPERTIES: Array[StringName] = [
 	&"_reversed_time",
 ]
 
-const AUTOMATION_METHODS: Array[StringName] = [
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"change_speed",
 	&"increment_speed",
 	&"decrement_speed",
-	&"set_real_time_speed",
 	&"set_reversed_time",
 	&"get_speed_name",
 ]
-const AUTOMATION_PROPERTIES: Array[StringName] = [
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [
 	&"speed_index",
 	&"reversed_time",
 	&"speed_multiplier",
 	&"speeds",
 	&"speed_names",
 ]
+const AUTOMATION_METHODS: Array[StringName] = [&"set_real_time_speed"]
 
 
 ## Current speed index as defined in [member speeds]. Has setter method but see

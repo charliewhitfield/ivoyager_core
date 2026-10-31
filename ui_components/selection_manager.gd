@@ -66,7 +66,7 @@ const PERSIST_PROPERTIES: Array[StringName] = [
 	&"_selection_name",
 ]
 
-const AUTOMATION_METHODS: Array[StringName] = [
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"select_by_name",
 	&"has_selection",
 	&"get_name",
@@ -91,9 +91,7 @@ const AUTOMATION_METHODS: Array[StringName] = [
 	&"select_history_back",
 	&"select_history_forward",
 ]
-const AUTOMATION_PROPERTIES: Array[StringName] = [
-	&"selection",
-]
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [&"selection"]
 
 
 ## Set this script to generate a subclass in place of IVSelectionManager in

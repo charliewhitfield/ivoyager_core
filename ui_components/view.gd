@@ -85,7 +85,7 @@ const PERSIST_PROPERTIES: Array[StringName] = [
 	&"edited_default",
 ]
 
-const AUTOMATION_PROPERTIES: Array[StringName] = [
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [
 	&"flags",
 	&"target_name",
 	&"camera_flags",

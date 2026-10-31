@@ -50,6 +50,7 @@ const AUTOMATION_PROPERTIES: Array[StringName] = [
 	&"start_time_is_terrestrial_time",
 	&"home_name",
 	&"body_tables",
+	&"headless_mode",
 ]
 
 
@@ -58,6 +59,18 @@ const AUTOMATION_PROPERTIES: Array[StringName] = [
 ## [param use_threads]. In these classes, both this setting and the file
 ## setting must be true for threads to be used.
 var use_threads := true
+
+## Builds none of the simulation's 3D visuals: no body models, lights, rings, HUD
+## symbols, labels or orbit lines, star field or small-body points, no asset files for
+## them, and none of the managers that serve only them. The GUI, the camera, selection
+## and HUD state remain. True by default where nothing can be drawn: a run with
+## [code]--headless[/code] or on the dummy renderer. Read at startup, so set it in a
+## preinitializer. See [i]Culling, visibility and lifecycle[/i] in VISUAL_MODEL.md.
+var headless_mode := (DisplayServer.get_name() == "headless"
+		or RenderingServer.get_current_rendering_driver_name() == "dummy")
+## Frame rate in [member headless_mode], set as [member Engine.max_fps]: what a windowed
+## run gets on the most common monitors. 0 leaves Godot's own headless pace, about 145.
+var headless_fps := 60
 
 ## If true (default), [IVTimekeeper] will set [member Engine.time_scale] to
 ## follow changes in game speed. Note that ivoyager_core almost never uses

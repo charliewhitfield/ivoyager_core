@@ -229,7 +229,7 @@ const PERSIST_PROPERTIES: Array[StringName] = [
 const _SHELLS_REACH_RADII := 2.0
 
 const AUTOMATION_KEY: Array[StringName] = [&"name"]
-const AUTOMATION_METHODS: Array[StringName] = [
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"has_orbit",
 	&"get_orbit",
 	&"get_position_vector",
@@ -248,7 +248,7 @@ const AUTOMATION_METHODS: Array[StringName] = [
 	&"get_hud_name",
 	&"get_characteristic",
 ]
-const AUTOMATION_PROPERTIES: Array[StringName] = [
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [
 	&"flags",
 	&"mean_radius",
 	&"gravitational_parameter",
@@ -258,8 +258,8 @@ const AUTOMATION_PROPERTIES: Array[StringName] = [
 	&"begin",
 	&"end",
 	&"within_lifespan",
-	&"global_position",
 ]
+const AUTOMATION_PROPERTIES: Array[StringName] = [&"global_position"]
 
 
 ## Set this script to generate a subclass in place of IVBody in create methods.
@@ -1828,13 +1828,14 @@ func lazy_model_init() -> void:
 
 
 ## Builds a new [IVBodyVisual] for this body without adopting it, or [code]null[/code] if the
-## body has [member BodyFlags.BODYFLAGS_DISABLE_MODEL_SPACE]. This body's own visual is
+## body has [member BodyFlags.BODYFLAGS_DISABLE_MODEL_SPACE] or the run is in
+## [member IVCoreSettings.headless_mode]. This body's own visual is
 ## [member body_visual]; use this only to stage a second, throwaway one outside the simulation
 ## (an icon capture, a thumbnail). The caller owns it, and must call
 ## [method IVBodyVisual.set_static_preview] on it as soon as it is in the tree — an unattended
 ## copy animates, and a star's copy reaches back into this body.
 func make_body_visual() -> IVBodyVisual:
-	if flags & BodyFlags.BODYFLAGS_DISABLE_MODEL_SPACE:
+	if flags & BodyFlags.BODYFLAGS_DISABLE_MODEL_SPACE or IVCoreSettings.headless_mode:
 		return null
 	var triaxial_size := _resolve_triaxial_size()
 	if replacement_body_visual_class:

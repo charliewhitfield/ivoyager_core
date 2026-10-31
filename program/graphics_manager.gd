@@ -73,6 +73,10 @@ extends Node
 ## everything in view, and it waits for a restart instead. See [i]Glow: the bloom
 ## pass[/i] in [code]PHOTOMETRIC_MODEL.md[/code] for what it draws.[br][br]
 ##
+## In [member IVCoreSettings.headless_mode] this node sets only the frame rate, to
+## [member IVCoreSettings.headless_fps], and writes no file; it stays for the enumerations
+## [IVOptionsPopup] lists.[br][br]
+##
 ## Frame rate cap sets [member Engine.max_fps]. None leaves in place the cap the
 ## engine started with, from ProjectSettings [code]application/run/max_fps[/code] or
 ## the [code]--max-fps[/code] command-line argument; 60 or 30 replaces it.[br][br]
@@ -371,6 +375,12 @@ static func _get_screen_pixels() -> int:
 
 
 func _ready() -> void:
+	if IVCoreSettings.headless_mode:
+		Engine.max_fps = IVCoreSettings.headless_fps
+		set_process(false)
+		# Nothing else applies to a run that draws nothing, and it must not record its
+		# renderer or GPU type for the next start.
+		return
 	IVSettingsManager.changed.connect(_settings_listener)
 	# The renderer cannot change without a restart, so this is written once and never again.
 	RenderingServer.global_shader_parameter_set(&"iv_display_encode",

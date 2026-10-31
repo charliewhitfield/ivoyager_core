@@ -30,9 +30,7 @@ extends RefCounted
 ## This node and [IVHotkeysPopup] are unaware of actions defined in project.godot.
 
 
-const AUTOMATION_PROPERTIES: Array[StringName] = [
-	&"action_texts",
-]
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [&"action_texts"]
 
 
 static var defaults: Dictionary[StringName, Variant] = {

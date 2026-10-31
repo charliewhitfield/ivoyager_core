@@ -57,9 +57,13 @@ extends VBoxContainer
 ## exists and returns true.[br][br]
 ##
 ## For most applications, you'll want to put this widget in a ScrollContainer.[br][br]
+##
+## [method get_body_data] gives the same data as text, for any body.
 
 const NumberType := IVQFormat.NumberType
 const BodyFlags := IVBody.BodyFlags
+
+const AUTOMATION_USER_METHODS: Array[StringName] = [&"get_body_data"]
 
 
 ## Theme type variation used by [IVSelectionDataFoldable] decendents. If &""
@@ -162,10 +166,41 @@ var selection_data_valid_tests: Dictionary[StringName, Callable] = {
 
 
 var _selection_manager: IVSelectionManager
+var _body: IVBody # whose data get_body_data() reads, else null for the selection's
 
 
 func _ready() -> void:
 	IVWidgets.connect_selection_manager(self, &"_on_selection_manager_changed")
+
+
+## Returns the data this panel shows for the body named [param body_name],
+## selected or not, as text in the user's language: each section's title on a
+## line, then a line per row, "label: value", or the label alone for a list
+## item without a value. Returns "" if there is no such body.
+func get_body_data(body_name: StringName) -> String:
+	var body: IVBody = IVBody.bodies.get(body_name)
+	if !body:
+		return ""
+	_body = body
+	var lines := PackedStringArray()
+	for section in selection_data_content:
+		var valid_test: Callable = selection_data_valid_tests.get(section, Callable())
+		if valid_test and !valid_test.call():
+			continue
+		var rows := IVSelectionDataFoldable.get_rows(selection_data_content[section], body)
+		if !rows:
+			continue
+		var foldable: FoldableContainer = find_child(section, true, false)
+		lines.append(tr(foldable.title) if foldable else String(section))
+		for row in rows:
+			var row_label: StringName = row[0]
+			var value_text: String = row[1]
+			var value_key: StringName = row[2]
+			if value_key:
+				value_text = tr(value_key)
+			lines.append("%s: %s" % [tr(row_label), value_text] if value_text else tr(row_label))
+	_body = null
+	return "\n".join(lines)
 
 
 func _on_selection_manager_changed(selection_manager: IVSelectionManager) -> void:
@@ -177,21 +212,21 @@ func _on_selection_manager_changed(selection_manager: IVSelectionManager) -> voi
 
 func is_photosphere() -> bool:
 	const BODYFLAGS_STAR := IVBody.BodyFlags.BODYFLAGS_STAR
-	return bool(_selection_manager.get_body_flags() & BODYFLAGS_STAR)
+	return bool(_get_body_flags() & BODYFLAGS_STAR)
 
 
 # *****************************************************************************
 # Label callables (content index 0)
 
 func get_periapsis_label() -> StringName:
-	var body := _selection_manager.get_body()
+	var body := _get_body()
 	if body and body.has_method(&"get_periapsis_label"):
 		return body.call(&"get_periapsis_label")
 	return &"LABEL_PERIAPSIS"
 
 
 func get_apoapsis_label() -> StringName:
-	var body := _selection_manager.get_body()
+	var body := _get_body()
 	if body and body.has_method(&"get_apoapsis_label"):
 		return body.call(&"get_apoapsis_label")
 	return &"LABEL_APOAPSIS"
@@ -278,7 +313,7 @@ func axial_tilt_to_orbit(x: float, internal_precision: int) -> String:
 	# "~0°" if axis locked. Adds " (variable)" qualifier to chaotic tumblers.
 	const BODYFLAGS_AXIS_LOCKED := IVBody.BodyFlags.BODYFLAGS_AXIS_LOCKED
 	const BODYFLAGS_CHAOTIC_TUMBLER := IVBody.BodyFlags.BODYFLAGS_CHAOTIC_TUMBLER
-	var body_flags := _selection_manager.get_body_flags()
+	var body_flags := _get_body_flags()
 	if body_flags & BODYFLAGS_AXIS_LOCKED:
 		return "~0°"
 	var text := fixed_unit(x, internal_precision, &"deg", true, 4)
@@ -290,7 +325,7 @@ func axial_tilt_to_orbit(x: float, internal_precision: int) -> String:
 func axial_tilt_to_ecliptic(x: float, internal_precision: int) -> String:
 	# Adds " (variable)" qualifier to chaotic tumblers.
 	const BODYFLAGS_CHAOTIC_TUMBLER := IVBody.BodyFlags.BODYFLAGS_CHAOTIC_TUMBLER
-	var body_flags := _selection_manager.get_body_flags()
+	var body_flags := _get_body_flags()
 	var text := fixed_unit(x, internal_precision, &"deg", true, 4)
 	if body_flags & BODYFLAGS_CHAOTIC_TUMBLER:
 		return text + (" (%s)" % tr(&"TXT_VARIABLE").to_lower())
@@ -310,14 +345,25 @@ func natural_satellites(x: int) -> String:
 
 func hide_mean_radius() -> bool:
 	const DISPLAY_EQUATORIAL_POLAR_RADII := IVBody.BodyFlags.BODYFLAGS_DISPLAY_EQUATORIAL_POLAR_RADII
-	return bool(_selection_manager.get_body_flags() & DISPLAY_EQUATORIAL_POLAR_RADII)
+	return bool(_get_body_flags() & DISPLAY_EQUATORIAL_POLAR_RADII)
 
 
 func hide_equatorial_polar_radius() -> bool:
 	const DISPLAY_EQUATORIAL_POLAR_RADII := IVBody.BodyFlags.BODYFLAGS_DISPLAY_EQUATORIAL_POLAR_RADII
-	return !bool(_selection_manager.get_body_flags() & DISPLAY_EQUATORIAL_POLAR_RADII)
+	return !bool(_get_body_flags() & DISPLAY_EQUATORIAL_POLAR_RADII)
 
 
 func hide_hydrostatic_equilibrium() -> bool:
 	const BODYFLAGS_MOON := IVBody.BodyFlags.BODYFLAGS_MOON
-	return !bool(_selection_manager.get_body_flags() & BODYFLAGS_MOON)
+	return !bool(_get_body_flags() & BODYFLAGS_MOON)
+
+
+# *****************************************************************************
+# The body evaluated: the selection's, or get_body_data()'s.
+
+func _get_body() -> Object:
+	return _body if _body else _selection_manager.get_body()
+
+
+func _get_body_flags() -> int:
+	return _body.flags if _body else _selection_manager.get_body_flags()

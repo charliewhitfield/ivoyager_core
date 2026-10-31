@@ -55,26 +55,25 @@ const PERSIST_PROPERTIES: Array[StringName] = [
 	&"symbol_types",
 ]
 
-const AUTOMATION_METHODS: Array[StringName] = [
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"is_symbols_visible",
 	&"is_orbits_visible",
-	&"change_symbols_visibility",
-	&"change_orbits_visibility",
 	&"get_visible_symbols_groups",
 	&"get_visible_orbits_groups",
 	&"set_visible_symbols_groups",
 	&"set_visible_orbits_groups",
-	&"set_default_visibilities",
-	&"hide_all",
 	&"get_color",
 	&"set_color",
 	&"get_symbol_type",
 	&"set_symbol_type",
 ]
-const AUTOMATION_PROPERTIES: Array[StringName] = [
-	&"symbols_visibilities",
-	&"orbits_visibilities",
+const AUTOMATION_METHODS: Array[StringName] = [
+	&"change_symbols_visibility",
+	&"change_orbits_visibility",
+	&"set_default_visibilities",
+	&"hide_all",
 ]
+const AUTOMATION_PROPERTIES: Array[StringName] = [&"symbols_visibilities", &"orbits_visibilities"]
 
 
 # persisted - read-only!

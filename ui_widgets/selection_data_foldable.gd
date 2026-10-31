@@ -92,6 +92,70 @@ var _en_width: float
 @onready var _data_grid: GridContainer = $DataGrid # may move to VBoxContainer after this
 
 
+## Returns the rows that [param content], one foldable's content in the format
+## [IVSelectionData] describes, gives for [param subject]. Each row is
+## [code][row label, value text, value key][/code]: the label untranslated, and
+## the value key a translation key or &"". Pass [param selection_manager] for
+## table precisions where [member IVCoreSettings.enable_precisions] is true.
+static func get_rows(content: Array[Array], subject: Object,
+		selection_manager: IVSelectionManager = null) -> Array[Array]:
+	var rows: Array[Array] = []
+	for row_content in content:
+		
+		# hide callable?
+		if row_content.size() > 3:
+			var hide_callable: Callable = row_content[3]
+			if hide_callable.call():
+				continue
+		
+		var value_path: String = row_content[1]
+		var value: Variant = IVTree.get_path_variant(subject, value_path)
+		if value == null or is_same(value, NAN):
+			continue
+		
+		var value_text: String
+		var value_key := &""
+		if row_content.size() < 3:
+			# No format callable. Convert it to string, whatever it is.
+			value_text = str(value)
+			if value is StringName:
+				value_key = value
+		elif value is float:
+			# all format callables expect internal_precision
+			var format: Callable = row_content[2]
+			var internal_precision := -1
+			if selection_manager:
+				internal_precision = selection_manager.get_float_precision(value_path)
+			value_text = format.call(value, internal_precision)
+		else:
+			var format: Callable = row_content[2]
+			var formatted_value: Variant = format.call(value)
+			if formatted_value is Array:
+				# Rows of [row label, value text].
+				var list_rows: Array[Array] = formatted_value
+				for list_row in list_rows:
+					rows.append([list_row[0], list_row[1], &""])
+				continue
+			elif formatted_value is StringName:
+				value_text = formatted_value
+				value_key = formatted_value
+			else:
+				value_text = str(formatted_value)
+		
+		if value_text == "":
+			continue
+		
+		# if here, row_content[0] must have row label or row label callable
+		var row_label: StringName
+		if row_content[0] is Callable:
+			var label_callable: Callable = row_content[0]
+			row_label = label_callable.call()
+		else:
+			row_label = row_content[0]
+		rows.append([row_label, value_text, value_key])
+	return rows
+
+
 func _enter_tree() -> void:
 	get_parent_control().visibility_changed.connect(_on_parent_visibility_changed)
 
@@ -184,72 +248,14 @@ func _update_selection(_dummy := false) -> void:
 	if _valid_test and !_valid_test.call():
 		hide()
 		return
+	var rows := get_rows(_content, selection, _selection_manager if _enable_precisions else null)
 	var grid_row := 0
-	var content_row := 0
-	var content_size := _content.size()
-	while content_row < content_size:
-		var row_content := _content[content_row]
-		
-		# hide callable?
-		if row_content.size() > 3:
-			var hide_callable: Callable = row_content[3]
-			if hide_callable.call():
-				content_row += 1
-				continue
-		
-		var value_path: String = row_content[1]
-		var value: Variant = IVTree.get_path_variant(selection, value_path)
-		if value == null or is_same(value, NAN):
-			content_row += 1
-			continue
-		
-		var value_text: String
-		var value_key := &""
-		if row_content.size() < 3:
-			# No format callable. Convert it to string, whatever it is.
-			value_text = str(value)
-			if value is StringName:
-				value_key = value
-		elif value is float:
-			# all format callables expect internal_precision
-			var format: Callable = row_content[2]
-			var internal_precision := -1
-			if _enable_precisions:
-				internal_precision = _selection_manager.get_float_precision(value_path)
-			value_text = format.call(value, internal_precision)
-		else:
-			var format: Callable = row_content[2]
-			var formatted_value: Variant = format.call(value)
-			if formatted_value is Array:
-				# Rows of [row label, value text], set here and not below.
-				var rows: Array[Array] = formatted_value
-				for row in rows:
-					var list_label: StringName = row[0]
-					var list_value_text: String = row[1]
-					_set_row(grid_row, list_label, list_value_text, &"")
-					grid_row += 1
-				content_row += 1
-				continue
-			elif formatted_value is StringName:
-				value_text = formatted_value
-				value_key = formatted_value
-			else:
-				value_text = str(formatted_value)
-		
-		if value_text == "":
-			content_row += 1
-			continue
-		
-		# if here, row_content[0] must have row label or row label callable
-		var row_label: StringName
-		if row_content[0] is Callable:
-			var label_callable: Callable = row_content[0]
-			row_label = label_callable.call()
-		else:
-			row_label = row_content[0]
+	for row in rows:
+		var row_label: StringName = row[0]
+		var value_text: String = row[1]
+		var value_key: StringName = row[2]
 		_set_row(grid_row, row_label, value_text, value_key)
 		grid_row += 1
-		content_row += 1
 	
 	# hide this control (including title) if no applicable data
 	if grid_row == 0:

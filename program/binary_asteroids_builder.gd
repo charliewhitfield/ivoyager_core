@@ -41,9 +41,20 @@ const _BINARY_VERSION := 1
 const _FLAG_LIBRATION := 1 # block D present: Lagrange point libration parameters
 
 
+var _reported_missing_dirs: Dictionary[String, bool] = {}
 
+
+## Appends the asteroids of [param sbg]'s binaries in [param binary_dir] up to
+## [param mag_cutoff]. A missing directory (ivoyager_assets absent) leaves the group
+## empty, with one warning per directory, none in [member IVCoreSettings.headless_mode].
 func build_sbg_from_binaries(sbg: IVSmallBodiesGroup, binary_dir: String, mag_cutoff: float
 		) -> void:
+	if !DirAccess.dir_exists_absolute(binary_dir):
+		if !IVCoreSettings.headless_mode and !_reported_missing_dirs.has(binary_dir):
+			_reported_missing_dirs[binary_dir] = true
+			push_warning("IVBinaryAsteroidsBuilder: no directory '%s'; its small bodies groups"
+					% binary_dir + " will be empty")
+		return
 	var n_legacy := 0
 	for mag_str in BINARY_FILE_MAGNITUDES:
 		if mag_str.to_float() > mag_cutoff:
@@ -53,6 +64,9 @@ func build_sbg_from_binaries(sbg: IVSmallBodiesGroup, binary_dir: String, mag_cu
 	if n_legacy:
 		push_warning("Skipped %s pre-'IVAS' asteroid binaries in '%s'; rebuild them with "
 				% [n_legacy, binary_dir] + "addons/tools/build_asteroid_binaries.py")
+	elif sbg.get_number() == 0:
+		push_warning("IVBinaryAsteroidsBuilder: no '%s' binaries found in '%s'"
+				% [sbg.sbg_alias, binary_dir])
 	assert(!VPRINT or sbg.vprint_load("asteroids"))
 
 

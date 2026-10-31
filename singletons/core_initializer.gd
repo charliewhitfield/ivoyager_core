@@ -259,6 +259,19 @@ func _do_conditional_modifications() -> void:
 		program_nodes.erase(&"ExposureManager")
 	if not IVCoreSettings.enable_graphics_rescue:
 		program_nodes.erase(&"GraphicsRescue")
+	if IVCoreSettings.headless_mode:
+		# Nothing is drawn. The finishers stay and add nothing (see IVBodyFinisher), and
+		# IVGraphicsManager and IVScreenshotManager stay, inert, for IVOptionsPopup.
+		init_refcounteds.erase(&"ResourceInitializer")
+		ordered_init_refcounteds.erase(&"ResourceInitializer")
+		for key: StringName in [&"LazyModelInitializer", &"PSFSettings"]:
+			program_refcounteds.erase(key)
+			ordered_program_refcounteds.erase(key)
+		for key: StringName in [&"FragmentIdentifier", &"GraphicsRescue", &"FarwarpManager",
+				&"SunOcclusionManager", &"ExposureManager", &"Body2DCaptureManager",
+				&"ShaderWarmup"]:
+			program_nodes.erase(key)
+			ordered_program_nodes.erase(key)
 
 
 func _set_simulator_universe() -> void:

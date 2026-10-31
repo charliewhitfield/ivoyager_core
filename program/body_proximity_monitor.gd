@@ -40,7 +40,10 @@ extends Node
 ## that read the bodies it wakes. Required: without it no HUD shows and nothing can be
 ## hovered. To keep every body awake, set [member IVCoreSettings.apply_body_sleep] false
 ## rather than removing this node. Only this node should call [method IVBody.set_sleeping]
-## and [method IVBody.set_huds_visible].
+## and [method IVBody.set_huds_visible].[br][br]
+##
+## In [member IVCoreSettings.headless_mode] nothing can be seen: a body sleeps unless it is
+## held awake, and no HUD shows or mouse target is reported.
 
 
 const CAN_SLEEP := IVBody.BodyFlags.BODYFLAGS_CAN_SLEEP
@@ -51,6 +54,7 @@ const STAR := IVBody.BodyFlags.BODYFLAGS_STAR
 var sleep_distance_ratio := 1.5
 
 var _applies_sleep: bool = IVCoreSettings.apply_body_sleep
+var _is_headless: bool = IVCoreSettings.headless_mode
 var _world_controller: IVWorldController
 var _body_huds_state: IVBodyHUDsState
 var _hides_huds_when_close := false
@@ -98,7 +102,8 @@ func _process(_delta: float) -> void:
 	var camera_position := camera.global_position
 	_update_held(camera)
 	_update_sleep(camera_position)
-	_update_awake(camera, camera_position)
+	if !_is_headless:
+		_update_awake(camera, camera_position)
 
 
 ## Keeps [param body] and its ancestors awake at any distance until
@@ -207,7 +212,14 @@ func _get_min_hud_distance(body: IVBody) -> float:
 # INF for a body that must never sleep, and for any body above one: a sleeping body's
 # stale position would misplace an awake descendant.
 func _get_wake_distance(body: IVBody) -> float:
-	if !(body.flags & CAN_SLEEP) or IVBodyPSF.is_applicable(body):
+	if !(body.flags & CAN_SLEEP):
+		return INF
+	if _is_headless:
+		for satellite_name in body.satellites:
+			if is_inf(_get_wake_distance(body.satellites[satellite_name])):
+				return INF
+		return 0.0 # nothing can show, so only a held body wakes
+	if IVBodyPSF.is_applicable(body):
 		return INF # a point of light can show from any distance
 	var orbit := body.get_orbit()
 	if !orbit:

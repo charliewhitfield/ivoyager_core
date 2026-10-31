@@ -69,6 +69,9 @@ static var override_theme_path := ""
 ## are not set.
 static var fallback_theme_path := "res://addons/ivoyager_core/resources/ivoyager_theme.tres"
 static var override_font_path := ""
+## Font used if [member override_font_path] and ProjectSettings/gui/theme/custom_font are not
+## set. Empty or missing (ivoyager_assets absent) gives Godot's own font; see [method
+## get_main_font].
 static var fallback_font_path := "res://addons/ivoyager_assets/fonts/Roboto-NotoSansSymbols-merged.ttf"
 ## Names of the theme constants that are lengths in pixels, which follow "gui_size"
 ## (see class description). These are the constants Godot scales when it builds its
@@ -149,21 +152,27 @@ static func get_main_theme() -> Theme:
 	return theme
 
 
-## Returns Font specified by [member override_font_path], ProjectSettings/gui/theme/custom_font,
-## or [member fallback_font_path], in that order of precedence.
+## Returns Font specified by [member override_font_path], ProjectSettings/gui/theme/custom_font
+## or [member fallback_font_path], in that order of precedence, or Godot's own fallback font
+## if the path is empty or its file is missing (with a warning). [member fallback_font_path] is
+## not used in [member IVCoreSettings.headless_mode].[br][br]
+##
+## Don't point ProjectSettings/gui/theme/custom_font at an ivoyager_assets font: Godot loads
+## it before any script runs and errors if the assets are absent.
 static func get_main_font() -> Font:
-	var main_font: Font
-	if override_font_path:
-		main_font = load(override_font_path)
-		assert(main_font, "IVThemeInitializer.override_font_path is not a valid font file")
-		return main_font
-	var project_theme_path: String = ProjectSettings.get_setting("gui/theme/custom_font")
-	if project_theme_path:
-		main_font = load(project_theme_path)
-		assert(main_font, "ProjectSettings/gui/theme/custom_font is not a valid font file")
-		return main_font
-	main_font = load(fallback_font_path)
-	assert(main_font, "IVThemeInitializer.fallback_font_path is not a valid font file")
+	var font_path := override_font_path
+	if !font_path:
+		font_path = ProjectSettings.get_setting("gui/theme/custom_font")
+	if !font_path and !IVCoreSettings.headless_mode:
+		font_path = fallback_font_path
+	if !font_path:
+		return ThemeDB.fallback_font
+	if !ResourceLoader.exists(font_path):
+		if !IVCoreSettings.headless_mode:
+			push_warning("IVThemeManager: no font at '%s'; using Godot's own font" % font_path)
+		return ThemeDB.fallback_font
+	var main_font: Font = load(font_path)
+	assert(main_font, "'%s' is not a valid font file" % font_path)
 	return main_font
 
 
@@ -208,6 +217,12 @@ func add_gui_font_sizes(theme: Theme) -> void:
 	#var empty_stylebox := StyleBoxTexture.new()
 	#theme.set_stylebox(&"normal", &"BorderlessColorPickerButton", empty_stylebox)
 	#theme.set_type_variation(&"BorderlessColorPickerButton", &"ColorPickerButton")
+
+
+## Returns the Label3D font for body name labels: the font [method get_main_font]
+## gave at init.
+func get_label3d_names_font() -> Font:
+	return _main_font
 
 
 ## Returns the current Label3D font size for body name labels, derived from

@@ -86,7 +86,7 @@ const RESET_GRAPHICS_ARGUMENT := "--reset-graphics"
 ## other than by quitting, counts as failed; see [member IVCoreSettings.enable_graphics_rescue].
 const START_CHECK_TIME := 10.0
 
-const AUTOMATION_METHODS: Array[StringName] = [
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"get_setting_keys",
 	&"has_setting",
 	&"get_setting",

@@ -30,7 +30,8 @@ extends RefCounted
 ## methods.)[br][br]
 ##
 ## All work here is the same whether this is a new game built from data tables
-## or a loaded game built from file.
+## or a loaded game built from file. In [member IVCoreSettings.headless_mode] it adds
+## nothing.
 ##
 ## TODO: Thread build
 
@@ -66,8 +67,9 @@ func _on_node_added(node: Node) -> void:
 	
 	# Count doesn't matter here, but might if we implement thread as for IVBody...
 	_state_auxiliary.change_tree_building_count(1)
-	_add_sbg_orbits(sbg)
-	_add_sbg_positions(sbg)
+	if !IVCoreSettings.headless_mode:
+		_add_sbg_orbits(sbg)
+		_add_sbg_positions(sbg)
 	_state_auxiliary.change_tree_building_count(-1)
 
 

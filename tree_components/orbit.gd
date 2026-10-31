@@ -235,7 +235,7 @@ const PERSIST_PROPERTIES: Array[StringName] = [
 	&"_update_time",
 ]
 
-const AUTOMATION_METHODS: Array[StringName] = [
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"get_semi_major_axis_at_time",
 	&"get_eccentricity_at_time",
 	&"get_inclination_at_time",
@@ -252,7 +252,7 @@ const AUTOMATION_METHODS: Array[StringName] = [
 	&"get_periapsis",
 	&"get_apoapsis",
 ]
-const AUTOMATION_PROPERTIES: Array[StringName] = [
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [
 	&"parent_name",
 	&"reference_plane_type",
 	&"semi_major_axis",

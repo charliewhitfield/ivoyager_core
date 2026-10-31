@@ -263,16 +263,16 @@ const AUTOMATION_LIFECYCLE: Dictionary[StringName, StringName] = {
 	&"quitting": &"about_to_quit",
 	&"quit": &"quit",
 }
-const AUTOMATION_METHODS: Array[StringName] = [
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"start",
 	&"set_user_paused",
 	&"can_user_pause",
 	&"exit",
 	&"quit",
 ]
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [&"paused_by_user", &"started"]
 const AUTOMATION_PROPERTIES: Array[StringName] = [
 	&"paused_tree",
-	&"paused_by_user",
 	&"initialized_core",
 	&"has_assets",
 	&"prestart",
@@ -280,7 +280,6 @@ const AUTOMATION_PROPERTIES: Array[StringName] = [
 	&"building_system",
 	&"built_system",
 	&"ready_system",
-	&"started",
 	&"running",
 	&"quitting",
 	&"loading_game",

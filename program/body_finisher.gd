@@ -24,6 +24,9 @@ extends RefCounted
 ## visual graphic, a point-spread quad ([IVBodyPSF]), lights, and rings (as
 ## applicable).
 ##
+## In [member IVCoreSettings.headless_mode] it adds nothing, but stays: the system
+## tree is not ready until it has passed every body.[br][br]
+##
 ## Graphic nodes added here are not referenced anywhere else so can be fully
 ## replaced by modifying script members here. Replacement classes must have
 ## compatable _init() signatures. (Or, to change that, extend this class in
@@ -84,7 +87,10 @@ func _finish(body: IVBody) -> void:
 	var children: Array[Node] = []
 	var siblings: Array[Node] = []
 	var body_visual_nodes: Array[Node3D] = []
-	
+	if IVCoreSettings.headless_mode:
+		_deffered_finish.call_deferred(body, children, siblings, body_visual_nodes)
+		return
+
 	_get_body_position_visual(body, children)
 
 	if IVBodyPSF.is_applicable(body):
@@ -94,7 +100,7 @@ func _finish(body: IVBody) -> void:
 	if body.has_light():
 		_get_dynamic_light(body, children)
 		_get_omni_lights(body, children)
-	if body.has_rings():
+	if IVRings.is_applicable(body):
 		_get_rings(body, body_visual_nodes)
 	
 	_deffered_finish.call_deferred(body, children, siblings, body_visual_nodes)

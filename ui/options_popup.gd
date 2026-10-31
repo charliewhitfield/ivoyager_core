@@ -49,13 +49,14 @@ extends PopupPanel
 ## The popup grows with its content up to [member max_screen_proportion] of the
 ## view, and the options scroll beyond that.[br][br]
 ##
+## A section may also hold buttons that open something of the project's own,
+## added by [method add_button].[br][br]
+##
 ## [signal IVGlobal.options_requested] opens this popup, or closes it as Cancel
 ## does if it's open. See [member modal] for the two ways it can work.
 
 
-const AUTOMATION_METHODS: Array[StringName] = [
-	&"get_option_enumeration",
-]
+const AUTOMATION_USER_METHODS: Array[StringName] = [&"get_option_enumeration"]
 
 
 ## Stop the simulator while this popup is open. This setting will be overridden
@@ -101,7 +102,8 @@ const AUTOMATION_METHODS: Array[StringName] = [
 
 ## Section keys are the header labels used in [member layout]. Content of each
 ## section is an array of 2-element arrays, where each 2-element array has an
-## option label and a setting (setting must be defined in [IVSettingsManager]).
+## option label and a setting (setting must be defined in [IVSettingsManager]),
+## or of the button arrays [method add_button] adds.
 ## Note: It's not necessary to remove a section here if it has been removed
 ## from [member layout].
 @export var section_content: Dictionary[StringName, Array] = {
@@ -318,6 +320,23 @@ func add_option(section_name: StringName, option_name: StringName, setting: Stri
 	section.insert(option_index, [option_name, setting])
 
 
+## Add a button in section [param section_name] that calls [param action], such
+## as opening a project's own popup, at [param button_index] among the section's
+## options and buttons (at the end if greater than their number). Texts are
+## translation keys; [param type_variation] styles the button. The action runs
+## with this popup open, which suits a popup that isn't [member modal], unless
+## [param closes_popup], which first closes it if there are no changes to
+## confirm. Use [method add_section] first if the section doesn't already exist.
+func add_button(section_name: StringName, button_text: StringName, action: Callable,
+		tooltip := &"", type_variation := &"", closes_popup := false, button_index := 999
+		) -> void:
+	assert(section_content.has(section_name),
+			"Section '%s' doesn't exist; use add_section() first" % section_name)
+	var section := section_content[section_name]
+	button_index = mini(section.size(), button_index)
+	section.insert(button_index, [button_text, action, tooltip, type_variation, closes_popup])
+
+
 ## Returns the names of setting [param setting]'s values by value, as this popup
 ## lists them, or an empty dictionary for a setting with no enumeration.
 func get_option_enumeration(setting: StringName) -> Dictionary:
@@ -379,7 +398,7 @@ func _remove_option(setting: StringName) -> void:
 	for section: Array in section_content.values():
 		for i in range(section.size() - 1, -1, -1):
 			var option_array: Array = section[i]
-			if option_array[1] == setting:
+			if !_is_button(option_array) and option_array[1] == setting:
 				section.remove_at(i)
 
 
@@ -402,6 +421,9 @@ func _build_content() -> void:
 			header_label.text = header
 			var section := section_content[header]
 			for option_array: Array in section:
+				if _is_button(option_array):
+					subpanel_vbox.add_child(_build_button(option_array))
+					continue
 				var option_text: StringName = option_array[0]
 				var setting: StringName = option_array[1]
 				if not IVSettingsManager.has_setting(setting):
@@ -450,10 +472,26 @@ func _clear_content() -> void:
 
 func _has_existing_option(header: StringName) -> bool:
 	for option_array: Array in section_content[header]:
+		if _is_button(option_array):
+			return true
 		var setting: StringName = option_array[1]
 		if IVSettingsManager.has_setting(setting):
 			return true
 	return false
+
+
+func _is_button(option_array: Array) -> bool:
+	return option_array[1] is Callable
+
+
+func _build_button(button_array: Array) -> Button:
+	var button := Button.new()
+	button.text = button_array[0]
+	button.tooltip_text = button_array[2]
+	button.theme_type_variation = button_array[3]
+	button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	button.pressed.connect(_on_button_pressed.bind(button_array[1], button_array[4]))
+	return button
 
 
 func _build_item(option_text: StringName, setting: StringName) -> HBoxContainer:
@@ -613,6 +651,13 @@ func _on_change(value: Variant, setting: StringName, default_button: Button,
 	_restore_defaults.disabled = IVSettingsManager.is_defaults()
 	_confirm_changes.disabled = IVSettingsManager.is_cache_current()
 	_update_restart_warning()
+
+
+func _on_button_pressed(action: Callable, closes_popup: bool) -> void:
+	if closes_popup and IVSettingsManager.is_cache_current():
+		_suppress_close = false
+		hide()
+	action.call()
 
 
 func _on_restore_defaults() -> void:

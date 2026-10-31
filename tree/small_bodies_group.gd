@@ -64,7 +64,7 @@ const PERSIST_PROPERTIES: Array[StringName] = [
 ]
 
 const AUTOMATION_KEY: Array[StringName] = [&"name"]
-const AUTOMATION_METHODS: Array[StringName] = [
+const AUTOMATION_USER_METHODS: Array[StringName] = [
 	&"get_number",
 	&"get_member_name",
 	&"get_member_position",
@@ -72,7 +72,7 @@ const AUTOMATION_METHODS: Array[StringName] = [
 	&"get_orbit_elements",
 	&"get_mean_anomaly_rate",
 ]
-const AUTOMATION_PROPERTIES: Array[StringName] = [
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [
 	&"sbg_alias",
 	&"sbg_class",
 	&"lp_integer",

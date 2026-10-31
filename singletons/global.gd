@@ -119,7 +119,8 @@ const PERSIST_PROPERTIES_ONLY := PersistMode.PERSIST_PROPERTIES_ONLY
 ## Persist mode for the ivoyager_save plugin. Safe to use if plugin is not present.
 const PERSIST_PROCEDURAL := PersistMode.PERSIST_PROCEDURAL
 
-const AUTOMATION_PROPERTIES: Array[StringName] = [&"times", &"date", &"clock", &"date_aux"]
+const AUTOMATION_USER_PROPERTIES: Array[StringName] = [&"date", &"clock"]
+const AUTOMATION_PROPERTIES: Array[StringName] = [&"times", &"date_aux"]
 
 
 ## [member VisualInstance3D.layers] bit marking a shadow caster for the local

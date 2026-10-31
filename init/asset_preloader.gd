@@ -25,7 +25,10 @@ extends RefCounted
 ##
 ## In typical setup, loading will commence right after splash screen is shown,
 ## on [signal IVStateManager.core_initialized]. When finished, emits [signal
-## IVStateManager.assets_preloaded].
+## IVStateManager.assets_preloaded].[br][br]
+##
+## In [member IVCoreSettings.headless_mode] no asset file is loaded: every body gets the
+## resources a run without ivoyager_assets gives it, and no rings get any.
 
 # VRAM color formats a normal map must never have (would mean it was imported as
 # sRGB color, not as a Normal Map). Load-time push_warning only.
@@ -282,7 +285,8 @@ func get_body_mesh_scale(body_name: StringName) -> float:
 ## The rings' three-layer scattering texture: backscatter, forward scatter and unlit side,
 ## each a width x 1 profile of linear SCATTERING STRENGTH — not radiance; the observing
 ## geometry is divided out and the shader puts it back — plus the occluded fraction in
-## alpha. See [code]shaders/rings.gdshader[/code] for what the channels mean.
+## alpha. See [code]shaders/rings.gdshader[/code] for what the channels mean. Null if no
+## texture was found under [member rings_search].
 func get_rings_texture_array(rings_name: StringName) -> TextureLayered:
 	return _rings_resources[rings_name][0]
 
@@ -321,6 +325,12 @@ func read_material_fields(table: StringName, row: int,
 
 
 func _on_core_inited() -> void:
+	if IVCoreSettings.headless_mode:
+		for search: Array[String] in [models_search, meshes_search, maps_search,
+				cubemaps_search, bodies_2d_search, rings_search]:
+			search.clear()
+		for key in asset_paths:
+			asset_paths[key] = ""
 	var start_msec := Time.get_ticks_msec()
 	if use_thread and IVCoreSettings.use_threads:
 		WorkerThreadPool.add_task(_load_resources.bind(start_msec))
@@ -507,8 +517,8 @@ func _load_body_resources() -> void:
 	var surface_class_index := _build_surface_class_index()
 
 	var fallback_texture_2d_path := asset_paths[&"fallback_body_texture_2d"]
-	assert(ResourceLoader.exists(fallback_texture_2d_path))
-	var fallback_texture_2d: Texture2D = load(fallback_texture_2d_path)
+	var fallback_texture_2d: Texture2D = (load(fallback_texture_2d_path)
+			if ResourceLoader.exists(fallback_texture_2d_path) else null)
 	var bodies_2d_index := _build_prefix_index(bodies_2d_search)
 	var models_index := _build_prefix_index(models_search)
 	var meshes_index := _build_prefix_index(meshes_search)
@@ -967,7 +977,12 @@ func _load_rings_resources() -> void:
 		# TextureLayered, so `is Texture2DArray` would be false for every imported one.
 		var texture_array: TextureLayered = IVFiles.find_and_load_resource(rings_search,
 				file_prefix)
-		assert(texture_array, "Failed to load rings texture '%s.*'" % file_prefix)
+		if !texture_array:
+			if !rings_search.is_empty(): # empty is a choice of no rings, as in headless mode
+				push_warning("IVAssetPreloader: no rings texture '%s.*' found; '%s' will not"
+						% [file_prefix, rings_name] + " be drawn")
+			_rings_resources[rings_name] = [null, null, null]
+			continue
 		assert(texture_array.get_layers() == 3,
 				"Rings texture '%s' has %s layers; expected 3 (backscatter, forward scatter,"
 				% [file_prefix, texture_array.get_layers()] + " unlit side)")

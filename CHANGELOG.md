@@ -12,10 +12,14 @@ See cloning and downloading instructions [here](https://www.ivoyager.dev/develop
 Under development using Godot 4.7.2.
 
 ### Added
-* Automation: Core's singletons, program objects, bodies, orbits, views and HUD states declare what an automation client, such as the Assistant plugin, may read and call, in `AUTOMATION_METHODS`, `AUTOMATION_PROPERTIES` and `AUTOMATION_KEY` constants with gates in `is_automation_available()`. IVStateManager declares the lifecycle in `AUTOMATION_LIFECYCLE`, and IVGlobal names program objects by role in `get_automation_objects()`. The declared members are public API; see the Assistant plugin's SPECIFICATION.md §11.
+* Automation: Core's singletons, program objects, bodies, orbits, views and HUD states declare what an automation client, such as the Assistant plugin, may read and call, in `AUTOMATION_METHODS`, `AUTOMATION_PROPERTIES` and `AUTOMATION_KEY` constants, marking in `AUTOMATION_USER_METHODS` and `AUTOMATION_USER_PROPERTIES` those a user's assistant may also use, with gates in `is_automation_available()`. IVStateManager declares the lifecycle in `AUTOMATION_LIFECYCLE`, and IVGlobal names program objects by role in `get_automation_objects()`. The declared members are public API; see the Assistant plugin's SPECIFICATION.md §11.
 * Widgets name themselves through Godot's accessibility properties, repeated ones declare `AUTOMATION_KEY`, and IVSpeedButtons, IVTrackCkbxs, IVTimeSetter and IVFocalLengthControl declare a value interface (`get_automation_value()`, `set_automation_value()`, `get_automation_options()`), with new text keys `LABEL_CAMERA_TRACKING` and `LABEL_FOCAL_LENGTH`.
 * `IVCamera.get_focal_length()`, `IVSmallBodiesGroup.get_member_name()`, `get_member_position()` and `get_primary()`, `IVOptionsPopup.get_option_enumeration()` and `IVViewButton.view_name`.
 * `IVSettingsManager.get_setting_keys()` lists every registered setting.
+* `IVOptionsPopup.add_button()` puts a project's button, such as one that opens its own popup, in an options section, with a style and the choice to close the popup first when it has no changes to confirm.
+* `IVWikiManager.open_page()` is a user method an assistant may call, and returns whether the entity has a page.
+* `IVSelectionData.get_body_data()` gives the data panel's rows for any body as text, and `IVViewManager.get_view_description()` says what the user sees: the selection, the camera, the bodies in view, the date, time and speed. Both are in the user's language, for a user's assistant or a screen reader.
+* [API breaking] Headless mode: new `IVCoreSettings.headless_mode`, true by default under `--headless` or the dummy renderer, builds none of the 3D visuals, loads no asset files and leaves out the program objects that serve only them, keeping the GUI, camera and selection, and runs at new `headless_fps` (see *Culling, visibility and lifecycle* in [VISUAL_MODEL.md](VISUAL_MODEL.md)). A headless run that needs its visuals sets it false.
 
 ### Changed
 * [API breaking] New IVBodyProximityMonitor replaces IVSleepManager and its `hide_on_sleep`, and takes over HUD visibility and mouse targets from `IVBody._process` (see *Proximity sleep* in [GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md)). A `can_sleep` body now sleeps only while it neither draws anything nor shows a HUD the user has switched on; a project driving its own camera holds its target awake with `pin_awake()`. A project that removed `SleepManager` to turn sleep off sets new `IVCoreSettings.apply_body_sleep` false instead; the monitor itself must stay, since without it no HUD shows and nothing can be hovered.
@@ -27,6 +31,7 @@ Under development using Godot 4.7.2.
 * [API breaking] An IVSelectionData value format Callable can return any number of `[row label, value text]` rows, in place of one `[labels, values]` row.
 * `IVTimekeeper.set_time_from_date_clock_elements()` and `IVSelectionManager.select_by_name()` return whether they acted, and the former no longer sets a time from an invalid date.
 * `IVSettingsManager.change_setting()` gives a number the setting's own type, int or float.
+* Core runs without ivoyager_assets, where it raised thousands of script errors, with one warning for each kind of asset missing (none in headless mode): IVThemeManager falls back to Godot's own font from any missing font path, a body's 2D texture is null, rings without a texture are not added (new `IVRings.is_applicable()`), and small bodies groups whose binaries directory is missing are empty.
 
 ### Removed
 * [API breaking] 171 text keys that nothing in Core displays, from `gui_text.csv`, `hints_text.csv` and `long_text.csv`, with their rows in `wiki_extras.tsv`. A project that displayed one adds it to its own translation.
@@ -45,6 +50,7 @@ Under development using Godot 4.7.2.
 * IVWikiManager asserted on a language in `table_fields` whose page-title field the project hadn't loaded, and gave no page where the current language lacked a title though `has_page()` promised a fallback. Both now get the `fallback_language_code` page.
 * Composition data: Venus's sulfur dioxide was misspelled, a stray comma split Mars's semiheavy water (HDO) into two species, and Mars's xenon was rounded to 0.1 ppm from NASA's 0.08.
 * `TXT_PWA_UPDATE_AVAILABLE` told the user to press 'Continue', a button the web update prompt doesn't have.
+* An editor start printed a burst of `Unrecognized UID` and `Failed to create an autoload` errors: the editor plugin re-added its autoloads while the editor's first file scan had emptied the UID database. It now waits for the scan to end.
 
 
 ## [v0.2.2] - 2026-10-15
