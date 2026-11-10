@@ -230,6 +230,15 @@ var start_real_world_time := false
 ## Unset by events such as game speed change and user pause.
 var operating_system_time_sync := false: set = set_operating_system_time_sync
 
+## Optional hold on the clock: a Callable taking no arguments and returning the
+## latest [member time] the clock may reach. Called on the main thread once each
+## frame that time runs forward, and [member time] advances no further than it
+## says, nor goes back, so the simulator runs slower rather than ahead of work a
+## project schedules by time, such as server threads that fall behind. Return
+## [code]INF[/code] for no hold. Unset (default), time advances by game speed
+## alone.
+var time_limiter := Callable()
+
 
 var _time: float # persisted
 var _julian_day_number: int # derived
@@ -368,7 +377,10 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	# Engine.time_scale may or may not follow IVSpeedManager.speed_multiplier
-	delta *= _times[1] / Engine.time_scale 
+	delta *= _times[1] / Engine.time_scale
+	if delta > 0.0 and time_limiter.is_valid():
+		var limit: float = time_limiter.call()
+		delta = clampf(limit - _time, 0.0, delta)
 	_time += delta
 	_process_time()
 
