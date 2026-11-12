@@ -46,6 +46,7 @@ const AUTOMATION_PROPERTIES: Array[StringName] = [
 	&"disable_quit",
 	&"allow_time_setting",
 	&"allow_time_reversal",
+	&"allow_maximum_speed",
 	&"start_time_date_clock",
 	&"start_time_is_terrestrial_time",
 	&"home_name",
@@ -147,6 +148,11 @@ var start_camera_fov := IVMath.get_fov_from_focal_length(24.0)
 var allow_time_setting := false
 ## Enables time reversal in [IVSpeedManager] and elsewhere. (Used by Planetarium.)
 var allow_time_reversal := false
+## In a debug build ([method OS.is_debug_build]), adds a maximum speed after the project's
+## [member IVSpeedManager.speeds], at which time runs forward as fast as
+## [member IVTimekeeper.time_limiter] allows. A project that sets this keeps a valid limiter
+## whenever that speed is selected.
+var allow_maximum_speed := false
 ## If true (default), "admin" popups like the main menu, options, etc., will
 ## stop the simulator while open. If false, the simulator will continue running.
 var popops_can_stop_sim := true

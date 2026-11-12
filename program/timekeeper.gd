@@ -236,7 +236,12 @@ var operating_system_time_sync := false: set = set_operating_system_time_sync
 ## says, nor goes back, so the simulator runs slower rather than ahead of work a
 ## project schedules by time, such as server threads that fall behind. Return
 ## [code]INF[/code] for no hold. Unset (default), time advances by game speed
-## alone.
+## alone.[br][br]
+##
+## At [IVSpeedManager]'s maximum speed it alone sets the pace: time moves to each
+## finite limit it returns, and stands still at [code]INF[/code] or with no limiter
+## set. A project that offers that speed ([member IVCoreSettings.allow_maximum_speed])
+## keeps a limiter set while it is selected.
 var time_limiter := Callable()
 
 
@@ -253,6 +258,7 @@ var _network_state := IVStateManager.NetworkState.NO_NETWORK
 var _ut_body: IVBody
 var _last_clock_time_floored := -99999999
 var _last_clock_time_rounded := -99999999
+var _is_limiter_missing := false
 
 
 
@@ -376,6 +382,9 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if _speed_manager.is_maximum_speed():
+		_run_at_maximum_speed()
+		return
 	# Engine.time_scale may or may not follow IVSpeedManager.speed_multiplier
 	delta *= _times[1] / Engine.time_scale
 	if delta > 0.0 and time_limiter.is_valid():
@@ -655,6 +664,20 @@ func _process_time(suppress_signals := false) -> void:
 		get_date_elements_at_jdn(jdn_for_date, _date, _date_aux)
 		if not suppress_signals:
 			date_changed.emit()
+
+
+# The maximum speed has no rate of its own: time goes as far as the limiter allows.
+func _run_at_maximum_speed() -> void:
+	if !time_limiter.is_valid():
+		if !_is_limiter_missing:
+			_is_limiter_missing = true
+			push_error("IVTimekeeper: the maximum speed needs a time_limiter; time stands still")
+		return
+	_is_limiter_missing = false
+	var limit: float = time_limiter.call()
+	if limit > _time and is_finite(limit):
+		_time = limit
+		_process_time()
 
 
 func _on_run_state_changed(running: bool) -> void:

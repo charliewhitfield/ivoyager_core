@@ -26,6 +26,10 @@ extends Node
 ## actions for game speed, maintains [member speed_multiplier], and emits
 ## [signal speed_changed]. Time is managed by [IVTimekeeper].[br][br]
 ##
+## A debug build of a project that sets [member IVCoreSettings.allow_maximum_speed]
+## offers a maximum speed after the project's own, at which only the project's
+## hold on the clock ([member IVTimekeeper.time_limiter]) sets the pace.[br][br]
+##
 ## [IVSpeedManager] does not change [member Engine.time_scale] by default. If you
 ## want that to happen, set [member IVCoreSettings.manage_engine_time_scale].
 
@@ -65,6 +69,10 @@ const AUTOMATION_USER_PROPERTIES: Array[StringName] = [
 ]
 const AUTOMATION_METHODS: Array[StringName] = [&"set_real_time_speed"]
 
+## Seconds over which [member speed_multiplier] follows the speed time reaches at
+## the maximum speed.
+const REACHED_SPEED_AVERAGING := 1.0
+
 
 ## Current speed index as defined in [member speeds]. Has setter method but see
 ## also [method change_speed].
@@ -81,7 +89,9 @@ var ease_curve := 0.0
 var ease_seconds := 0.5
 
 ## Project game speeds. Modify at or before [signal IVStateManager.core_initialized].
-## Value [constant IVUnits.SECOND] is real-time.[br][br]
+## Value [constant IVUnits.SECOND] is real-time. Value [constant @GDScript.INF] is
+## the maximum speed, which [member IVCoreSettings.allow_maximum_speed] adds after
+## them at [signal IVStateManager.core_initialized] (see [method is_maximum_speed]).[br][br]
 ##
 ## Note: If the project might call [method set_real_time_speed], one of the
 ## array values must be real-time.
@@ -114,7 +124,9 @@ var speed_names: Array[StringName] = [
 ## IVStateManager.core_initialized].
 var start_speed := 2
 ## Current game speed multiplier from [member speeds] for current [member speed_index].
-## Negative if [member reversed_time].[br][br]
+## Negative if [member reversed_time]. At the maximum speed, which runs forward
+## only, the speed time reaches, averaged over [constant REACHED_SPEED_AVERAGING]
+## seconds of running; never [constant @GDScript.INF].[br][br]
 ##
 ## Read only. Used by [IVTimekeeper].
 var speed_multiplier: float # negative if reversed_time
@@ -132,11 +144,13 @@ var _times := IVGlobal.times # floats
 var _ease_from_multiplier: float
 var _ease_to_multiplier: float
 var _ease_fraction := 1.0
+var _reached_from_time := 0.0
 
 
 
 func _ready() -> void:
 	process_mode = PROCESS_MODE_ALWAYS
+	IVStateManager.core_initialized.connect(_on_core_initialized)
 	IVStateManager.system_tree_built.connect(_on_system_tree_built)
 	IVStateManager.network_state_changed.connect(_on_network_state_changed)
 	IVStateManager.paused_changed.connect(_on_paused_changed)
@@ -145,8 +159,11 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
-	# Only processes during ease transition (if applicalble).
+	# Only processes during ease transition (if applicalble) and at the maximum speed.
 	delta /= Engine.time_scale # actual seconds
+	if is_maximum_speed():
+		_follow_reached_speed(delta)
+		return
 	_ease_fraction += delta / ease_seconds
 	if _ease_fraction >= 1.0 or IVStateManager.paused_tree: # finish transition
 		_ease_fraction = 1.0
@@ -264,6 +281,13 @@ func get_speed_name() -> StringName:
 	return speed_names[_speed_index] if _speed_index < speed_names.size() else &""
 
 
+## True at the maximum speed, where time runs forward as fast as
+## [member IVTimekeeper.time_limiter] allows (see
+## [member IVCoreSettings.allow_maximum_speed]).
+func is_maximum_speed() -> bool:
+	return _speed_index < speeds.size() and is_inf(speeds[_speed_index])
+
+
 ## Whether an automation client may use [param member] now: a network client
 ## changes no speed, and time reversal needs [member IVCoreSettings.allow_time_reversal].
 func is_automation_available(member: StringName) -> bool:
@@ -283,14 +307,29 @@ func is_automation_available(member: StringName) -> bool:
 
 # private
 
+func _on_core_initialized() -> void:
+	if IVCoreSettings.allow_maximum_speed and OS.is_debug_build():
+		speeds.append(INF)
+		speed_names.append(&"TXT_MAXIMUM_SPEED")
+
+
 func _on_system_tree_built(new_game: bool) -> void:
 	if new_game: # need game start _time & _speed_index (otherwise persisted from game load)
 		_speed_index = start_speed
+	# A game saved at the maximum speed can load in a build that doesn't offer it.
+	_speed_index = clampi(_speed_index, 0, speeds.size() - 1)
 	_process_speed_index(false)
 
 
 func _process_speed_index(allow_ease_curve: bool) -> void:
 	# "_speed_index" and "_reversed_time" are set. Everything here follows from that...
+	
+	if is_maximum_speed(): # speed_multiplier follows the speed reached from here
+		_ease_fraction = 1.0
+		_reached_from_time = _times[0]
+		set_process(true)
+		speed_changed.emit()
+		return
 	
 	if allow_ease_curve and ease_curve and !IVStateManager.paused_tree:
 		_ease_from_multiplier = speed_multiplier
@@ -300,7 +339,9 @@ func _process_speed_index(allow_ease_curve: bool) -> void:
 		speed_changed.emit()
 		return
 	
-	# instant change
+	# instant change, ending any ease underway or the maximum speed's averaging
+	_ease_fraction = 1.0
+	set_process(false)
 	speed_multiplier = -speeds[_speed_index] if _reversed_time else speeds[_speed_index]
 	_times[1] = speed_multiplier
 	if IVCoreSettings.manage_engine_time_scale:
@@ -308,6 +349,21 @@ func _process_speed_index(allow_ease_curve: bool) -> void:
 		# for reversed_time and it doesn't use Engine.time_scale for anything.)
 		Engine.time_scale = absf(speed_multiplier)
 	speed_changed.emit()
+	multiplier_changed.emit()
+
+
+func _follow_reached_speed(delta: float) -> void:
+	var time := _times[0]
+	if !IVStateManager.running or IVStateManager.paused_tree or !(delta > 0.0):
+		_reached_from_time = time
+		return
+	var reached := (time - _reached_from_time) / delta
+	_reached_from_time = time
+	speed_multiplier += ((reached - speed_multiplier)
+			* (1.0 - exp(-delta / REACHED_SPEED_AVERAGING)))
+	_times[1] = speed_multiplier
+	if IVCoreSettings.manage_engine_time_scale:
+		Engine.time_scale = maxf(speed_multiplier, 0.0000001)
 	multiplier_changed.emit()
 
 

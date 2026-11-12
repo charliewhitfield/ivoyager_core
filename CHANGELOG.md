@@ -20,7 +20,7 @@ Under development using Godot 4.7.2.
 * `IVWikiManager.open_page()` is a user method an assistant may call, and returns whether the entity has a page.
 * `IVSelectionData.get_body_data()` gives the data panel's rows for any body as text, and `IVViewManager.get_view_description()` says what the user sees: the selection, the camera, the bodies in view, the date, time and speed. Both are in the user's language, for a user's assistant or a screen reader.
 * [API breaking] Headless mode: new `IVCoreSettings.headless_mode`, true by default under `--headless` or the dummy renderer, builds none of the 3D visuals, loads no asset files and leaves out the program objects that serve only them, keeping the GUI, camera and selection, and runs at new `headless_fps` (see *Culling, visibility and lifecycle* in [VISUAL_MODEL.md](VISUAL_MODEL.md)). A headless run that needs its visuals sets it false.
-* `IVTimekeeper.time_limiter` lets a project hold the clock each frame at the latest time its own work allows, so the simulator runs slower rather than ahead of server threads that fall behind.
+* `IVTimekeeper.time_limiter` lets a project hold the clock each frame at the latest time its own work allows, so the simulator runs slower rather than ahead of server threads that fall behind. New `IVCoreSettings.allow_maximum_speed` adds a Maximum speed after the project's own in debug builds, paced by the limiter alone (`IVSpeedManager.is_maximum_speed()`, text key `TXT_MAXIMUM_SPEED`).
 
 ### Changed
 * [API breaking] New IVBodyProximityMonitor replaces IVSleepManager and its `hide_on_sleep`, and takes over HUD visibility and mouse targets from `IVBody._process` (see *Proximity sleep* in [GRAPHICS_PROFILING.md](GRAPHICS_PROFILING.md)). A `can_sleep` body now sleeps only while it neither draws anything nor shows a HUD the user has switched on; a project driving its own camera holds its target awake with `pin_awake()`. A project that removed `SleepManager` to turn sleep off sets new `IVCoreSettings.apply_body_sleep` false instead; the monitor itself must stay, since without it no HUD shows and nothing can be hovered.
@@ -52,6 +52,7 @@ Under development using Godot 4.7.2.
 * Composition data: Venus's sulfur dioxide was misspelled, a stray comma split Mars's semiheavy water (HDO) into two species, and Mars's xenon was rounded to 0.1 ppm from NASA's 0.08.
 * `TXT_PWA_UPDATE_AVAILABLE` told the user to press 'Continue', a button the web update prompt doesn't have.
 * An editor start printed a burst of `Unrecognized UID` and `Failed to create an autoload` errors: the editor plugin re-added its autoloads while the editor's first file scan had emptied the UID database. It now waits for the scan to end.
+* IVSpeedManager: a speed set without easing while an ease was underway was replaced by the ease's target when the ease finished.
 
 
 ## [v0.2.2] - 2026-10-15
